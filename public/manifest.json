@@ -1,0 +1,27 @@
+{
+  "name": "TCDN4 Alumni Hub - K33 UEH",
+  "short_name": "TCDN4 Hub",
+  "description": "Mạng lưới cựu sinh viên TCDN4 - K33 UEH",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#003B5C",
+  "theme_color": "#003B5C",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/images/ueh-group.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/images/ueh-group.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

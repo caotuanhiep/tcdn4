@@ -2,26 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Loader2, Users } from "lucide-react";
+import { CalendarCheck, ImageIcon, Loader2, Users, ArrowLeft, Bot, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import ImagesPanel from "./ImagesPanel";
 import UsersPanel from "./UsersPanel";
+import RegistrationsPanel from "./RegistrationsPanel";
+import ZaloBotSettings from "./ZaloBotSettings";
 
-type Tab = "images" | "users";
+type Tab = "registrations" | "zalobot" | "users" | "images";
 
-const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
-  { id: "images", label: "Quản lý hình ảnh", icon: ImageIcon },
-  { id: "users", label: "Quản lý user", icon: Users },
+const TABS = [
+  { id: "registrations" as Tab, label: "Đăng ký 15 Năm & Áo", icon: CalendarCheck },
+  { id: "zalobot" as Tab, label: "Đấu nối Bot Zalo", icon: Bot },
+  { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
+  { id: "images" as Tab, label: "Quản lý hình ảnh", icon: ImageIcon },
 ];
 
 export default function AdminShell() {
   const { user, loading, isAdmin, profile } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("images");
+  const [tab, setTab] = useState<Tab>("registrations");
 
-  // Client-side guard (proxy.ts already enforces this on the server).
+  // Client-side guard
   useEffect(() => {
-    if (!loading && (!user || (profile && !isAdmin) || (!profile && user))) router.replace("/");
+    if (!loading && (!user || (profile && !isAdmin) || (!profile && user))) {
+      router.replace("/");
+    }
   }, [loading, user, profile, isAdmin, router]);
 
   if (loading || !isAdmin) {
@@ -34,26 +41,49 @@ export default function AdminShell() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 md:flex-row">
-      <aside className="md:w-60 md:shrink-0">
-        <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:sticky md:top-24">
-          <p className="px-3 pb-2 pt-1 text-xs font-bold uppercase tracking-wider text-slate-400">Admin Dashboard</p>
-          <nav className="flex gap-2 md:flex-col">
+      {/* Sidebar */}
+      <aside className="md:w-64 md:shrink-0">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm md:sticky md:top-24">
+          <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trang Quản Trị</p>
+              <h2 className="text-base font-black text-ueh">TCDN4 Admin Hub</h2>
+            </div>
+            <Link
+              href="/"
+              className="p-1.5 text-slate-400 hover:text-ueh hover:bg-slate-50 rounded-lg transition-colors"
+              title="Về trang chủ"
+            >
+              <ArrowLeft size={16} />
+            </Link>
+          </div>
+
+          <nav className="flex gap-1.5 md:flex-col">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition md:flex-none ${
-                  tab === id ? "bg-ueh text-white shadow" : "text-slate-600 hover:bg-slate-50"
+                className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold transition md:flex-none ${
+                  tab === id
+                    ? "bg-ueh text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                <Icon size={18} /> {label}
+                <Icon size={16} className={tab === id ? "text-ueh-gold" : "text-slate-400"} />
+                <span className="truncate">{label}</span>
               </button>
             ))}
           </nav>
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1">{tab === "images" ? <ImagesPanel /> : <UsersPanel />}</section>
+      {/* Main Content */}
+      <section className="min-w-0 flex-1">
+        {tab === "registrations" && <RegistrationsPanel />}
+        {tab === "zalobot" && <ZaloBotSettings />}
+        {tab === "users" && <UsersPanel />}
+        {tab === "images" && <ImagesPanel />}
+      </section>
     </div>
   );
 }

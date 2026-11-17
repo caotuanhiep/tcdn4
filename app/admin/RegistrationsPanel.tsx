@@ -1,0 +1,317 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { 
+  CheckCircle2, 
+  Clock, 
+  Search, 
+  Shirt, 
+  Download, 
+  Copy, 
+  Users, 
+  DollarSign, 
+  Check, 
+  Trash2 
+} from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
+
+interface Registration {
+  id: string;
+  fullName: string;
+  className: "TC10" | "TC11" | "TC12";
+  phone: string;
+  shirtSize: string;
+  address: string;
+  guestsCount: number;
+  status: "confirmed" | "pending";
+  paidAmount: number;
+  createdAt: string;
+  note?: string;
+}
+
+const DEFAULT_REGS: Registration[] = [
+  {
+    id: "reg-1",
+    fullName: "Nguyễn Văn An",
+    className: "TC10",
+    phone: "0903123123",
+    shirtSize: "L (Nam)",
+    address: "Số 12 Nguyễn Du, Quận 1, TP.HCM",
+    guestsCount: 1,
+    status: "confirmed",
+    paidAmount: 500000,
+    createdAt: "15/11/2026",
+  },
+  {
+    id: "reg-2",
+    fullName: "Trần Thị Bích",
+    className: "TC11",
+    phone: "0918456456",
+    shirtSize: "M (Nữ)",
+    address: "Chung cư Sunrise City, Quận 7, TP.HCM",
+    guestsCount: 0,
+    status: "confirmed",
+    paidAmount: 500000,
+    createdAt: "16/11/2026",
+  },
+  {
+    id: "reg-3",
+    fullName: "Lê Hoàng Cường",
+    className: "TC12",
+    phone: "0982789789",
+    shirtSize: "XL (Nam)",
+    address: "Phố Huế, Hai Bà Trưng, Hà Nội",
+    guestsCount: 0,
+    status: "confirmed",
+    paidAmount: 500000,
+    createdAt: "16/11/2026",
+  },
+  {
+    id: "reg-4",
+    fullName: "Phạm Hải Đăng",
+    className: "TC10",
+    phone: "0934222222",
+    shirtSize: "L (Nam)",
+    address: "Thảo Điền, TP. Thủ Đức, TP.HCM",
+    guestsCount: 1,
+    status: "pending",
+    paidAmount: 500000,
+    createdAt: "17/11/2026",
+  },
+  {
+    id: "reg-5",
+    fullName: "Hoàng Minh Em",
+    className: "TC11",
+    phone: "0977333333",
+    shirtSize: "M (Nam)",
+    address: "Đường 3/2, Quận 10, TP.HCM",
+    guestsCount: 0,
+    status: "confirmed",
+    paidAmount: 500000,
+    createdAt: "17/11/2026",
+  },
+];
+
+export default function RegistrationsPanel() {
+  const toast = useToast();
+  const [list, setList] = useState<Registration[]>(DEFAULT_REGS);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [classFilter, setClassFilter] = useState("all");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("tcdn4_registrations");
+      if (stored) {
+        setList(JSON.parse(stored));
+      }
+    } catch {}
+  }, []);
+
+  const saveList = (data: Registration[]) => {
+    setList(data);
+    try {
+      localStorage.setItem("tcdn4_registrations", JSON.stringify(data));
+    } catch {}
+  };
+
+  const toggleStatus = (id: string) => {
+    const updated = list.map((item) => {
+      if (item.id === id) {
+        const nextStatus = item.status === "confirmed" ? "pending" : "confirmed";
+        return { ...item, status: nextStatus as "confirmed" | "pending" };
+      }
+      return item;
+    });
+    saveList(updated);
+    toast.success("Đã cập nhật trạng thái thanh toán!");
+  };
+
+  const removeReg = (id: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa lượt đăng ký này?")) return;
+    const updated = list.filter((item) => item.id !== id);
+    saveList(updated);
+    toast.success("Đã xóa lượt đăng ký!");
+  };
+
+  const copyShirtSummary = () => {
+    const summary: Record<string, number> = {};
+    list.forEach((r) => {
+      summary[r.shirtSize] = (summary[r.shirtSize] || 0) + 1;
+    });
+    const text = Object.entries(summary)
+      .map(([size, count]) => `${size}: ${count} áo`)
+      .join("\n");
+    navigator.clipboard.writeText(`TỔNG HỢP SIZE ÁO TCDN4 15 NĂM:\n${text}`);
+    toast.success("Đã sao chép bảng tổng hợp size áo để gửi xưởng may!");
+  };
+
+  const filtered = list.filter((item) => {
+    if (classFilter !== "all" && item.className !== classFilter) return false;
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      return (
+        item.fullName.toLowerCase().includes(q) ||
+        item.phone.includes(q) ||
+        item.address.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const totalPaid = list
+    .filter((r) => r.status === "confirmed")
+    .reduce((sum, r) => sum + r.paidAmount, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-ueh">
+            Quản lý Đăng ký 15 Năm & Size Áo
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Theo dõi danh sách tham dự, đối soát chuyển khoản và thống kê sản xuất áo lớp
+          </p>
+        </div>
+
+        <button
+          onClick={copyShirtSummary}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-800 transition-colors self-start sm:self-auto"
+        >
+          <Shirt size={14} /> Xuất Bảng Size Áo
+        </button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Tổng Đăng Ký</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{list.length}</div>
+          <div className="text-[10px] text-slate-500">Thành viên & Khách</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Đã Chuyển Khoản</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">
+            {list.filter((r) => r.status === "confirmed").length}
+          </div>
+          <div className="text-[10px] text-emerald-600 font-semibold">Đã xác nhận tiền</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Chờ Đối Soát</div>
+          <div className="text-2xl font-black text-amber-600 mt-1">
+            {list.filter((r) => r.status === "pending").length}
+          </div>
+          <div className="text-[10px] text-amber-600 font-semibold">Cần check sao kê</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Kinh Phí Đã Thu</div>
+          <div className="text-xl sm:text-2xl font-black text-blue-600 mt-1">
+            {(totalPaid / 1000000).toFixed(1)}M
+          </div>
+          <div className="text-[10px] text-slate-500">Quỹ tài chính sự kiện</div>
+        </div>
+      </div>
+
+      {/* Filter and Search */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl bg-white p-3 border border-slate-100 shadow-2xs">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên, SĐT, địa chỉ..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs focus:border-ueh focus:bg-white focus:outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Lớp:</span>
+          {(["all", "TC10", "TC11", "TC12"] as const).map((cls) => (
+            <button
+              key={cls}
+              onClick={() => setClassFilter(cls)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                classFilter === cls
+                  ? "bg-ueh text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {cls === "all" ? "Tất cả" : cls}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Registrations Table */}
+      <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-xs">
+        <table className="w-full min-w-[700px] text-left text-xs">
+          <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
+            <tr>
+              <th className="px-4 py-3">Họ và tên</th>
+              <th className="px-4 py-3">Lớp</th>
+              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Size Áo</th>
+              <th className="px-4 py-3">Địa chỉ giao áo</th>
+              <th className="px-4 py-3 text-center">Trạng thái</th>
+              <th className="px-4 py-3 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filtered.map((item) => (
+              <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                <td className="px-4 py-3 font-bold text-slate-900">
+                  {item.fullName}
+                  {item.guestsCount > 0 && (
+                    <span className="text-[10px] text-slate-400 block font-normal">
+                      +{item.guestsCount} F1
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="rounded bg-blue-50 px-2 py-0.5 font-bold text-ueh border border-blue-100">
+                    {item.className}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-600">{item.phone}</td>
+                <td className="px-4 py-3 font-semibold text-slate-800">{item.shirtSize}</td>
+                <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{item.address}</td>
+                <td className="px-4 py-3 text-center">
+                  <button
+                    onClick={() => toggleStatus(item.id)}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 ${
+                      item.status === "confirmed"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    {item.status === "confirmed" ? (
+                      <>
+                        <CheckCircle2 size={12} /> Đã thu 500k
+                      </>
+                    ) : (
+                      <>
+                        <Clock size={12} /> Chờ duyệt
+                      </>
+                    )}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => removeReg(item.id)}
+                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

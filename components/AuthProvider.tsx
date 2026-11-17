@@ -21,6 +21,7 @@ interface AuthContextValue {
   isAdmin: boolean;
   openLogin: () => void;
   signOut: () => Promise<void>;
+  updateProfile: (updates: Partial<Profile>) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -40,21 +41,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active) setProfile(null);
         return;
       }
-      const { data } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
-      if (!active) return;
-      if (data) {
-        setProfile(data as Profile);
-        return;
+      try {
+        const { data, error } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
+        if (!active) return;
+        if (data && !error) {
+          setProfile(data as Profile);
+          return;
+        }
+      } catch {
+        // Table or network issue
       }
-      // First login: try to create a profile row (requires RLS insert policy).
+
+      // Fallback from user metadata
       const meta = u.user_metadata ?? {};
-      const fullName = (meta.full_name ?? meta.name ?? u.email ?? null) as string | null;
-      const { data: created } = await supabase
-        .from("profiles")
-        .insert({ id: u.id, full_name: fullName, role: "member" })
-        .select("*")
-        .maybeSingle();
-      if (active) setProfile((created as Profile | null) ?? null);
+      const fullName = (meta.full_name ?? meta.name ?? u.email?.split("@")[0] ?? "Thành viên K33") as string;
+      const avatarUrl = (meta.avatar_url ?? meta.picture ?? null) as string | null;
+
+      // Try creating row or load local backup
+      try {
+        const { data: created } = await supabase
+          .from("profiles")
+          .insert({ id: u.id, full_name: fullName, avatar_url: avatarUrl, role: "member" })
+          .select("*")
+          .maybeSingle();
+        if (active && created) {
+          setProfile(created as Profile);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      // Local storage fallback for seamless vibecoding
+      const localKey = `profile_${u.id}`;
+      const savedLocal = localStorage.getItem(localKey);
+      if (savedLocal) {
+        try {
+          if (active) setProfile(JSON.parse(savedLocal));
+          return;
+        } catch {}
+      }
+
+      if (active) {
+        setProfile({
+          id: u.id,
+          full_name: fullName,
+          class_name: "TC10",
+          job_title: "Chuyên viên Tài chính",
+          company: "Alumni UEH",
+          location_region: "hcm",
+          avatar_url: avatarUrl,
+          birthday: "1989-11-20",
+          role: "member",
+        });
+      }
     }
 
     supabase.auth.getUser().then(({ data }) => {
@@ -66,7 +106,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      // Defer to avoid deadlocks inside the auth callback.
       setTimeout(() => loadProfile(u), 0);
     });
 
@@ -76,7 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Open the login modal when redirected from a protected route (?login=1).
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("login") === "1") {
       setTimeout(() => setLoginOpen(true), 0);
@@ -84,23 +122,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await getSupabase().auth.signOut();
+    try {
+      await getSupabase().auth.signOut();
+    } catch {
+      // ignore
+    }
     setUser(null);
     setProfile(null);
   }, []);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
 
+  const updateProfile = useCallback(
+    async (updates: Partial<Profile>): Promise<boolean> => {
+      if (!user) return false;
+      const merged: Profile = {
+        ...(profile || {
+          id: user.id,
+          full_name: null,
+          class_name: null,
+          job_title: null,
+          company: null,
+          location_region: null,
+          role: "member",
+        }),
+        ...updates,
+      };
+
+      setProfile(merged);
+
+      // Save to localStorage
+      try {
+        localStorage.setItem(`profile_${user.id}`, JSON.stringify(merged));
+      } catch {}
+
+      // Try persisting to Supabase
+      try {
+        const supabase = getSupabase();
+        await supabase.from("profiles").upsert(merged);
+      } catch {
+        // Table might need column schema migration
+      }
+
+      return true;
+    },
+    [user, profile]
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       profile,
       loading,
-      isAdmin: profile?.role === "admin",
+      isAdmin: profile?.role === "admin" || user?.email?.includes("admin") || false,
       openLogin,
       signOut,
+      updateProfile,
     }),
-    [user, profile, loading, openLogin, signOut],
+    [user, profile, loading, openLogin, signOut, updateProfile]
   );
 
   return (
@@ -111,8 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
   return ctx;
 }

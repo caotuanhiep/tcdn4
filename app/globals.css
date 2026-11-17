@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-ueh: #003366;
+  --color-ueh: #003B5C;
+  --color-ueh-light: #005A8C;
+  --color-ueh-orange: #E87722;
+  --color-ueh-gold: #F5A800;
   --color-zalo: #0068ff;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
@@ -25,4 +28,14 @@ body {
 .arc-dash {
   stroke-dasharray: 4 6;
   animation: arc-dash 3s linear infinite;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
