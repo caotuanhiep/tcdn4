@@ -220,16 +220,16 @@ export default function EventSection() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Section Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-2.5 border border-blue-100">
-            <Sparkles size={13} className="text-ueh-orange" /> Kỷ niệm 15 năm tốt nghiệp
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3.5 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-3 border border-blue-100">
+            <Sparkles size={14} className="text-ueh-orange" /> Kỷ niệm 15 năm tốt nghiệp
           </div>
-          <h2 className="text-2xl font-extrabold text-ueh sm:text-3xl md:text-4xl tracking-tight">
+          <h2 className="text-3xl font-black text-ueh sm:text-5xl lg:text-6xl tracking-tight leading-tight">
             Chương Trình Gặp Mặt 15 Năm
           </h2>
-          <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
-          <p className="mx-auto mt-3 max-w-xl text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở B, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
+          <div className="mx-auto mt-3 h-1.5 w-24 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
+          <p className="mx-auto mt-4 max-w-xl text-sm sm:text-base text-slate-600 leading-relaxed">
+            Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở A - UEH, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
           </p>
         </div>
 

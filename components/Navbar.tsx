@@ -14,26 +14,67 @@ import {
   Store, 
   UserCircle2, 
   Users, 
-  X 
+  X,
+  Smartphone,
+  HeartHandshake
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { useToast } from "@/components/ToastProvider";
 import ProfileModal from "@/components/ProfileModal";
 
 const NAV_ITEMS = [
   { href: "#event", label: "Sự kiện", icon: Calendar },
   { href: "#directory", label: "Danh bạ", icon: Users },
-  { href: "#memories", label: "Kỷ niệm", icon: ImageIcon },
+  { href: "#committee", label: "Ban liên lạc", icon: HeartHandshake },
+  { href: "#memories", label: "Ký niệm", icon: ImageIcon },
   { href: "#guestbook", label: "Lưu bút", icon: MessageSquare },
   { href: "#business", label: "Kiosk", icon: Store, isSubtle: true },
 ];
 
 export default function Navbar() {
   const { user, profile, loading, isAdmin, openLogin, signOut } = useAuth();
+  const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    // Register Service Worker
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) {
+      toast.success("Để cài đặt trên iPhone/iPad: Nhấn nút Chia sẻ (Share) trên Safari -> chọn 'Thêm vào MH chính' (Add to Home Screen)!");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setIsInstallable(false);
+      toast.success("Đã cài đặt TCDN4 Alumni Hub vào màn hình chính!");
+    }
+    setDeferredPrompt(null);
+  };
 
   useEffect(() => {
     function onScroll() {
@@ -80,52 +121,51 @@ export default function Navbar() {
         }`}
       >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          {/* Logo */}
-          <Link
-            href="/"
-            onClick={(e) => {
-              if (window.location.pathname === "/") {
-                e.preventDefault();
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }
-            }}
-            className="group flex items-center gap-2.5"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ueh shadow-md transition-transform group-hover:scale-105">
-              <GraduationCap className="h-5 w-5 text-white" />
+          
+          {/* Logo Brand */}
+          <Link href="/" className="group flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ueh shadow-md shadow-blue-900/20 transition-transform group-hover:scale-105">
+              <GraduationCap className="h-6 w-6 text-white" />
             </span>
             <div className="flex flex-col">
-              <span className="text-lg font-extrabold tracking-tight text-ueh leading-tight sm:text-xl">
-                TCDN4<span className="ml-1 font-semibold text-blue-500">K33</span>
+              <span className="text-xl font-black tracking-tight text-ueh leading-none">
+                TCDN4<span className="ml-1 font-bold text-ueh-orange">Hub</span>
               </span>
-              <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                UEH Alumni Hub
+              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                K33 • UEH 15 Năm
               </span>
             </div>
           </Link>
 
-          {/* Desktop Menu */}
+          {/* Desktop Nav Items */}
           <div className="hidden items-center gap-5 md:flex lg:gap-6">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.href}
-                  onClick={() => scrollTo(item.href)}
-                  className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold transition-colors ${
-                    item.isSubtle
-                      ? "text-slate-400 hover:text-ueh"
-                      : "text-slate-600 hover:text-ueh"
-                  }`}
-                >
-                  <Icon size={15} className={item.isSubtle ? "opacity-60" : "text-blue-500"} />
-                  {item.label}
-                </button>
-              );
-            })}
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.href}
+                onClick={() => scrollTo(item.href)}
+                className={`text-xs lg:text-sm font-bold transition-colors ${
+                  item.isSubtle
+                    ? "text-slate-400 hover:text-ueh"
+                    : "text-slate-700 hover:text-ueh"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
 
-            <div className="h-4 w-px bg-slate-200" />
+            <div className="h-4 w-px bg-slate-200 mx-1" />
 
+            {/* 8. Nút Icon Cài Đặt PWA trên Header cực kỳ gọn gàng */}
+            <button
+              onClick={handleInstallApp}
+              title="Cài đặt App lên màn hình điện thoại / máy tính"
+              className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh hover:bg-white transition-all shadow-2xs"
+            >
+              <Smartphone size={14} className="text-[#0068FF]" />
+              <span className="hidden lg:inline">Cài App</span>
+            </button>
+
+            {/* User Auth Info or Login Button */}
             {loading ? (
               <div className="h-9 w-9 animate-pulse rounded-full bg-slate-100" />
             ) : user ? (
@@ -133,25 +173,37 @@ export default function Navbar() {
                 <button
                   onClick={() => setMenuOpen((o) => !o)}
                   aria-label="Menu tài khoản"
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-ueh font-bold text-white ring-2 ring-white shadow-md hover:ring-blue-200 transition-all"
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1 pr-3 hover:border-ueh transition-colors"
                 >
-                  {avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={avatarUrl}
-                      alt={name}
-                      className="h-full w-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    initial
-                  )}
+                  <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ueh font-bold text-xs text-white shadow-xs">
+                    {avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarUrl}
+                        alt={name}
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      initial
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 max-w-[100px] truncate">
+                    {name}
+                  </span>
                 </button>
+
+                {/* Dropdown Menu */}
                 {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-slate-100 bg-white py-2 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-100 bg-white py-2 shadow-xl animate-in fade-in zoom-in-95 duration-150">
                     <div className="border-b border-slate-100 px-4 pb-3 pt-1">
                       <p className="truncate text-sm font-bold text-slate-900">{name}</p>
                       <p className="truncate text-xs text-slate-500">{user.email}</p>
+                      {profile?.class_name && (
+                        <span className="inline-block mt-1 text-[10px] font-bold text-ueh bg-blue-50 px-2 py-0.5 rounded">
+                          Lớp {profile.class_name}
+                        </span>
+                      )}
                     </div>
 
                     <button
@@ -159,38 +211,29 @@ export default function Navbar() {
                         setMenuOpen(false);
                         setProfileOpen(true);
                       }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                     >
-                      <UserCircle2 size={16} className="text-blue-600" /> Hồ sơ & Đổi Avatar
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        scrollTo("#directory");
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      <Users size={16} /> Danh bạ cựu sinh viên
+                      <UserCircle2 size={16} className="text-ueh" /> Hồ sơ cá nhân
                     </button>
 
                     {isAdmin && (
                       <Link
                         href="/admin"
                         onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                       >
-                        <LayoutDashboard size={16} className="text-purple-600" /> Trang quản trị
+                        <LayoutDashboard size={16} className="text-ueh-orange" /> Quản trị Admin
                       </Link>
                     )}
 
                     <div className="my-1 border-t border-slate-100" />
+
                     <button
                       onClick={() => {
                         setMenuOpen(false);
                         signOut();
                       }}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                     >
                       <LogOut size={16} /> Đăng xuất
                     </button>
@@ -200,102 +243,106 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openLogin}
-                className="flex items-center gap-1.5 rounded-full bg-ueh px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-md shadow-blue-900/20 transition-all hover:bg-blue-800"
+                className="flex items-center gap-2 rounded-full bg-ueh px-5 py-2 text-xs font-bold text-white shadow-md shadow-blue-900/20 transition-all hover:bg-ueh-light hover:shadow-lg"
               >
                 <LogIn size={15} /> Đăng nhập
               </button>
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile Right Controls: Install Icon + Hamburger */}
           <div className="flex items-center gap-2 md:hidden">
-            {!user ? (
-              <button
-                onClick={openLogin}
-                className="flex items-center gap-1 rounded-full bg-ueh px-3 py-1.5 text-xs font-semibold text-white shadow-xs"
-              >
-                <LogIn size={13} /> Đăng nhập
-              </button>
-            ) : (
-              <button
-                onClick={() => setProfileOpen(true)}
-                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ueh text-xs font-bold text-white shadow-xs"
-              >
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt={name} className="h-full w-full object-cover" />
-                ) : (
-                  initial
-                )}
-              </button>
-            )}
             <button
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label="Toggle Menu"
-              className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ueh"
+              onClick={handleInstallApp}
+              title="Cài đặt App"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[#0068FF] shadow-2xs"
             >
-              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+              <Smartphone size={17} />
+            </button>
+
+            <button
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-ueh focus:outline-none"
+              onClick={() => setMobileOpen((o) => !o)}
+              aria-label="Mở menu"
+            >
+              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Drawer */}
+        {/* Mobile Dropdown Menu */}
         {mobileOpen && (
-          <div className="border-t border-slate-100 bg-white px-4 py-4 shadow-xl md:hidden animate-in slide-in-from-top-2 duration-150">
-            <div className="flex flex-col space-y-1">
+          <div className="border-t border-slate-100 bg-white px-4 py-4 shadow-xl md:hidden">
+            <div className="flex flex-col gap-1.5">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button
                     key={item.href}
                     onClick={() => scrollTo(item.href)}
-                    className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-ueh"
+                    className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
                   >
-                    <Icon size={16} className="text-blue-500" />
-                    {item.label}
+                    <Icon size={17} className="text-ueh" />
+                    <span>{item.label}</span>
                   </button>
                 );
               })}
+
+              <div className="my-2 border-t border-slate-100" />
+
               {user ? (
-                <div className="pt-2 border-t border-slate-100 mt-2">
-                  <div className="px-4 py-1 text-xs font-bold uppercase text-slate-400">
-                    Tài khoản: {name}
-                  </div>
+                <>
                   <button
                     onClick={() => {
                       setMobileOpen(false);
                       setProfileOpen(true);
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
                   >
-                    <UserCircle2 size={16} className="text-blue-600" /> Hồ sơ cá nhân
+                    <UserCircle2 size={17} className="text-ueh" />
+                    <span>Hồ sơ cá nhân ({name})</span>
                   </button>
+
                   {isAdmin && (
                     <Link
                       href="/admin"
                       onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
                     >
-                      <LayoutDashboard size={16} className="text-purple-600" /> Quản trị viên
+                      <LayoutDashboard size={17} className="text-ueh-orange" />
+                      <span>Trang Quản trị Admin</span>
                     </Link>
                   )}
+
                   <button
                     onClick={() => {
                       setMobileOpen(false);
                       signOut();
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                    className="flex items-center gap-3 rounded-xl bg-rose-50 px-3.5 py-2.5 text-left text-sm font-bold text-rose-600"
                   >
-                    <LogOut size={16} /> Đăng xuất
+                    <LogOut size={17} />
+                    <span>Đăng xuất</span>
                   </button>
-                </div>
-              ) : null}
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    openLogin();
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-ueh py-3 text-center text-sm font-bold text-white shadow-md shadow-blue-900/20"
+                >
+                  <LogIn size={17} />
+                  <span>Đăng nhập Alumni Hub</span>
+                </button>
+              )}
             </div>
           </div>
         )}
       </nav>
 
-      {/* Modal Profile */}
+      {/* Modal chỉnh sửa Profile cá nhân */}
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </>
   );

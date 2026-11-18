@@ -6,8 +6,6 @@ import { ToastProvider } from "@/components/ToastProvider";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ZaloWidget from "@/components/ZaloWidget";
-import PWAInstaller from "@/components/PWAInstaller";
-import QuickCommunityChat from "@/components/QuickCommunityChat";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -46,8 +44,6 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <Footer />
             <ZaloWidget />
-            <PWAInstaller />
-            <QuickCommunityChat />
           </AuthProvider>
         </ToastProvider>
       </body>

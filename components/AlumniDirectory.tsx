@@ -80,73 +80,73 @@ const ALUMNI_LIST: AlumniMember[] = [
     id: 5,
     name: "Hoàng Minh Em",
     class: "TC11",
-    job: "Senior Financial Advisor",
+    job: "Cố vấn Tài chính Cao cấp",
     company: "KPMG Australia",
     location: "Sydney, Úc",
     region: "overseas",
     phone: "+61412345678",
-    bio: "Định cư tại Úc từ 2017, cố vấn chiến lược thuế và cấu trúc vốn xuyên biên giới.",
+    bio: "Định cư tại Sydney, chuyên tư vấn cấu trúc vốn và thuế doanh nghiệp xuyên biên giới.",
   },
   {
     id: 6,
     name: "Vũ Khánh Phương",
     class: "TC12",
-    job: "Giám đốc Quản trị Rủi ro",
-    company: "Tech Bank SV",
-    location: "California, Mỹ",
+    job: "Giám đốc Quản lý Rủi ro",
+    company: "Wells Fargo Bank",
+    location: "San Francisco, Mỹ",
     region: "overseas",
     phone: "+14155552671",
-    bio: "Chuyên gia định lượng mô hình rủi ro tín dụng tại thung lũng Silicon.",
+    bio: "Thạc sĩ Tài chính tại Mỹ, nghiên cứu thuật toán đánh giá rủi ro tín dụng ngân hàng.",
   },
   {
     id: 7,
     name: "Đặng Quốc Hưng",
     class: "TC10",
-    job: "Phó Tổng Giám đốc",
-    company: "Chứng khoán SSI",
+    job: "Trưởng phòng Tín dụng Doanh nghiệp",
+    company: "Vietcombank HCM",
     location: "TP. Hồ Chí Minh",
     region: "hcm",
-    phone: "0908776655",
-    bio: "15 năm gắn bó với thị trường tài chính chứng khoán từ ngày tốt nghiệp UEH.",
+    phone: "0909887766",
+    bio: "Tài trợ vốn lưu động và dự án bất động sản công nghiệp phía Nam.",
   },
   {
     id: 8,
-    name: "Mai Thảo Vy",
+    name: "Ngô Mỹ Linh",
     class: "TC11",
-    job: "GĐ Khối KHDN",
-    company: "Vietcombank Sở Giao Dịch",
-    location: "Hà Nội",
-    region: "hn",
-    phone: "0977443322",
-    bio: "Phụ trách các gói tài trợ vốn dự án cơ sở hạ tầng lớn khu vực phía Bắc.",
-  },
-  {
-    id: 9,
-    name: "Bùi Tuấn Kiệt",
-    class: "TC12",
-    job: "Quản lý Dự án Đầu tư",
-    company: "Sun Group Central",
-    location: "Đà Nẵng",
-    region: "dn",
-    phone: "0933221100",
-    bio: "Tham gia triển khai các đại dự án bất động sản nghỉ dưỡng tại Đà Nẵng - Hội An.",
-  },
-  {
-    id: 10,
-    name: "Ngô Thanh Trúc",
-    class: "TC10",
-    job: "Chuyên gia Tư vấn Thuế",
-    company: "PwC Vietnam",
+    job: "Giám đốc Khối Phân tích",
+    company: "SSI Securities",
     location: "TP. Hồ Chí Minh",
     region: "hcm",
     phone: "0912334455",
-    bio: "Hỗ trợ các doanh nghiệp FDI tối ưu hóa chính sách thuế và chuyển giá.",
+    bio: "Thường xuyên xuất hiện trên các diễn đàn kinh tế, nhận định thị trường chứng khoán Việt Nam.",
+  },
+  {
+    id: 9,
+    name: "Bùi Thanh Nam",
+    class: "TC12",
+    job: "Phó Tổng Giám đốc",
+    company: "Bamos Coffee Group",
+    location: "TP. Hồ Chí Minh",
+    region: "hcm",
+    phone: "0945667788",
+    bio: "Vận hành chuỗi cà phê F&B phục vụ không gian học tập và làm việc 24/7.",
+  },
+  {
+    id: 10,
+    name: "Võ Thùy Trang",
+    class: "TC10",
+    job: "CFO",
+    company: "Gowise Global",
+    location: "Đà Nẵng",
+    region: "dn",
+    phone: "0971223344",
+    bio: "Phát triển công nghệ eSIM viễn thông quốc tế cho du khách toàn cầu.",
   },
   {
     id: 11,
-    name: "Võ Minh Đức",
+    name: "Nguyễn Quang Vinh",
     class: "TC11",
-    job: "Trưởng nhóm Đầu tư mạo hiểm",
+    job: "Giám đốc Đầu tư Mạo hiểm",
     company: "Nextrans Capital",
     location: "Hà Nội",
     region: "hn",
@@ -210,28 +210,28 @@ export default function AlumniDirectory({
   const displayedList = filteredList.slice(0, visibleCount);
 
   return (
-    <section id="directory" className="scroll-mt-16 bg-slate-100/60 py-14 sm:py-20">
+    <section id="directory" className="scroll-mt-16 bg-slate-100/60 py-16 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
-        {/* Section Header */}
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-2.5">
-            <Users size={13} className="text-ueh" /> Mạng lưới cựu sinh viên
+        {/* Section Header với Tiêu đề Cực To */}
+        <div className="mb-10 text-center">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3.5 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-3">
+            <Users size={14} className="text-ueh" /> Mạng lưới cựu sinh viên
           </div>
-          <h2 className="text-2xl font-extrabold text-ueh sm:text-3xl md:text-4xl tracking-tight">
+          <h2 className="text-3xl font-black text-ueh sm:text-5xl lg:text-6xl tracking-tight leading-tight">
             Danh Bạ Cựu Sinh Viên
           </h2>
-          <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
-          <p className="mx-auto mt-3 max-w-xl text-xs sm:text-sm text-slate-600">
+          <div className="mx-auto mt-3 h-1.5 w-24 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
+          <p className="mx-auto mt-4 max-w-xl text-sm sm:text-base text-slate-600">
             Tìm kiếm và kết nối lại với bạn bè cùng khóa TC10, TC11, TC12.
           </p>
         </div>
 
-        {/* Search & Single-row Scrollable Filter Tabs */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-2xs">
-          {/* Search Box */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+        {/* Search & 2 DÒNG FILTER RIÊNG BIỆT (DÒNG KHU VỰC NẰM TRÊN 1 HÀNG TRƯỢT SANG PHẢI KHÔNG NHẢY DÒNG) */}
+        <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+          {/* Ô tìm kiếm */}
+          <div className="relative mb-5">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
               placeholder="Tìm theo họ tên, chức danh, công ty hoặc nơi ở..."
@@ -240,259 +240,213 @@ export default function AlumniDirectory({
                 setSearchTerm(e.target.value);
                 setVisibleCount(6);
               }}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-8 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:border-ueh focus:bg-white focus:outline-none"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-10 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:border-ueh focus:bg-white focus:outline-none focus:ring-2 focus:ring-ueh/20 transition-all"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
               >
-                ✕
+                <X size={16} />
               </button>
             )}
           </div>
 
-          {/* Single-row Horizontal Scrollable Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 whitespace-nowrap">
-            <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 mr-1 flex items-center gap-1">
-              <Filter size={12} /> Lớp:
+          {/* DÒNG 1: LỌC THEO LỚP */}
+          <div className="mb-4 flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1.5 min-w-[70px]">
+              <GraduationCap size={14} className="text-ueh" /> Lớp:
             </span>
-            {(["all", "TC10", "TC11", "TC12"] as const).map((cls) => (
-              <button
-                key={cls}
-                onClick={() => {
-                  setSelectedClass(cls);
-                  setVisibleCount(6);
-                }}
-                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all shrink-0 ${
-                  selectedClass === cls
-                    ? "bg-ueh text-white shadow-2xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {cls === "all" ? "Tất cả lớp" : cls}
-              </button>
-            ))}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {(["all", "TC10", "TC11", "TC12"] as const).map((cls) => (
+                <button
+                  key={cls}
+                  onClick={() => {
+                    setSelectedClass(cls);
+                    setVisibleCount(6);
+                  }}
+                  className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
+                    selectedClass === cls
+                      ? "bg-ueh text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {cls === "all" ? "Tất cả các lớp" : cls}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            <div className="h-4 w-px bg-slate-200 mx-1 shrink-0" />
-
-            <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 mr-1">
-              Khu vực:
+          {/* 5. DÒNG 2: LỌC THEO KHU VỰC (BẮT BUỘC NẰM TRÊN 1 HÀNG, TRƯỢT SANG PHẢI XEM THÊM, KO NHẢY DÒNG) */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 whitespace-nowrap pt-3 border-t border-slate-100">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1.5 min-w-[70px]">
+              <MapPin size={14} className="text-rose-500" /> Khu vực:
             </span>
-            {[
-              { id: "all", label: "Toàn cầu" },
-              { id: "hcm", label: "TP.HCM" },
-              { id: "hn", label: "Hà Nội" },
-              { id: "dn", label: "Đà Nẵng" },
-              { id: "overseas", label: "Nước ngoài" },
-            ].map((reg) => (
-              <button
-                key={reg.id}
-                onClick={() => {
-                  handleRegionClick(reg.id);
-                  setVisibleCount(6);
-                }}
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all shrink-0 ${
-                  selectedRegion === reg.id
-                    ? "bg-ueh-light text-white shadow-2xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-ueh"
-                }`}
-              >
-                {reg.id === "overseas" ? <Globe size={11} /> : <MapPin size={11} />}
-                {reg.label}
-              </button>
-            ))}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {[
+                { id: "all", label: "Toàn cầu (Tất cả)" },
+                { id: "hcm", label: "TP. Hồ Chí Minh" },
+                { id: "hn", label: "Hà Nội" },
+                { id: "dn", label: "Đà Nẵng" },
+                { id: "overseas", label: "Nước ngoài" },
+              ].map((reg) => (
+                <button
+                  key={reg.id}
+                  onClick={() => {
+                    handleRegionClick(reg.id);
+                    setVisibleCount(6);
+                  }}
+                  className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                    selectedRegion === reg.id
+                      ? "bg-ueh-light text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-ueh"
+                  }`}
+                >
+                  {reg.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Directory Grid - Cards with warm grey background for clear contrast & easy reading */}
+        {/* Directory Grid: 2 cột trên Mobile */}
         {filteredList.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <h3 className="text-sm font-bold text-slate-800">Không tìm thấy thành viên phù hợp</h3>
-            <button
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedClass("all");
-                handleRegionClick("all");
-              }}
-              className="mt-3 rounded-lg bg-ueh px-4 py-1.5 text-xs font-bold text-white hover:bg-ueh-light"
-            >
-              Đặt lại bộ lọc
-            </button>
+          <div className="rounded-3xl border border-slate-200 bg-white py-14 text-center">
+            <Users className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+            <h3 className="text-base font-bold text-slate-700">Không tìm thấy cựu sinh viên phù hợp</h3>
+            <p className="text-xs text-slate-500 mt-1">Vui lòng thử tìm kiếm với từ khóa hoặc bộ lọc khác.</p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3">
-              {displayedList.map((member) => (
-                <div
-                  key={member.id}
-                  onClick={() => setViewingMember(member)}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3 sm:p-5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:border-ueh/50 hover:shadow-md cursor-pointer"
-                >
-                  <div>
-                    {/* Top: Avatar & Class */}
-                    <div className="flex items-center justify-between mb-2 sm:mb-3">
-                      <div className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-gradient-to-br from-ueh to-ueh-light text-sm sm:text-base font-black text-white shadow-xs">
-                        {member.name.trim().charAt(member.name.trim().lastIndexOf(" ") + 1)}
-                      </div>
-                      <span className="rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] sm:text-xs font-bold text-ueh">
-                        {member.class}
-                      </span>
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
+            {displayedList.map((member) => (
+              <div
+                key={member.id}
+                onClick={() => setViewingMember(member)}
+                className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-ueh/40 hover:shadow-md cursor-pointer"
+              >
+                <div>
+                  {/* Top: Avatar & Class */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex h-11 w-11 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-base sm:text-lg shadow-xs group-hover:scale-105 transition-transform">
+                      {member.name.charAt(member.name.lastIndexOf(" ") + 1)}
                     </div>
-
-                    {/* Name */}
-                    <h3 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-ueh transition-colors truncate">
-                      {member.name}
-                    </h3>
-
-                    {/* Job & Company */}
-                    <div className="mt-1 sm:mt-2 space-y-1 text-[11px] sm:text-xs text-slate-600">
-                      <div className="flex items-center gap-1 font-medium text-slate-800 truncate">
-                        <Briefcase size={12} className="text-ueh-orange shrink-0" />
-                        <span className="truncate">{member.job}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-slate-500 truncate">
-                        <Building size={12} className="shrink-0 text-slate-400" />
-                        <span className="truncate">{member.company}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-slate-500 truncate">
-                        <MapPin size={12} className="text-rose-500 shrink-0" />
-                        <span className="truncate">{member.location}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions inside card: Direct Zalo & Phone */}
-                  <div className="mt-3 pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-ueh group-hover:underline">
-                      Xem hồ sơ
+                    <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] sm:text-xs font-bold text-ueh border border-blue-100/60">
+                      {member.class}
                     </span>
-                    {member.phone && (
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {member.phone.slice(0, 4)}***
-                      </span>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
 
-            {/* Load More Button */}
-            {filteredList.length > visibleCount && (
-              <div className="mt-8 text-center">
-                <button
-                  onClick={() => setVisibleCount((prev) => prev + 6)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-6 py-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:border-ueh hover:text-ueh transition-all"
-                >
-                  <ChevronDown size={14} />
-                  Xem thêm ({filteredList.length - visibleCount} cựu sinh viên còn lại)
-                </button>
+                  {/* Name & Job */}
+                  <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
+                    {member.name}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs font-semibold text-slate-600 line-clamp-1 mt-0.5">
+                    {member.job}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-1">
+                    {member.company}
+                  </p>
+                </div>
+
+                {/* Bottom: Location & Action */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs text-slate-500 line-clamp-1">
+                    <MapPin size={12} className="text-rose-500 shrink-0" />
+                    <span className="truncate">{member.location}</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-ueh group-hover:underline hidden sm:inline">
+                    Chi tiết →
+                  </span>
+                </div>
               </div>
-            )}
-          </>
+            ))}
+          </div>
+        )}
+
+        {/* Load More Button */}
+        {filteredList.length > displayedList.length && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => setVisibleCount((prev) => prev + 6)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-2.5 text-xs sm:text-sm font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-xs transition-all"
+            >
+              Xem thêm cựu sinh viên ({filteredList.length - displayedList.length})
+              <ChevronDown size={16} />
+            </button>
+          </div>
         )}
 
       </div>
 
-      {/* Modal Profile with Direct Zalo Link & Phone Call */}
+      {/* Modal xem chi tiết Profile */}
       {viewingMember && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
           onClick={() => setViewingMember(null)}
         >
           <div
-            className="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"
+            className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setViewingMember(null)}
-              className="absolute right-3.5 top-3.5 rounded-full bg-slate-100 p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+              className="absolute right-4 top-4 rounded-full bg-slate-100 p-1.5 text-slate-400 hover:bg-slate-200 transition-colors"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
 
-            <div className="text-center mb-4">
-              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-2xl font-black text-white shadow-md">
-                {viewingMember.name.trim().charAt(viewingMember.name.trim().lastIndexOf(" ") + 1)}
+            <div className="flex items-center gap-4 mb-5">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-2xl shadow-md">
+                {viewingMember.name.charAt(viewingMember.name.lastIndexOf(" ") + 1)}
               </div>
-              <h3 className="text-lg font-bold text-slate-900">{viewingMember.name}</h3>
-              <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-ueh border border-blue-100">
-                <GraduationCap size={13} /> Lớp {viewingMember.class} - K33 UEH
+              <div>
+                <h3 className="text-xl font-black text-slate-900">{viewingMember.name}</h3>
+                <span className="inline-block mt-0.5 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh">
+                  Lớp {viewingMember.class}
+                </span>
               </div>
             </div>
 
-            <div className="space-y-2 rounded-2xl bg-slate-50 p-3.5 border border-slate-200 text-xs">
-              <div>
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Chức danh:</span>
-                <p className="font-bold text-slate-800">{viewingMember.job}</p>
+            <div className="space-y-3 rounded-2xl bg-slate-50 p-4 text-xs sm:text-sm text-slate-700 mb-5">
+              <div className="flex items-center gap-2">
+                <Briefcase size={16} className="text-ueh shrink-0" />
+                <span className="font-bold">{viewingMember.job}</span>
               </div>
-
-              <div>
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Công ty:</span>
-                <p className="font-bold text-slate-800">{viewingMember.company}</p>
+              <div className="flex items-center gap-2">
+                <Building size={16} className="text-slate-400 shrink-0" />
+                <span>{viewingMember.company}</span>
               </div>
-
-              <div>
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Nơi ở:</span>
-                <p className="font-bold text-slate-800 flex items-center gap-1">
-                  <MapPin size={12} className="text-rose-500" /> {viewingMember.location}
-                </p>
+              <div className="flex items-center gap-2">
+                <MapPin size={16} className="text-rose-500 shrink-0" />
+                <span>{viewingMember.location}</span>
               </div>
-
-              {viewingMember.phone && (
-                <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-bold">Số điện thoại / Zalo:</span>
-                  <p className="font-bold text-slate-900 font-mono">{viewingMember.phone}</p>
-                </div>
-              )}
-
               {viewingMember.bio && (
-                <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-bold">Giới thiệu:</span>
-                  <p className="text-slate-600 italic mt-0.5 leading-relaxed">
-                    "{viewingMember.bio}"
-                  </p>
+                <div className="pt-2 border-t border-slate-200/60 text-slate-600 text-xs italic">
+                  "{viewingMember.bio}"
                 </div>
               )}
             </div>
 
-            {/* Direct Zalo Link & Phone Call Buttons */}
-            <div className="mt-4 flex flex-col sm:flex-row gap-2">
-              <a
-                href={
-                  viewingMember.phone
-                    ? `https://zalo.me/${viewingMember.phone.replace(/[^0-9]/g, "")}`
-                    : ZALO_GROUP_URL
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-zalo py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors"
-              >
-                <MessageCircle size={15} /> Nhắn Zalo
-              </a>
-
+            <div className="flex gap-2">
               {viewingMember.phone && (
                 <a
-                  href={`tel:${viewingMember.phone.replace(/[^0-9+]/g, "")}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+                  href={`tel:${viewingMember.phone}`}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-300 py-2.5 text-xs font-bold text-slate-800 hover:border-ueh hover:text-ueh transition-colors shadow-2xs"
                 >
-                  <Phone size={14} /> Gọi Điện
+                  <Phone size={14} className="text-emerald-600" /> Gọi điện
                 </a>
               )}
-            </div>
-
-            <div className="mt-2 text-center">
-              <button
-                onClick={() => setViewingMember(null)}
-                className="text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+              <a
+                href={ZALO_GROUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
               >
-                Đóng cửa sổ
-              </button>
+                <MessageCircle size={14} /> Nhóm Zalo
+              </a>
             </div>
           </div>
         </div>
       )}
-
     </section>
   );
 }
