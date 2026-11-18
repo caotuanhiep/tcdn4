@@ -110,6 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = session?.user ?? null;
       setUser(u);
       setTimeout(() => loadProfile(u), 0);
+
+      // Tự động dọn dẹp URL param ?code= sau khi hoàn tất đăng nhập
+      if (typeof window !== "undefined" && window.location.search.includes("code=")) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("code");
+        window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ""));
+      }
     });
 
     return () => {
