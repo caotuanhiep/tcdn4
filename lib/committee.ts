@@ -18,7 +18,7 @@ export const DEFAULT_COMMITTEE_MEMBERS: CommitteeMember[] = [
     role: "Trưởng Ban Liên Lạc",
     duty: "Điều phối chung, liên hệ UEH thăm trường",
     phone: "",
-    avatarUrl: "/images/committee/com-1.jpg",
+    avatarUrl: "/images/committee/com-nghia.png",
     avatarColor: "from-[#003B5C] to-[#0068FF]",
     badge: "Trưởng Ban",
   },
@@ -29,7 +29,7 @@ export const DEFAULT_COMMITTEE_MEMBERS: CommitteeMember[] = [
     role: "Phó Ban - Tổ Chức",
     duty: "Quản lý quỹ, website",
     phone: "0972555211",
-    avatarUrl: "/images/committee/com-2.jpg",
+    avatarUrl: "/images/committee/com-hiep.png",
     avatarColor: "from-blue-600 to-indigo-700",
     badge: "Tổ chức & Quỹ",
   },
@@ -40,7 +40,7 @@ export const DEFAULT_COMMITTEE_MEMBERS: CommitteeMember[] = [
     role: "Phó Ban - Hậu Cần",
     duty: "Quản lý áo kỷ niệm, ăn uống",
     phone: "0945816926",
-    avatarUrl: "/images/committee/com-3.jpg",
+    avatarUrl: "/images/committee/com-loi.png",
     avatarColor: "from-amber-500 to-orange-600",
     badge: "Hậu cần & Áo",
   },
@@ -51,7 +51,7 @@ export const DEFAULT_COMMITTEE_MEMBERS: CommitteeMember[] = [
     role: "Phó Ban - Truyền Thông",
     duty: "Kêu gọi tham gia sự kiện 15 năm, vận hành Alumni Hub và nhóm Zalo",
     phone: "0909808639",
-    avatarUrl: "/images/committee/com-4.jpg",
+    avatarUrl: "/images/committee/com-huy.png",
     avatarColor: "from-emerald-600 to-teal-700",
     badge: "Truyền thông & Zalo",
   },
@@ -62,7 +62,7 @@ export function getCommitteeMembers(): CommitteeMember[] {
     return DEFAULT_COMMITTEE_MEMBERS;
   }
   try {
-    const raw = localStorage.getItem("tcdn4_committee_members");
+    const raw = localStorage.getItem("tcdn4_committee_members_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -76,7 +76,7 @@ export function getCommitteeMembers(): CommitteeMember[] {
 export function saveCommitteeMembers(members: CommitteeMember[]) {
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem("tcdn4_committee_members", JSON.stringify(members));
+      localStorage.setItem("tcdn4_committee_members_v2", JSON.stringify(members));
     } catch {}
   }
 }

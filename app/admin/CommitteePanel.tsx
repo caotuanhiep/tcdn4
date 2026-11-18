@@ -57,8 +57,8 @@ export default function CommitteePanel() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentMember.name?.trim() || !currentMember.phone?.trim()) {
-      toast.error("Vui lòng điền họ tên và số điện thoại!");
+    if (!currentMember.name?.trim()) {
+      toast.error("Vui lòng điền họ tên thành viên!");
       return;
     }
 

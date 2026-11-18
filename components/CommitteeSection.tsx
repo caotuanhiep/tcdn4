@@ -32,7 +32,7 @@ export default function CommitteeSection() {
           </h2>
           <div className="mx-auto mt-2.5 h-1 w-20 rounded-full bg-gradient-to-r from-[#003B5C] via-[#0068FF] to-[#E06D53]" />
           <p className="mx-auto mt-3 max-w-2xl text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Đội ngũ đại diện kết nối cho 3 lớp <strong className="text-[#003B5C]">TC10 - TC11 - TC12</strong>. Mọi thắc mắc về chương trình 15 năm, đóng góp kỷ niệm hoặc đăng ký kiosk, xin vui lòng liên hệ ban liên lạc.
+            Đội ngũ đại diện kết nối cho 3 lớp <strong className="text-[#003B5C]">TC10 - TC11 - TC12</strong>. Mọi thắc mắc về chương trình 15 năm hoặc đóng góp kỷ niệm, xin vui lòng liên hệ ban liên lạc.
           </p>
         </div>
 
