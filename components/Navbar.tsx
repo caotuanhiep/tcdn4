@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { href: "#event", label: "Sự kiện", icon: Calendar },
   { href: "#directory", label: "Danh bạ", icon: Users },
   { href: "#committee", label: "Ban liên lạc", icon: HeartHandshake },
-  { href: "#memories", label: "Ký niệm", icon: ImageIcon },
+  { href: "#memories", label: "Kỷ niệm", icon: ImageIcon },
   { href: "#guestbook", label: "Lưu bút", icon: MessageSquare },
   { href: "#business", label: "Kiosk", icon: Store, isSubtle: true },
 ];

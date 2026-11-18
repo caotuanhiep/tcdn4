@@ -4,7 +4,6 @@ import { useState } from "react";
 import { 
   Compass, 
   MapPin, 
-  Users, 
   Building2
 } from "lucide-react";
 
@@ -72,6 +71,10 @@ export default function MigrationMap({
     if (onSelectRegion) {
       onSelectRegion(regionId);
     }
+    const dirElement = document.getElementById("directory");
+    if (dirElement) {
+      dirElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
   const calculateArc = (to: MapRegion) => {
@@ -110,20 +113,6 @@ export default function MigrationMap({
             <p className="mt-3 max-w-xl text-xs sm:text-sm text-slate-600">
               Từ giảng đường UEH thân yêu, các thế hệ cựu sinh viên TCDN4 đã tỏa sáng khắp ba miền và quốc tế.
             </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-3 shadow-2xs self-start md:self-end">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ueh text-white shadow-xs">
-              <Users size={18} />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-ueh">
-                Tổng Cựu Sinh Viên
-              </div>
-              <div className="text-lg sm:text-xl font-black text-ueh leading-tight">
-                {totalCount}+ <span className="text-xs font-normal text-slate-500">thành viên</span>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -24,32 +24,7 @@ interface ChatMessage {
   isMe?: boolean;
 }
 
-const INITIAL_CHAT: ChatMessage[] = [
-  {
-    id: "msg-1",
-    sender: "Lê Hoàng Cường",
-    className: "TC12",
-    avatarColor: "from-blue-600 to-indigo-600",
-    text: "Chào cả nhà! Anh chị em đã đăng ký áo hết chưa?",
-    time: "10:15",
-  },
-  {
-    id: "msg-2",
-    sender: "Trần Thị Bích",
-    className: "TC11",
-    avatarColor: "from-pink-500 to-rose-600",
-    text: "Mình vừa chuyển khoản đăng ký 2 vé luôn rồi nè 🎉 Hẹn gặp lại cả nhà!",
-    time: "10:18",
-  },
-  {
-    id: "msg-3",
-    sender: "Nguyễn Văn An",
-    className: "TC10",
-    avatarColor: "from-amber-500 to-orange-600",
-    text: "Hôm đó lớp mình tập trung sớm 9h30 ở sảnh Cơ sở A nha mọi người!",
-    time: "10:25",
-  },
-];
+const INITIAL_CHAT: ChatMessage[] = [];
 
 const UPCOMING_BIRTHDAYS = [
   { name: "Trần Thị Bích", class: "TC11", date: "19/11" },
@@ -186,52 +161,60 @@ export default function EmbeddedCommunityChat() {
 
         {/* Chat Message List */}
         <div className="h-60 sm:h-64 overflow-y-auto p-4 space-y-2.5 bg-slate-50/70">
-          {messages.map((msg) => {
-            const isCurrentUser = msg.isMe || (user && profile?.full_name === msg.sender);
-            return (
-              <div
-                key={msg.id}
-                className={`flex gap-2.5 ${isCurrentUser ? "flex-row-reverse" : "flex-row"}`}
-              >
-                {/* Avatar */}
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 py-6">
+              <MessageCircle className="h-8 w-8 text-slate-300 mb-1" />
+              <p className="text-xs font-semibold text-slate-600">Chưa có tin nhắn nào</p>
+              <p className="text-[11px] text-slate-400">Hãy gửi lời chào đầu tiên tới các bạn cùng khóa!</p>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isCurrentUser = msg.isMe || (user && profile?.full_name === msg.sender);
+              return (
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${msg.avatarColor} text-[10px] font-black text-white shadow-xs`}
+                  key={msg.id}
+                  className={`flex gap-2.5 ${isCurrentUser ? "flex-row-reverse" : "flex-row"}`}
                 >
-                  {msg.sender.charAt(msg.sender.lastIndexOf(" ") + 1)}
-                </div>
-
-                {/* Bubble */}
-                <div
-                  className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow-2xs ${
-                    isCurrentUser
-                      ? "bg-[#003B5C] text-white rounded-tr-xs"
-                      : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs"
-                  }`}
-                >
+                  {/* Avatar */}
                   <div
-                    className={`flex items-center gap-1.5 mb-0.5 ${
-                      isCurrentUser ? "justify-end text-blue-200" : "text-slate-400"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${msg.avatarColor} text-[10px] font-black text-white shadow-xs`}
+                  >
+                    {msg.sender.charAt(msg.sender.lastIndexOf(" ") + 1)}
+                  </div>
+
+                  {/* Bubble */}
+                  <div
+                    className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow-2xs ${
+                      isCurrentUser
+                        ? "bg-[#003B5C] text-white rounded-tr-xs"
+                        : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs"
                     }`}
                   >
-                    <span className="font-bold text-[11px]">
-                      {isCurrentUser ? "Bạn" : msg.sender}
-                    </span>
-                    {msg.className && (
-                      <span
-                        className={`rounded px-1 text-[9px] font-semibold ${
-                          isCurrentUser ? "bg-white/20 text-white" : "bg-blue-50 text-ueh"
-                        }`}
-                      >
-                        {msg.className}
+                    <div
+                      className={`flex items-center gap-1.5 mb-0.5 ${
+                        isCurrentUser ? "justify-end text-blue-200" : "text-slate-400"
+                      }`}
+                    >
+                      <span className="font-bold text-[11px]">
+                        {isCurrentUser ? "Bạn" : msg.sender}
                       </span>
-                    )}
-                    <span className="text-[9px] opacity-75">• {msg.time}</span>
+                      {msg.className && (
+                        <span
+                          className={`rounded px-1 text-[9px] font-semibold ${
+                            isCurrentUser ? "bg-white/20 text-white" : "bg-blue-50 text-ueh"
+                          }`}
+                        >
+                          {msg.className}
+                        </span>
+                      )}
+                      <span className="text-[9px] opacity-75">• {msg.time}</span>
+                    </div>
+                    <p className="leading-relaxed whitespace-pre-wrap font-medium text-[11px] sm:text-xs">{msg.text}</p>
                   </div>
-                  <p className="leading-relaxed whitespace-pre-wrap font-medium text-[11px] sm:text-xs">{msg.text}</p>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
           <div ref={messagesEndRef} />
         </div>
 

@@ -40,68 +40,7 @@ interface Registration {
   note?: string;
 }
 
-const INITIAL_REGISTRATIONS: Registration[] = [
-  {
-    id: "reg-1",
-    fullName: "Nguyễn Văn An",
-    className: "TC10",
-    phone: "0903***123",
-    shirtSize: "L (Nam)",
-    address: "Quận 1, TP.HCM",
-    guestsCount: 1,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "15/11",
-  },
-  {
-    id: "reg-2",
-    fullName: "Trần Thị Bích",
-    className: "TC11",
-    phone: "0918***456",
-    shirtSize: "M (Nữ)",
-    address: "Quận 7, TP.HCM",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "16/11",
-  },
-  {
-    id: "reg-3",
-    fullName: "Lê Hoàng Cường",
-    className: "TC12",
-    phone: "0982***789",
-    shirtSize: "XL (Nam)",
-    address: "Đống Đa, Hà Nội",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "16/11",
-  },
-  {
-    id: "reg-4",
-    fullName: "Phạm Hải Đăng",
-    className: "TC10",
-    phone: "0934***222",
-    shirtSize: "L (Nam)",
-    address: "TP. Thủ Đức, TP.HCM",
-    guestsCount: 1,
-    status: "pending",
-    paidAmount: 500000,
-    createdAt: "17/11",
-  },
-  {
-    id: "reg-5",
-    fullName: "Hoàng Minh Em",
-    className: "TC11",
-    phone: "0977***333",
-    shirtSize: "M (Nam)",
-    address: "Quận 10, TP.HCM",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "17/11",
-  },
-];
+const INITIAL_REGISTRATIONS: Registration[] = [];
 
 import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
 
@@ -561,59 +500,71 @@ export default function EventSection() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredRegistrations.map((reg, idx) => (
-                  <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors">
-                    {/* 1. Họ và tên: whitespace-nowrap */}
-                    <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-ueh">
-                          {idx + 1}
-                        </span>
-                        <span className="whitespace-nowrap">{reg.fullName}</span>
-                        {reg.guestsCount > 0 && (
-                          <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">
-                            (+{reg.guestsCount})
-                          </span>
-                        )}
+                {filteredRegistrations.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-500">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Users className="h-10 w-10 text-slate-300" />
+                        <p className="text-sm font-bold text-slate-700">Chưa có lượt đăng ký nào</p>
+                        <p className="text-xs text-slate-400">Hãy là người đầu tiên đăng ký tham gia họp mặt 15 năm và nhận áo đồng phục kỷ niệm!</p>
                       </div>
                     </td>
-
-                    {/* 2. Lớp */}
-                    <td className="py-2.5 px-3 whitespace-nowrap">
-                      <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh border border-blue-100">
-                        {reg.className}
-                      </span>
-                    </td>
-
-                    {/* 3. Trạng thái đứng kế Lớp theo yêu cầu */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                      {reg.status === "confirmed" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 size={11} /> Đã xác nhận
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
-                          <Clock size={11} /> Chờ đối soát
-                        </span>
-                      )}
-                    </td>
-
-                    {/* 4. Size Áo */}
-                    <td className="py-2.5 px-3 font-medium text-slate-700 whitespace-nowrap">
-                      {reg.shirtSize}
-                    </td>
-
-                    {/* 5. Địa chỉ nhận áo ra sau cùng */}
-                    <td className="py-2.5 px-3 text-slate-500 max-w-[200px] truncate" title={reg.address}>
-                      {reg.address}
-                    </td>
-
-                    {/* 6. Ngày ĐK */}
-                    <td className="py-2.5 px-3 text-right text-xs text-slate-400 whitespace-nowrap">
-                      {reg.createdAt}
-                    </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredRegistrations.map((reg, idx) => (
+                    <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* 1. Họ và tên: whitespace-nowrap */}
+                      <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-ueh">
+                            {idx + 1}
+                          </span>
+                          <span className="whitespace-nowrap">{reg.fullName}</span>
+                          {reg.guestsCount > 0 && (
+                            <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">
+                              (+{reg.guestsCount})
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 2. Lớp */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh border border-blue-100">
+                          {reg.className}
+                        </span>
+                      </td>
+
+                      {/* 3. Trạng thái đứng kế Lớp theo yêu cầu */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {reg.status === "confirmed" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 size={11} /> Đã xác nhận
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
+                            <Clock size={11} /> Chờ đối soát
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 4. Size Áo */}
+                      <td className="py-2.5 px-3 font-medium text-slate-700 whitespace-nowrap">
+                        {reg.shirtSize}
+                      </td>
+
+                      {/* 5. Địa chỉ nhận áo ra sau cùng */}
+                      <td className="py-2.5 px-3 text-slate-500 max-w-[200px] truncate" title={reg.address}>
+                        {reg.address}
+                      </td>
+
+                      {/* 6. Ngày ĐK */}
+                      <td className="py-2.5 px-3 text-right text-xs text-slate-400 whitespace-nowrap">
+                        {reg.createdAt}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

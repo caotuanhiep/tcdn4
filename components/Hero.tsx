@@ -72,10 +72,10 @@ export default function Hero() {
           <span>Chào mừng trở lại, TCDN4 - K33 UEH</span>
         </div>
 
-        {/* 1. Tiêu Đề Cực To Ấn Tượng */}
-        <h1 className="mb-4 text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-ueh leading-[1.08]">
-          15 Năm Hội Ngộ <br className="hidden sm:inline" />
-          <span className="bg-gradient-to-r from-ueh via-ueh-light to-ueh-orange bg-clip-text text-transparent">
+        {/* 1. Tiêu Đề Cực To Ấn Tượng - Ngắt dòng chuẩn trên mobile: Dòng 1 '15 Năm Hội Ngộ', Dòng 2 'TCDN4 Alumni Hub' trọn vẹn 1 dòng */}
+        <h1 className="mb-4 text-[28px] sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-ueh leading-[1.18] sm:leading-[1.1]">
+          <span className="block">15 Năm Hội Ngộ</span>
+          <span className="inline-block whitespace-nowrap bg-gradient-to-r from-ueh via-ueh-light to-ueh-orange bg-clip-text text-transparent">
             TCDN4 Alumni Hub
           </span>
         </h1>

@@ -23,8 +23,29 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "TCDN4 Alumni Hub - K33 UEH",
-  description: "Mạng lưới cựu sinh viên TCDN4 - K33 UEH nhân dịp kỷ niệm 15 năm hội ngộ.",
+  metadataBase: new URL("https://tcdn4.top"),
+  title: {
+    default: "TCDN4 K33 UEH - 15 Năm Hội Ngộ | Alumni Hub",
+    template: "%s | TCDN4 K33 UEH",
+  },
+  description:
+    "Cổng thông tin & mạng lưới kết nối cựu sinh viên TCDN4 - K33 Đại học Kinh Tế TP.HCM (UEH) nhân dịp kỷ niệm 15 năm tốt nghiệp. Đăng ký tham gia họp mặt, nhận áo đồng phục kỷ niệm, kết nối danh bạ toàn khóa và lưu bút bạn bè.",
+  keywords: [
+    "TCDN4",
+    "TCDN4 K33",
+    "K33 UEH",
+    "Đại học Kinh tế TP.HCM",
+    "Cựu sinh viên UEH",
+    "Hội ngộ 15 năm",
+    "TCDN4 Alumni Hub",
+    "Tài chính doanh nghiệp UEH",
+    "TC10",
+    "TC11",
+    "TC12",
+  ],
+  authors: [{ name: "Ban Liên Lạc Cựu Sinh Viên TCDN4 K33 UEH" }],
+  creator: "Ban Liên Lạc TCDN4 K33 UEH",
+  publisher: "TCDN4 Alumni Hub",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.png",
@@ -35,6 +56,41 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "TCDN4 Hub",
+  },
+  openGraph: {
+    type: "website",
+    locale: "vi_VN",
+    url: "https://tcdn4.top",
+    siteName: "TCDN4 Alumni Hub - K33 UEH",
+    title: "TCDN4 K33 UEH - 15 Năm Hội Ngộ | Alumni Hub",
+    description:
+      "Hành trình 15 năm gắn kết cựu sinh viên Tài chính Doanh nghiệp 4 - K33 UEH. Đăng ký họp mặt, nhận áo đồng phục kỷ niệm và kết nối danh bạ bạn bè.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "15 Năm Hội Ngộ TCDN4 K33 UEH Alumni Hub",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TCDN4 K33 UEH - 15 Năm Hội Ngộ | Alumni Hub",
+    description:
+      "Hành trình 15 năm gắn kết cựu sinh viên TCDN4 - K33 UEH. Đăng ký tham gia họp mặt, nhận áo đồng phục và kết nối danh bạ.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
 };
 

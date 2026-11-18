@@ -22,35 +22,7 @@ interface GuestbookEntry {
   likes: number;
 }
 
-const INITIAL_MESSAGES: GuestbookEntry[] = [
-  {
-    id: "gb-1",
-    name: "Lê Hoàng Cường",
-    className: "TC12",
-    time: "Hôm qua",
-    message:
-      "Tiếc quá đợt này mình đang công tác tại Hà Nội không bay về dự kịp ngày 12/12. Chúc tập thể lớp mình có một buổi họp mặt 15 năm thật ý nghĩa và nhiều niềm vui nhé! Mọi người đi nhớ quay chụp thật nhiều hình dìm hàng up lên nha!",
-    likes: 14,
-  },
-  {
-    id: "gb-2",
-    name: "Hoàng Minh Em",
-    className: "TC11",
-    time: "2 ngày trước",
-    message:
-      "Gửi lời chào thân thương từ Sydney đến toàn thể anh chị em TC10 - TC11 - TC12! 15 năm trôi qua nhanh như một cái chớp mắt, vẫn nhớ như in những buổi trưa ngồi chép bài tại Canteen Cơ sở B. Chúc các bạn luôn dồi dào sức khỏe!",
-    likes: 21,
-  },
-  {
-    id: "gb-3",
-    name: "Vũ Khánh Phương",
-    className: "TC12",
-    time: "3 ngày trước",
-    message:
-      "Dù cách xa nửa vòng trái đất ở California nhưng trái tim vẫn luôn hướng về UEH và TCDN4. Hẹn dịp kỷ niệm 20 năm mình nhất định sẽ có mặt đông đủ!",
-    likes: 19,
-  },
-];
+const INITIAL_MESSAGES: GuestbookEntry[] = [];
 
 export default function GuestbookSection() {
   const toast = useToast();
@@ -228,58 +200,66 @@ export default function GuestbookSection() {
             </div>
 
             <div className="max-h-[500px] overflow-y-auto pr-1 space-y-3.5 no-scrollbar">
-              {messages.map((item, idx) => {
-                const isLiked = likedIds.includes(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    className="group relative rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 backdrop-blur-md transition-all duration-300 hover:border-sky-400/40 hover:bg-white/10 hover:shadow-xl hover:-translate-y-0.5"
-                  >
-                    {/* Top: Name & Class & Time */}
-                    <div className="flex items-start justify-between mb-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-black text-white shadow-xs">
-                          {item.name.charAt(item.name.lastIndexOf(" ") + 1)}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-sm text-white group-hover:text-sky-300 transition-colors">
-                              {item.name}
-                            </span>
-                            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-sky-300 border border-white/10">
-                              {item.className}
-                            </span>
+              {messages.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-slate-300 backdrop-blur-md">
+                  <Feather className="mx-auto h-8 w-8 text-sky-400/60 mb-2" />
+                  <p className="text-sm font-semibold text-white">Chưa có lời nhắn nào</p>
+                  <p className="text-xs text-slate-400 mt-1">Hãy là người đầu tiên gửi lời chúc và chia sẻ kỷ niệm vào sổ lưu bút!</p>
+                </div>
+              ) : (
+                messages.map((item, idx) => {
+                  const isLiked = likedIds.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className="group relative rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 backdrop-blur-md transition-all duration-300 hover:border-sky-400/40 hover:bg-white/10 hover:shadow-xl hover:-translate-y-0.5"
+                    >
+                      {/* Top: Name & Class & Time */}
+                      <div className="flex items-start justify-between mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-black text-white shadow-xs">
+                            {item.name.charAt(item.name.lastIndexOf(" ") + 1)}
                           </div>
-                          <span className="text-[10px] text-slate-400">{item.time}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-sm text-white group-hover:text-sky-300 transition-colors">
+                                {item.name}
+                              </span>
+                              <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-sky-300 border border-white/10">
+                                {item.className}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">{item.time}</span>
+                          </div>
                         </div>
+
+                        {/* Nút Like thả tim */}
+                        <button
+                          onClick={() => handleToggleLike(item.id)}
+                          className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold transition-all ${
+                            isLiked
+                              ? "bg-rose-500 text-white shadow-xs"
+                              : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                          }`}
+                        >
+                          <Heart
+                            size={13}
+                            className={isLiked ? "fill-white text-white" : "text-rose-400"}
+                          />
+                          <span>{item.likes}</span>
+                        </button>
                       </div>
 
-                      {/* Nút Like thả tim */}
-                      <button
-                        onClick={() => handleToggleLike(item.id)}
-                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold transition-all ${
-                          isLiked
-                            ? "bg-rose-500 text-white shadow-xs"
-                            : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
-                        }`}
-                      >
-                        <Heart
-                          size={13}
-                          className={isLiked ? "fill-white text-white" : "text-rose-400"}
-                        />
-                        <span>{item.likes}</span>
-                      </button>
+                      {/* Nội dung lưu bút */}
+                      <div className="relative pl-3 border-l-2 border-sky-400/40 my-2">
+                        <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
+                          "{item.message}"
+                        </p>
+                      </div>
                     </div>
-
-                    {/* Nội dung lưu bút */}
-                    <div className="relative pl-3 border-l-2 border-sky-400/40 my-2">
-                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
-                        "{item.message}"
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 

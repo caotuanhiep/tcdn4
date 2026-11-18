@@ -29,68 +29,7 @@ interface Registration {
   note?: string;
 }
 
-const DEFAULT_REGS: Registration[] = [
-  {
-    id: "reg-1",
-    fullName: "Nguyễn Văn An",
-    className: "TC10",
-    phone: "0903123123",
-    shirtSize: "L (Nam)",
-    address: "Số 12 Nguyễn Du, Quận 1, TP.HCM",
-    guestsCount: 1,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "15/11/2026",
-  },
-  {
-    id: "reg-2",
-    fullName: "Trần Thị Bích",
-    className: "TC11",
-    phone: "0918456456",
-    shirtSize: "M (Nữ)",
-    address: "Chung cư Sunrise City, Quận 7, TP.HCM",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "16/11/2026",
-  },
-  {
-    id: "reg-3",
-    fullName: "Lê Hoàng Cường",
-    className: "TC12",
-    phone: "0982789789",
-    shirtSize: "XL (Nam)",
-    address: "Phố Huế, Hai Bà Trưng, Hà Nội",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "16/11/2026",
-  },
-  {
-    id: "reg-4",
-    fullName: "Phạm Hải Đăng",
-    className: "TC10",
-    phone: "0934222222",
-    shirtSize: "L (Nam)",
-    address: "Thảo Điền, TP. Thủ Đức, TP.HCM",
-    guestsCount: 1,
-    status: "pending",
-    paidAmount: 500000,
-    createdAt: "17/11/2026",
-  },
-  {
-    id: "reg-5",
-    fullName: "Hoàng Minh Em",
-    className: "TC11",
-    phone: "0977333333",
-    shirtSize: "M (Nam)",
-    address: "Đường 3/2, Quận 10, TP.HCM",
-    guestsCount: 0,
-    status: "confirmed",
-    paidAmount: 500000,
-    createdAt: "17/11/2026",
-  },
-];
+const DEFAULT_REGS: Registration[] = [];
 
 export default function RegistrationsPanel() {
   const toast = useToast();
