@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { 
   Users, 
   HeartHandshake, 
@@ -9,62 +10,14 @@ import {
   ShieldCheck, 
   GraduationCap
 } from "lucide-react";
-
-interface CommitteeMember {
-  id: string;
-  name: string;
-  className: "TC10" | "TC11" | "TC12";
-  role: string;
-  duty: string;
-  phone: string;
-  avatarColor: string;
-  badge: string;
-}
-
-const COMMITTEE_MEMBERS: CommitteeMember[] = [
-  {
-    id: "com-1",
-    name: "Nguyễn Văn An",
-    className: "TC10",
-    role: "Trưởng Ban Liên Lạc",
-    duty: "Điều phối chung, kế hoạch tổng thể & tài chính 15 năm",
-    phone: "0903 123 456",
-    avatarColor: "from-[#003B5C] to-[#0068FF]",
-    badge: "Điều phối",
-  },
-  {
-    id: "com-2",
-    name: "Trần Thị Bích",
-    className: "TC11",
-    role: "Phó Ban - Hậu Cần",
-    duty: "Quản lý áo kỷ niệm, quà tặng, đón tiếp tại Cơ sở A / B",
-    phone: "0918 654 321",
-    avatarColor: "from-rose-500 to-pink-600",
-    badge: "Hậu cần & Áo",
-  },
-  {
-    id: "com-3",
-    name: "Lê Hoàng Cường",
-    className: "TC12",
-    role: "Phó Ban - Truyền Thông",
-    duty: "Biên tập kỷ yếu, vận hành Alumni Hub & nhóm Zalo",
-    phone: "0982 112 233",
-    avatarColor: "from-amber-500 to-orange-600",
-    badge: "Truyền thông",
-  },
-  {
-    id: "com-4",
-    name: "Phạm Hải Đăng",
-    className: "TC10",
-    role: "Ủy Viên - Kết Nối DN",
-    duty: "Xây dựng Kiosk doanh nghiệp & ưu đãi nội bộ K33",
-    phone: "0934 998 877",
-    avatarColor: "from-emerald-600 to-teal-700",
-    badge: "Mạng lưới DN",
-  },
-];
+import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers } from "@/lib/committee";
 
 export default function CommitteeSection() {
+  const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
+
+  useEffect(() => {
+    setMembers(getCommitteeMembers());
+  }, []);
   return (
     <section id="committee" className="scroll-mt-16 bg-white py-14 sm:py-20 border-t border-slate-200/80">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -85,7 +38,7 @@ export default function CommitteeSection() {
 
         {/* Grid Ban Liên Lạc 2 CỘT TRÊN MOBILE - Bo góc vừa vặn rounded-2xl */}
         <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
-          {COMMITTEE_MEMBERS.map((member) => (
+          {members.map((member) => (
             <div
               key={member.id}
               className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 sm:p-5 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:border-[#003B5C]/30 hover:shadow-lg"
@@ -103,8 +56,13 @@ export default function CommitteeSection() {
 
                 {/* Avatar & Info */}
                 <div className="text-center mb-2.5">
-                  <div className={`mx-auto mb-2 flex h-13 w-13 sm:h-16 sm:w-16 items-center justify-center rounded-xl bg-gradient-to-br ${member.avatarColor} text-white font-black text-base sm:text-xl shadow-xs group-hover:scale-105 transition-transform`}>
-                    {member.name.charAt(member.name.lastIndexOf(" ") + 1)}
+                  <div className={`mx-auto mb-2 flex h-14 w-14 sm:h-18 sm:w-18 items-center justify-center rounded-2xl ${member.avatarColor || "bg-gradient-to-br from-[#003B5C] to-[#0068FF]"} text-white font-black text-base sm:text-xl shadow-xs group-hover:scale-105 transition-transform overflow-hidden`}>
+                    {member.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={member.avatarUrl} alt={member.name} className="h-full w-full object-cover" />
+                    ) : (
+                      member.name.charAt(member.name.lastIndexOf(" ") + 1)
+                    )}
                   </div>
                   <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-[#003B5C] transition-colors line-clamp-1">
                     {member.name}

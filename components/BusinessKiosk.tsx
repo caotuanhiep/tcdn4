@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Store, 
   Tag, 
@@ -12,61 +12,25 @@ import {
   Megaphone,
   X,
   Users,
-  Sparkles
+  Sparkles,
+  Phone
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
-
-interface Business {
-  id: number;
-  name: string;
-  type: string;
-  owner: string;
-  discount: string;
-  gradient: string;
-}
-
-const BUSINESS_ITEMS: Business[] = [
-  {
-    id: 1,
-    name: "SMLIFE",
-    type: "Nội thất thông minh & Bàn ghế Ergonomic",
-    owner: "Nguyễn Văn An (TC10)",
-    discount: "Giảm 15% cho Alumni K33",
-    gradient: "from-orange-500 to-amber-500",
-  },
-  {
-    id: 2,
-    name: "Bamos Coffee",
-    type: "F&B - Chuỗi Cà phê Trải nghiệm 24/7",
-    owner: "Trần Thị Bích (TC11)",
-    discount: "Tặng 1 đồ uống khi check-in",
-    gradient: "from-emerald-500 to-teal-500",
-  },
-  {
-    id: 3,
-    name: "Gowise",
-    type: "eSIM Du lịch Quốc tế & Data Roaming",
-    owner: "Lê Hoàng Cường (TC12)",
-    discount: "Giảm 20% gói Data toàn cầu",
-    gradient: "from-sky-500 to-cyan-500",
-  },
-  {
-    id: 4,
-    name: "Viwise",
-    type: "Giải pháp Digital Marketing & SEO",
-    owner: "Phạm Hải Đăng (TC10)",
-    discount: "Free Audit Website & Tư vấn 1:1",
-    gradient: "from-purple-500 to-indigo-500",
-  },
-];
+import { KioskItem, DEFAULT_KIOSK_ITEMS, getKioskItems, saveKioskItems } from "@/lib/kiosk";
 
 export default function BusinessKiosk() {
   const toast = useToast();
+  const [items, setItems] = useState<KioskItem[]>(DEFAULT_KIOSK_ITEMS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [bizName, setBizName] = useState("");
   const [bizType, setBizType] = useState("");
   const [owner, setOwner] = useState("");
+  const [phone, setPhone] = useState("");
   const [discount, setDiscount] = useState("");
+
+  useEffect(() => {
+    setItems(getKioskItems());
+  }, []);
 
   const handleRegisterKiosk = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,11 +38,27 @@ export default function BusinessKiosk() {
       toast.error("Vui lòng điền tên doanh nghiệp và người đại diện!");
       return;
     }
-    toast.success("Đã ghi nhận thông tin đăng ký Kiosk! Ban liên lạc sẽ liên hệ duyệt hiển thị.");
+
+    const newItem: KioskItem = {
+      id: Date.now(),
+      name: bizName.trim(),
+      type: bizType.trim() || "Doanh nghiệp cựu sinh viên",
+      owner: owner.trim(),
+      phone: phone.trim() || undefined,
+      discount: discount.trim() || "Ưu đãi đặc biệt cho K33",
+      gradient: "from-blue-600 to-indigo-600",
+    };
+
+    const updated = [...items, newItem];
+    setItems(updated);
+    saveKioskItems(updated);
+
+    toast.success("Đã ghi nhận thông tin đăng ký Kiosk thành công!");
     setIsModalOpen(false);
     setBizName("");
     setBizType("");
     setOwner("");
+    setPhone("");
     setDiscount("");
   };
 
@@ -111,15 +91,20 @@ export default function BusinessKiosk() {
 
         {/* 7. Grid Kiosk: 2 CỘT TRÊN MOBILE theo yêu cầu số 7 */}
         <div className="grid grid-cols-2 gap-3.5 sm:gap-5 lg:grid-cols-4">
-          {BUSINESS_ITEMS.map((biz) => (
+          {items.map((biz) => (
             <div
               key={biz.id}
               className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <div className={`flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-gradient-to-br ${biz.gradient} text-white shadow-xs group-hover:scale-105 transition-transform`}>
-                    <Store size={18} />
+                  <div className={`flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-gradient-to-br ${biz.gradient || "from-blue-600 to-indigo-600"} text-white shadow-xs group-hover:scale-105 transition-transform overflow-hidden`}>
+                    {biz.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={biz.logoUrl} alt={biz.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <Store size={18} />
+                    )}
                   </div>
                   <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-rose-600 border border-rose-100 flex items-center gap-1">
                     <Tag size={10} /> Nội bộ
@@ -135,9 +120,21 @@ export default function BusinessKiosk() {
               </div>
 
               <div className="mt-4 pt-3 border-t border-slate-100">
-                <div className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1 mb-2">
-                  <Users size={12} className="shrink-0" />
-                  <span className="truncate">{biz.owner}</span>
+                <div className="text-[10px] sm:text-xs text-slate-400 flex items-center justify-between mb-2">
+                  <span className="flex items-center gap-1 truncate">
+                    <Users size={12} className="shrink-0" />
+                    <span className="truncate">{biz.owner}</span>
+                  </span>
+                  {biz.phone && (
+                    <a
+                      href={`https://zalo.me/${biz.phone.replace(/[^0-9]/g, "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#0068FF] font-bold hover:underline shrink-0"
+                    >
+                      Zalo
+                    </a>
+                  )}
                 </div>
                 <div className="rounded-xl bg-blue-50/90 px-2.5 py-1.5 text-[10px] sm:text-xs font-bold text-ueh border border-blue-100 text-center leading-snug">
                   {biz.discount}

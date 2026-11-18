@@ -126,7 +126,7 @@ export default function EventSection() {
   const [filterClass, setFilterClass] = useState<string>("all");
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
 
-  // Bộ đếm lùi (Countdown Timer) tới Thứ 7 ngày 12/12/2026 (09:30:00)
+  // Bộ đếm lùi (Countdown Timer) tới Thứ 7 ngày 12/12/2026 (11:30:00)
   const [mounted, setMounted] = useState(false);
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
@@ -137,8 +137,8 @@ export default function EventSection() {
 
   useEffect(() => {
     setMounted(true);
-    // Mốc thời gian chốt: Thứ 7 ngày 12/12/2026 lúc 09:30 AM
-    const target = new Date("2026-12-12T09:30:00").getTime();
+    // Mốc thời gian chốt: Thứ 7 ngày 12/12/2026 lúc 11:30 AM
+    const target = new Date("2026-12-12T11:30:00").getTime();
 
     const calculateTime = () => {
       const now = new Date().getTime();
@@ -267,15 +267,15 @@ export default function EventSection() {
           </p>
         </div>
 
-        {/* Thẻ Áo Polo Kỷ Niệm hiển thị trên Mobile (nằm ngay trên mục Thông tin chung) */}
+        {/* Thẻ Áo Polo Kỷ Niệm hiển thị trên Mobile (nằm ngay trên mục Thông tin chung) - Dùng ảnh nền trong suốt */}
         <div className="block lg:hidden mb-6 rounded-3xl overflow-hidden border border-orange-200/90 bg-gradient-to-br from-orange-50/90 via-white to-amber-50/60 p-3.5 shadow-md">
           <div className="flex items-center gap-3.5">
-            <div className="h-24 w-24 shrink-0 rounded-2xl overflow-hidden bg-white border border-orange-100 p-1 flex items-center justify-center shadow-xs">
+            <div className="h-28 w-24 shrink-0 rounded-2xl overflow-hidden bg-gradient-to-b from-slate-100 to-blue-50/60 border border-orange-100 p-1 flex items-center justify-center shadow-xs">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/uniform-3.png"
+                src="/images/model-uniform-transparent.png"
                 alt="Áo Polo Kỷ Niệm 15 Năm TCDN4"
-                className="h-full w-full object-contain"
+                className="h-full w-auto object-contain object-bottom"
               />
             </div>
             <div className="flex-1 text-left">
@@ -294,9 +294,9 @@ export default function EventSection() {
                     openProfile();
                   }
                 }}
-                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-ueh-orange px-3 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-orange-600"
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-ueh-orange px-3 py-1.5 text-[11px] font-bold text-white shadow-2xs hover:bg-orange-600"
               >
-                <Shirt size={12} /> Chọn size áo ngay
+                <Shirt size={12} /> Đăng ký nhận áo kỷ niệm TC4
               </button>
             </div>
           </div>
@@ -358,7 +358,7 @@ export default function EventSection() {
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Thời gian</div>
                     <div className="text-sm font-bold text-slate-900">Thứ 7, ngày 12/12/2026</div>
-                    <div className="text-xs font-semibold text-ueh-orange">Khung giờ: 09:30 - 14:00 (Đã chốt)</div>
+                    <div className="text-xs font-semibold text-ueh-orange">Bắt đầu từ: 11:30 (Đã chốt)</div>
                   </div>
                 </div>
 
@@ -378,9 +378,9 @@ export default function EventSection() {
                     <MapPin size={18} />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Địa điểm</div>
-                    <div className="text-sm font-bold text-slate-900">Cơ sở B - UEH (279 Nguyễn Tri Phương)</div>
-                    <div className="text-xs text-slate-500">& Nhà hàng VIP phòng riêng (trung tâm Q.10)</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Địa điểm tiệc</div>
+                    <div className="text-sm font-bold text-slate-900">Quán Làng Nướng Nam Bộ</div>
+                    <div className="text-xs text-slate-600 font-medium">302A Tô Hiến Thành, P.15, Q.10, TP.HCM</div>
                   </div>
                 </div>
 
@@ -445,12 +445,12 @@ export default function EventSection() {
                   </div>
                   <div className="flex-1 rounded-2xl border border-slate-200/60 bg-white p-3.5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-ueh uppercase tracking-wide">09:30 - 11:30</span>
-                      <span className="text-[11px] rounded-md bg-blue-50 px-2 py-0.5 font-medium text-ueh">Cơ sở B - UEH</span>
+                      <span className="text-xs font-bold text-ueh uppercase tracking-wide">11:30 - 12:00</span>
+                      <span className="text-[11px] rounded-md bg-blue-50 px-2 py-0.5 font-medium text-ueh">302A Tô Hiến Thành</span>
                     </div>
-                    <h4 className="text-sm font-bold text-slate-900 mt-1">Gặp gỡ & Thăm trường cũ</h4>
+                    <h4 className="text-sm font-bold text-slate-900 mt-1">Đón tiếp & Trao áo kỷ niệm TC4</h4>
                     <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                      Check-in sảnh B1 (279 Nguyễn Tri Phương), nhận áo lớp kỷ niệm và chụp ảnh tập thể tại các giảng đường xưa.
+                      Tập trung tại Làng Nướng Nam Bộ, check-in gặp gỡ bạn bè, nhận áo đồng phục kỷ niệm 15 năm và chụp hình lưu niệm.
                     </p>
                   </div>
                 </div>
@@ -461,12 +461,12 @@ export default function EventSection() {
                   </div>
                   <div className="flex-1 rounded-2xl border border-slate-200/60 bg-white p-3.5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-ueh-light uppercase tracking-wide">11:45 - 14:00</span>
-                      <span className="text-[11px] rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">Nhà hàng VIP Q.10</span>
+                      <span className="text-xs font-bold text-ueh-light uppercase tracking-wide">12:00 - 14:30</span>
+                      <span className="text-[11px] rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">Làng Nướng Nam Bộ</span>
                     </div>
-                    <h4 className="text-sm font-bold text-slate-900 mt-1">Tiệc trưa VIP & Giao lưu ấm cúng</h4>
+                    <h4 className="text-sm font-bold text-slate-900 mt-1">Tiệc trưa hội ngộ 15 năm & Giao lưu</h4>
                     <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                      Dùng bữa thân mật tại phòng riêng, chia sẻ chặng đường 15 năm và hát hò ôn lại thời sinh viên.
+                      Nâng ly mừng 15 năm ra trường, ôn lại kỷ niệm thanh xuân thời sinh viên và chia sẻ những bước ngoặt trong sự nghiệp.
                     </p>
                   </div>
                 </div>
@@ -477,7 +477,7 @@ export default function EventSection() {
                   </div>
                   <div className="flex-1 rounded-2xl border border-slate-200/60 bg-white p-3.5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-ueh-orange uppercase tracking-wide">14:00 trở đi</span>
+                      <span className="text-xs font-bold text-ueh-orange uppercase tracking-wide">14:30 trở đi</span>
                       <span className="text-[11px] rounded-md bg-orange-50 px-2 py-0.5 font-medium text-ueh-orange">TCDN4 Hub</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 mt-1">Lưu giữ Kỷ yếu & Kết nối lâu dài</h4>

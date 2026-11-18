@@ -111,7 +111,6 @@ const INITIAL_ALBUM: AlbumPhoto[] = [
     comments: [],
     uploader: "Ban Liên Lạc",
     color: "from-sky-600 to-blue-800",
-    span: "col-span-2",
   },
   {
     id: "photo-7",
@@ -134,6 +133,17 @@ const INITIAL_ALBUM: AlbumPhoto[] = [
     comments: [],
     uploader: "Ngô Mỹ Linh",
     color: "from-rose-600 to-pink-800",
+  },
+  {
+    id: "photo-9",
+    title: "Bảo Vệ Đề Tài Khóa Luận",
+    type: "image",
+    category: "Học tập",
+    caption: "Kỷ niệm ngày bảo vệ tốt nghiệp K33",
+    likes: 24,
+    comments: [],
+    uploader: "TC12",
+    color: "from-indigo-600 to-purple-800",
   },
 ];
 
@@ -182,7 +192,7 @@ export default function MemoriesGallery() {
   const [commentInput, setCommentInput] = useState("");
   const [likedPhotoIds, setLikedPhotoIds] = useState<string[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState<number>(6); // Cơ chế xem thêm ảnh
+  const [visibleCount, setVisibleCount] = useState<number>(9); // 9 mục lấp đầy hoàn hảo 3 hàng grid 4 cột
 
   // New photo form
   const [newTitle, setNewTitle] = useState("");

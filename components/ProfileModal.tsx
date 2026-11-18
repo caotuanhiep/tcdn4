@@ -636,7 +636,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                     <div>
                       <div className="text-xs font-bold text-slate-900">🟢 Sẽ tham gia trực tiếp</div>
                       <div className="text-[11px] text-slate-500 mt-0.5">
-                        Tại Cơ sở B - UEH & Tiệc trưa giao lưu thân mật (12/12)
+                        Tại Làng Nướng Nam Bộ (302A Tô Hiến Thành, Q.10) lúc 11:30 ngày 12/12
                       </div>
                     </div>
                   </button>

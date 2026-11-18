@@ -189,7 +189,7 @@ export default function AlumniDirectory({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [viewingMember, setViewingMember] = useState<AlumniMember | null>(null);
-  const [visibleCount, setVisibleCount] = useState<number>(6);
+  const [visibleCount, setVisibleCount] = useState<number>(8);
   const [alumniList, setAlumniList] = useState<AlumniMember[]>(ALUMNI_LIST);
 
   // Tải danh bạ thực tế từ bảng profiles trên Supabase
@@ -356,7 +356,7 @@ export default function AlumniDirectory({
                   key={reg.id}
                   onClick={() => {
                     handleRegionClick(reg.id);
-                    setVisibleCount(6);
+                    setVisibleCount(8);
                   }}
                   className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
                     selectedRegion === reg.id
@@ -371,7 +371,7 @@ export default function AlumniDirectory({
           </div>
         </div>
 
-        {/* Directory Grid: 2 cột trên Mobile */}
+        {/* Directory Grid: 4 cột trên Desktop, 2 cột trên Tablet, Nền Gradient nhẹ nhàng, Ảnh to bên trái */}
         {filteredList.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white py-14 text-center">
             <Users className="mx-auto h-12 w-12 text-slate-300 mb-3" />
@@ -379,17 +379,25 @@ export default function AlumniDirectory({
             <p className="text-xs text-slate-500 mt-1">Vui lòng thử tìm kiếm với từ khóa hoặc bộ lọc khác.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
-            {displayedList.map((member) => (
-              <div
-                key={member.id}
-                onClick={() => setViewingMember(member)}
-                className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-ueh/40 hover:shadow-md cursor-pointer"
-              >
-                <div>
-                  {/* Top: Avatar & Class */}
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="relative flex h-11 w-11 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-base sm:text-lg shadow-xs group-hover:scale-105 transition-transform overflow-hidden">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {displayedList.map((member) => {
+              // Nền gradient màu nhẹ nhàng phù hợp từng lớp
+              const gradientBg = member.class === "TC10"
+                ? "bg-gradient-to-br from-white via-sky-50/50 to-blue-50/60 border-blue-100/90"
+                : member.class === "TC11"
+                ? "bg-gradient-to-br from-white via-amber-50/40 to-orange-50/50 border-amber-100/90"
+                : "bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/50 border-emerald-100/90";
+
+              return (
+                <div
+                  key={member.id}
+                  onClick={() => setViewingMember(member)}
+                  className={`group relative flex flex-col justify-between rounded-3xl border ${gradientBg} p-3.5 sm:p-4 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-ueh/50 hover:shadow-md cursor-pointer`}
+                >
+                  {/* Top: Ảnh Avatar to bên trái, Thông tin bên phải */}
+                  <div className="flex items-start gap-3">
+                    {/* Avatar lớn bên trái */}
+                    <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh via-ueh-light to-ueh-orange text-white font-black text-lg sm:text-2xl shadow-xs group-hover:scale-105 transition-transform overflow-hidden border-2 border-white">
                       {member.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -400,56 +408,73 @@ export default function AlumniDirectory({
                       ) : (
                         member.name.charAt(member.name.lastIndexOf(" ") + 1)
                       )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
                       {user && user.id === member.id && (
-                        <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-emerald-700 border border-emerald-500/20 whitespace-nowrap">
+                        <span className="absolute bottom-1 right-1 rounded-md bg-emerald-600 px-1 py-0.2 text-[8px] font-black text-white shadow-2xs">
                           Bạn
                         </span>
                       )}
-                      <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] sm:text-xs font-bold text-ueh border border-blue-100/60">
-                        {member.class}
-                      </span>
+                    </div>
+
+                    {/* Thông tin cựu sinh viên bên phải */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-ueh border border-slate-200/80 shadow-2xs">
+                          {member.class}
+                        </span>
+                        {member.is_verified && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-bold text-[#0068FF]">
+                            <CheckCircle2 size={11} />
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
+                        {member.name}
+                      </h3>
+                      <p className="text-[11px] font-semibold text-slate-700 line-clamp-1 mt-0.5">
+                        {member.job}
+                      </p>
+                      <p className="text-[10px] text-slate-500 line-clamp-1">
+                        {member.company}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Name & Job */}
-                  <div className="flex items-center gap-1">
-                    <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
-                      {member.name}
-                    </h3>
-                    {member.is_verified && (
-                      <CheckCircle2 size={13} className="text-[#0068FF] shrink-0" />
-                    )}
-                  </div>
-                  <p className="text-[11px] sm:text-xs font-semibold text-slate-600 line-clamp-1 mt-0.5">
-                    {member.job}
-                  </p>
-                  <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-1">
-                    {member.company}
-                  </p>
-                </div>
+                  {/* Bottom: Vị trí & Nút Zalo / Chi tiết */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 truncate max-w-[130px]">
+                      <MapPin size={11} className="text-rose-500 shrink-0" />
+                      <span className="truncate">{member.location}</span>
+                    </span>
 
-                {/* Bottom: Location & Action */}
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs text-slate-500 line-clamp-1">
-                    <MapPin size={12} className="text-rose-500 shrink-0" />
-                    <span className="truncate">{member.location}</span>
-                  </span>
-                  <span className="text-[10px] font-bold text-ueh group-hover:underline hidden sm:inline">
-                    Chi tiết →
-                  </span>
+                    <div className="flex items-center gap-1.5">
+                      {member.phone && (
+                        <a
+                          href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded-lg bg-white px-2 py-0.5 text-[10px] font-bold text-[#0068FF] border border-blue-200/80 hover:bg-blue-50 transition-colors shadow-2xs"
+                        >
+                          Zalo
+                        </a>
+                      )}
+                      <span className="text-[10px] font-bold text-ueh group-hover:underline">
+                        Xem →
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* Load More Button */}
+        {/* Load More Button: Cộng thêm 8 thẻ (2 hàng) */}
         {filteredList.length > displayedList.length && (
           <div className="mt-8 text-center">
             <button
-              onClick={() => setVisibleCount((prev) => prev + 6)}
+              onClick={() => setVisibleCount((prev) => prev + 8)}
               className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-2.5 text-xs sm:text-sm font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-xs transition-all"
             >
               Xem thêm cựu sinh viên ({filteredList.length - displayedList.length})
