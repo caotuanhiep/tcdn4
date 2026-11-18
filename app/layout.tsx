@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/ToastProvider";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ZaloWidget from "@/components/ZaloWidget";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -37,13 +38,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`${inter.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
+      <body className="flex min-h-full flex-col pb-16 md:pb-0">
         <ToastProvider>
           <AuthProvider>
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
             <ZaloWidget />
+            {/* Thanh menu định hướng phong cách App ở chân trang trên Mobile */}
+            <MobileBottomNav />
           </AuthProvider>
         </ToastProvider>
       </body>

@@ -118,11 +118,8 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* 4. Hiển thị Box Chat ngay bên dưới mấy cái thẻ thống kê */}
+        {/* 4. Hiển thị Box Chat ngay bên dưới mấy cái thẻ thống kê (Đã tích hợp Lịch sinh nhật chạy ngang 1 dòng) */}
         <EmbeddedCommunityChat />
-
-        {/* Lịch sinh nhật sắp tới */}
-        <BirthdayBanner />
 
       </div>
     </section>
