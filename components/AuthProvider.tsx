@@ -82,6 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
       }
 
+      const isSuperAdmin = u.email === "caotuanhiep@gmail.com";
+      const userRole = isSuperAdmin ? "admin" : "member";
+
       if (active) {
         setProfile({
           id: u.id,
@@ -92,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           location_region: "hcm",
           avatar_url: avatarUrl,
           birthday: "1989-11-20",
-          role: "member",
+          role: userRole,
         });
       }
     }
@@ -174,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       profile,
       loading,
-      isAdmin: profile?.role === "admin" || user?.email?.includes("admin") || false,
+      isAdmin: profile?.role === "admin" || user?.email === "caotuanhiep@gmail.com" || user?.email?.includes("admin") || false,
       openLogin,
       signOut,
       updateProfile,

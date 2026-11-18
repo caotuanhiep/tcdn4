@@ -39,16 +39,19 @@ export async function updateSession(request: NextRequest) {
   }
 
   if ((path === "/admin" || path.startsWith("/admin/")) && user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (profile?.role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      url.search = "";
-      return NextResponse.redirect(url);
+    const isSuperAdmin = user.email === "caotuanhiep@gmail.com";
+    if (!isSuperAdmin) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
