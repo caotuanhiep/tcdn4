@@ -33,24 +33,24 @@ const REGIONS: MapRegion[] = [
     name: "Hà Nội",
     shortName: "Hà Nội",
     count: 22,
-    x: 360,
-    y: 95,
+    x: 330,
+    y: 80,
   },
   {
     id: "dn",
     name: "Đà Nẵng",
     shortName: "Đà Nẵng",
     count: 14,
-    x: 480,
-    y: 235,
+    x: 470,
+    y: 260,
   },
   {
     id: "overseas",
     name: "Nước ngoài",
     shortName: "Quốc tế",
     count: 16,
-    x: 740,
-    y: 160,
+    x: 750,
+    y: 150,
   },
 ];
 
@@ -78,14 +78,17 @@ export default function MigrationMap({
     let mx = (center.x + to.x) / 2;
     let my = (center.y + to.y) / 2;
     if (to.id === "hn") {
-      mx = 220;
-      my = 170;
-    } else if (to.id === "dn") {
-      mx = 290;
-      my = 270;
-    } else if (to.id === "overseas") {
-      mx = 430;
+      // Đường bay Hà Nội: Hướng thẳng lên phía Bắc rồi lượn sang
+      mx = 180;
       my = 150;
+    } else if (to.id === "dn") {
+      // Đường bay Đà Nẵng: Đi thấp bên dưới, không giao cắt
+      mx = 310;
+      my = 350;
+    } else if (to.id === "overseas") {
+      // Đường bay Quốc tế: Cánh cung bay vút lên cao sang bầu trời phía Đông
+      mx = 460;
+      my = 70;
     }
     return `M ${center.x} ${center.y} Q ${mx} ${my} ${to.x} ${to.y}`;
   };
@@ -240,7 +243,7 @@ export default function MigrationMap({
                   TP. Hồ Chí Minh
                 </text>
                 <text x="44" y="36" fill="#F5A800" fontSize="12" fontWeight="800" fontFamily="var(--font-inter), system-ui, sans-serif">
-                  {center.count} thành viên (Trung tâm)
+                  {center.count} thành viên
                 </text>
               </g>
             </g>

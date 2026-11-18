@@ -36,61 +36,71 @@ export default function CommitteeSection() {
           </p>
         </div>
 
-        {/* Grid Ban Liên Lạc 2 CỘT TRÊN MOBILE - Bo góc vừa vặn rounded-2xl */}
+        {/* Grid Ban Liên Lạc: Ảnh vuông ở trên, Tên và Vai trò bên dưới */}
         <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
           {members.map((member) => (
             <div
               key={member.id}
-              className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 sm:p-5 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:border-[#003B5C]/30 hover:shadow-lg"
+              className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl border-2 border-slate-200/90 bg-white p-2.5 sm:p-3.5 transition-all duration-300 hover:-translate-y-1 hover:border-ueh/50 hover:shadow-xl shadow-xs"
             >
               <div>
-                {/* Badge top */}
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[#003B5C]/10 px-2 py-0.5 text-[10px] font-bold text-[#003B5C]">
-                    <GraduationCap size={11} /> {member.className}
-                  </span>
-                  <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-200/60">
-                    {member.badge}
-                  </span>
+                {/* 1. Ảnh vuông nằm ở trên cùng của thẻ */}
+                <div className={`relative aspect-square w-full rounded-xl sm:rounded-2xl ${member.avatarColor || "bg-gradient-to-br from-[#003B5C] to-[#0068FF]"} text-white flex items-center justify-center font-black text-3xl sm:text-4xl shadow-inner group-hover:scale-[1.02] transition-transform overflow-hidden mb-3 border border-slate-100`}>
+                  {member.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={member.avatarUrl}
+                      alt={member.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span>{member.name.charAt(member.name.lastIndexOf(" ") + 1)}</span>
+                  )}
+
+                  {/* Floating Badges trên ảnh vuông */}
+                  <div className="absolute top-2 left-2 flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-ueh/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                      <GraduationCap size={11} /> {member.className}
+                    </span>
+                  </div>
+                  {member.badge && (
+                    <div className="absolute top-2 right-2">
+                      <span className="rounded-lg bg-amber-500/95 backdrop-blur-md px-2 py-0.5 text-[9px] font-black text-white shadow-xs">
+                        {member.badge}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Avatar & Info */}
-                <div className="text-center mb-2.5">
-                  <div className={`mx-auto mb-2 flex h-14 w-14 sm:h-18 sm:w-18 items-center justify-center rounded-2xl ${member.avatarColor || "bg-gradient-to-br from-[#003B5C] to-[#0068FF]"} text-white font-black text-base sm:text-xl shadow-xs group-hover:scale-105 transition-transform overflow-hidden`}>
-                    {member.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={member.avatarUrl} alt={member.name} className="h-full w-full object-cover" />
-                    ) : (
-                      member.name.charAt(member.name.lastIndexOf(" ") + 1)
-                    )}
-                  </div>
-                  <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-[#003B5C] transition-colors line-clamp-1">
+                {/* 2. Bên dưới là Tên, Vai trò và Nhiệm vụ */}
+                <div className="text-left px-1">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
                     {member.name}
                   </h3>
-                  <p className="text-[10px] sm:text-xs font-bold text-[#E06D53] mt-0.5 uppercase tracking-wide line-clamp-1">
+                  <p className="text-[11px] sm:text-xs font-bold text-ueh-orange mt-0.5 uppercase tracking-wide line-clamp-1">
                     {member.role}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-slate-500 mt-1.5 leading-relaxed line-clamp-2 hidden sm:block">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">
                     {member.duty}
                   </p>
                 </div>
               </div>
 
-              {/* 2 Nút Gọi điện & Zalo NẰM CHUNG 1 HÀNG TRÊN CẢ MOBILE LẪN DESKTOP */}
-              <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 flex items-center gap-1.5">
+              {/* 3. Nút Gọi điện & Nhắn Zalo ở chân thẻ */}
+              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5">
                 <a
                   href={`tel:${member.phone.replace(/\s+/g, "")}`}
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-white border border-slate-200 py-1.5 px-1.5 text-[10px] sm:text-xs font-bold text-slate-700 hover:border-[#003B5C] hover:text-[#003B5C] transition-colors shadow-2xs whitespace-nowrap"
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-slate-50 border border-slate-200 py-2 px-1 text-[11px] sm:text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh transition-colors shadow-2xs whitespace-nowrap"
                 >
-                  <Phone size={11} className="text-[#003B5C]" /> Gọi điện
+                  <Phone size={12} className="text-ueh" /> Gọi điện
                 </a>
                 <a
                   href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-[#0068FF] py-1.5 px-1.5 text-[10px] sm:text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs whitespace-nowrap"
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-[#0068FF] py-2 px-1 text-[11px] sm:text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs whitespace-nowrap"
                 >
-                  <MessageCircle size={11} /> Nhắn Zalo
+                  <MessageCircle size={12} /> Nhắn Zalo
                 </a>
               </div>
             </div>
