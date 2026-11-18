@@ -3,12 +3,23 @@
 import { Calendar, ChevronRight, Users, GraduationCap, Sparkles } from "lucide-react";
 import BirthdayBanner from "@/components/BirthdayBanner";
 import EmbeddedCommunityChat from "@/components/EmbeddedCommunityChat";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function Hero() {
+  const { user, openLogin, openProfile } = useAuth();
+
   const scrollTo = (id: string) => {
     const elem = document.getElementById(id);
     if (elem) {
       elem.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const handleRegisterClick = () => {
+    if (!user) {
+      openLogin();
+    } else {
+      openProfile();
     }
   };
 
@@ -70,7 +81,7 @@ export default function Hero() {
         {/* Nút bấm Button Đăng ký và Khám phá danh bạ (Nằm ngay bên dưới hình ảnh) */}
         <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4 mb-8">
           <button
-            onClick={() => scrollTo("event")}
+            onClick={handleRegisterClick}
             className="group flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-ueh px-8 py-3.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-blue-900/25 transition-all hover:bg-ueh-light hover:-translate-y-0.5"
           >
             <Calendar size={18} className="text-ueh-gold" />

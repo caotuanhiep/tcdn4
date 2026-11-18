@@ -11,6 +11,8 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin", "vietnamese"],
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 export const viewport: Viewport = {
@@ -38,13 +40,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`${inter.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col pb-16 md:pb-0">
+      <body className={`${inter.className} font-sans flex min-h-full flex-col pb-16 md:pb-0`}>
         <ToastProvider>
           <AuthProvider>
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
-            <ZaloWidget />
             {/* Thanh menu định hướng phong cách App ở chân trang trên Mobile */}
             <MobileBottomNav />
           </AuthProvider>

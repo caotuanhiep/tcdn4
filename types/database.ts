@@ -11,6 +11,12 @@ export interface Profile {
   birthday?: string | null; // Format: YYYY-MM-DD or DD/MM
   phone?: string | null;
   bio?: string | null;
+  marital_status?: "single" | "married" | string | null;
+  children_count?: number | null;
+  specific_location?: string | null;
+  attendance_status?: "attending" | "not_attending" | "pending" | string | null;
+  shirt_size?: string | null;
+  delivery_address?: string | null;
   role: UserRole;
 }
 

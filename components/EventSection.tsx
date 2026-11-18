@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { 
   Calendar, 
+  CalendarCheck,
   Clock, 
   MapPin, 
   Users, 
@@ -21,6 +22,7 @@ import {
   Bot
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { useAuth } from "@/components/AuthProvider";
 
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
@@ -112,6 +114,7 @@ const BANK_INFO = {
 
 export default function EventSection() {
   const toast = useToast();
+  const { user, openLogin, openProfile } = useAuth();
   const [registrations, setRegistrations] = useState<Registration[]>(INITIAL_REGISTRATIONS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [step, setStep] = useState<"form" | "payment" | "success">("form");
@@ -330,6 +333,17 @@ export default function EventSection() {
                 </div>
 
                 <div className="flex items-start gap-3.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-500 shadow-2xs border border-orange-200/70">
+                    <CalendarCheck size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-rose-600">Hạn chốt đăng ký</div>
+                    <div className="text-sm font-bold text-slate-900">Trước ngày 30/11/2026</div>
+                    <div className="text-xs text-slate-500">Để may áo kỷ niệm & chuẩn bị đón tiếp chu đáo</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3.5">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
                     <MapPin size={18} />
                   </div>
@@ -367,8 +381,11 @@ export default function EventSection() {
             <div className="mt-6 pt-5 border-t border-orange-200/80">
               <button
                 onClick={() => {
-                  setStep("form");
-                  setIsModalOpen(true);
+                  if (!user) {
+                    openLogin();
+                  } else {
+                    openProfile();
+                  }
                 }}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light py-3.5 px-5 text-sm font-bold text-white shadow-md shadow-blue-900/25 transition-all hover:opacity-95 whitespace-nowrap"
               >

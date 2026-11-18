@@ -32,11 +32,10 @@ const NAV_ITEMS = [
 ];
 
 export default function Navbar() {
-  const { user, profile, loading, isAdmin, openLogin, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, openLogin, openProfile, signOut } = useAuth();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -209,11 +208,11 @@ export default function Navbar() {
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        setProfileOpen(true);
+                        openProfile();
                       }}
                       className="flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                     >
-                      <UserCircle2 size={16} className="text-ueh" /> Hồ sơ cá nhân
+                      <UserCircle2 size={16} className="text-ueh" /> Điểm danh & Hồ sơ
                     </button>
 
                     {isAdmin && (
@@ -263,7 +262,7 @@ export default function Navbar() {
             {/* Icon Login hoặc Avatar trên Mobile Header */}
             {user ? (
               <button
-                onClick={() => setProfileOpen(true)}
+                onClick={openProfile}
                 className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-ueh text-white font-bold text-xs shadow-2xs"
               >
                 {avatarUrl ? (
@@ -318,7 +317,7 @@ export default function Navbar() {
                   <button
                     onClick={() => {
                       setMobileOpen(false);
-                      setProfileOpen(true);
+                      openProfile();
                     }}
                     className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
                   >
@@ -364,9 +363,6 @@ export default function Navbar() {
           </div>
         )}
       </nav>
-
-      {/* Modal chỉnh sửa Profile cá nhân */}
-      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </>
   );
 }

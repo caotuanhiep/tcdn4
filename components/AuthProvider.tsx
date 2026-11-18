@@ -13,6 +13,7 @@ import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
 import LoginModal from "@/components/LoginModal";
+import ProfileModal from "@/components/ProfileModal";
 
 interface AuthContextValue {
   user: User | null;
@@ -20,6 +21,8 @@ interface AuthContextValue {
   loading: boolean;
   isAdmin: boolean;
   openLogin: () => void;
+  openProfile: () => void;
+  closeProfile: () => void;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<boolean>;
 }
@@ -31,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -142,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
+  const openProfile = useCallback(() => setProfileOpen(true), []);
+  const closeProfile = useCallback(() => setProfileOpen(false), []);
 
   const updateProfile = useCallback(
     async (updates: Partial<Profile>): Promise<boolean> => {
@@ -186,16 +192,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isAdmin: profile?.role === "admin" || user?.email === "caotuanhiep@gmail.com" || user?.email?.includes("admin") || false,
       openLogin,
+      openProfile,
+      closeProfile,
       signOut,
       updateProfile,
     }),
-    [user, profile, loading, openLogin, signOut, updateProfile]
+    [user, profile, loading, openLogin, openProfile, closeProfile, signOut, updateProfile]
   );
 
   return (
     <AuthContext.Provider value={value}>
       {children}
       {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
+      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </AuthContext.Provider>
   );
 }

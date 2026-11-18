@@ -25,7 +25,7 @@ const REGIONS: MapRegion[] = [
     shortName: "TP.HCM",
     count: 68,
     x: 210,
-    y: 330,
+    y: 280,
     isCenter: true,
   },
   {
@@ -34,7 +34,7 @@ const REGIONS: MapRegion[] = [
     shortName: "Hà Nội",
     count: 22,
     x: 270,
-    y: 100,
+    y: 95,
   },
   {
     id: "dn",
@@ -42,7 +42,7 @@ const REGIONS: MapRegion[] = [
     shortName: "Đà Nẵng",
     count: 14,
     x: 340,
-    y: 210,
+    y: 190,
   },
   {
     id: "overseas",
@@ -50,7 +50,7 @@ const REGIONS: MapRegion[] = [
     shortName: "Quốc tế",
     count: 16,
     x: 580,
-    y: 170,
+    y: 160,
   },
 ];
 
@@ -211,8 +211,8 @@ export default function MigrationMap({
                 className="fill-yellow-400 stroke-2 stroke-white shadow-md"
               />
 
-              {/* Thẻ Card to rõ ràng cho điểm đến TP.HCM */}
-              <g transform={`translate(${center.x - 70}, ${center.y - 44})`}>
+              {/* Thẻ Card to rõ ràng cho điểm đến TP.HCM - NẰM DƯỚI NÚT VÀNG */}
+              <g transform={`translate(${center.x - 70}, ${center.y + 18})`}>
                 <rect
                   width="140"
                   height="34"
@@ -223,13 +223,13 @@ export default function MigrationMap({
                   className="shadow-md"
                 />
                 <circle cx="20" cy="17" r="7" fill="#F5A800" />
-                <text x="20" y="20.5" textAnchor="middle" fill="#001D33" fontSize="9" fontWeight="900" fontFamily="sans-serif">
+                <text x="20" y="20.5" textAnchor="middle" fill="#001D33" fontSize="9" fontWeight="900" fontFamily="var(--font-inter), system-ui, sans-serif">
                   ★
                 </text>
-                <text x="36" y="16" fill="#ffffff" fontSize="12" fontWeight="900" fontFamily="sans-serif">
+                <text x="36" y="16" fill="#ffffff" fontSize="12" fontWeight="800" fontFamily="var(--font-inter), system-ui, sans-serif">
                   TP. Hồ Chí Minh
                 </text>
-                <text x="36" y="27" fill="#F5A800" fontSize="10" fontWeight="700" fontFamily="sans-serif">
+                <text x="36" y="27" fill="#F5A800" fontSize="10" fontWeight="700" fontFamily="var(--font-inter), system-ui, sans-serif">
                   {center.count} thành viên
                 </text>
               </g>

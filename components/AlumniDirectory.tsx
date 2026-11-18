@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Users, 
   Search, 
@@ -13,13 +13,19 @@ import {
   Building, 
   Phone,
   X,
-  ChevronDown
+  ChevronDown,
+  CheckCircle2,
+  Sparkles,
+  Baby,
+  Heart
 } from "lucide-react";
+import { getSupabase } from "@/lib/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
 
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
 export interface AlumniMember {
-  id: number;
+  id: string | number;
   name: string;
   class: "TC10" | "TC11" | "TC12";
   job: string;
@@ -28,7 +34,11 @@ export interface AlumniMember {
   region: "hcm" | "hn" | "dn" | "overseas";
   email?: string;
   phone?: string;
+  avatar_url?: string;
   bio?: string;
+  marital_status?: string;
+  children_count?: number;
+  is_verified?: boolean;
 }
 
 const ALUMNI_LIST: AlumniMember[] = [
@@ -175,10 +185,62 @@ export default function AlumniDirectory({
   selectedRegion = "all",
   onSelectRegion,
 }: AlumniDirectoryProps) {
+  const { user, profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [viewingMember, setViewingMember] = useState<AlumniMember | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(6);
+  const [alumniList, setAlumniList] = useState<AlumniMember[]>(ALUMNI_LIST);
+
+  // Tải danh bạ thực tế từ bảng profiles trên Supabase
+  useEffect(() => {
+    let active = true;
+
+    async function loadSupabaseProfiles() {
+      try {
+        const { data, error } = await getSupabase()
+          .from("profiles")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!active || error || !data || data.length === 0) return;
+
+        const liveMembers: AlumniMember[] = data.map((p: any) => ({
+          id: p.id,
+          name: p.full_name || "Thành viên K33",
+          class: (p.class_name as any) || "TC10",
+          job: p.job_title || "Cựu sinh viên",
+          company: p.company || "UEH Alumni",
+          location: p.specific_location || (
+            p.location_region === "hn" ? "Hà Nội" :
+            p.location_region === "dn" ? "Đà Nẵng" :
+            p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
+          ),
+          region: (p.location_region as any) || "hcm",
+          phone: p.phone || "",
+          avatar_url: p.avatar_url || "",
+          bio: p.bio || "",
+          marital_status: p.marital_status || "",
+          children_count: p.children_count || 0,
+          is_verified: true,
+        }));
+
+        // Ghép danh sách: User thật trên Supabase xếp đầu, sau đó đến các cựu sinh viên mẫu không trùng
+        const liveNames = new Set(liveMembers.map((m) => m.name.toLowerCase()));
+        const remainingSamples = ALUMNI_LIST.filter((m) => !liveNames.has(m.name.toLowerCase()));
+
+        setAlumniList([...liveMembers, ...remainingSamples]);
+      } catch {
+        // Fallback giữ nguyên ALUMNI_LIST
+      }
+    }
+
+    loadSupabaseProfiles();
+
+    return () => {
+      active = false;
+    };
+  }, [profile]);
 
   const handleRegionClick = (r: string) => {
     if (onSelectRegion) {
@@ -187,7 +249,7 @@ export default function AlumniDirectory({
   };
 
   const filteredList = useMemo(() => {
-    return ALUMNI_LIST.filter((member) => {
+    return alumniList.filter((member) => {
       if (selectedRegion !== "all" && member.region !== selectedRegion) {
         return false;
       }
@@ -205,7 +267,7 @@ export default function AlumniDirectory({
       }
       return true;
     });
-  }, [selectedRegion, selectedClass, searchTerm]);
+  }, [alumniList, selectedRegion, selectedClass, searchTerm]);
 
   const displayedList = filteredList.slice(0, visibleCount);
 
@@ -327,18 +389,39 @@ export default function AlumniDirectory({
                 <div>
                   {/* Top: Avatar & Class */}
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex h-11 w-11 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-base sm:text-lg shadow-xs group-hover:scale-105 transition-transform">
-                      {member.name.charAt(member.name.lastIndexOf(" ") + 1)}
+                    <div className="relative flex h-11 w-11 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-base sm:text-lg shadow-xs group-hover:scale-105 transition-transform overflow-hidden">
+                      {member.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={member.avatar_url}
+                          alt={member.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        member.name.charAt(member.name.lastIndexOf(" ") + 1)
+                      )}
                     </div>
-                    <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] sm:text-xs font-bold text-ueh border border-blue-100/60">
-                      {member.class}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {user && user.id === member.id && (
+                        <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-emerald-700 border border-emerald-500/20 whitespace-nowrap">
+                          Bạn
+                        </span>
+                      )}
+                      <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] sm:text-xs font-bold text-ueh border border-blue-100/60">
+                        {member.class}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Name & Job */}
-                  <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
-                    {member.name}
-                  </h3>
+                  <div className="flex items-center gap-1">
+                    <h3 className="text-xs sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
+                      {member.name}
+                    </h3>
+                    {member.is_verified && (
+                      <CheckCircle2 size={13} className="text-[#0068FF] shrink-0" />
+                    )}
+                  </div>
                   <p className="text-[11px] sm:text-xs font-semibold text-slate-600 line-clamp-1 mt-0.5">
                     {member.job}
                   </p>
@@ -395,14 +478,40 @@ export default function AlumniDirectory({
             </button>
 
             <div className="flex items-center gap-4 mb-5">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-2xl shadow-md">
-                {viewingMember.name.charAt(viewingMember.name.lastIndexOf(" ") + 1)}
+              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh to-ueh-light text-white font-black text-2xl shadow-md overflow-hidden">
+                {viewingMember.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={viewingMember.avatar_url}
+                    alt={viewingMember.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  viewingMember.name.charAt(viewingMember.name.lastIndexOf(" ") + 1)
+                )}
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-900">{viewingMember.name}</h3>
-                <span className="inline-block mt-0.5 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh">
-                  Lớp {viewingMember.class}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-xl font-black text-slate-900">{viewingMember.name}</h3>
+                  {viewingMember.is_verified && (
+                    <CheckCircle2 size={16} className="text-[#0068FF] shrink-0" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh">
+                    Lớp {viewingMember.class}
+                  </span>
+                  {viewingMember.marital_status && (
+                    <span className="rounded-md bg-orange-50 px-2 py-0.5 text-xs font-semibold text-ueh-orange">
+                      {viewingMember.marital_status === "married" ? "Đã kết hôn" : "Độc thân"}
+                    </span>
+                  )}
+                  {typeof viewingMember.children_count === "number" && viewingMember.children_count > 0 && (
+                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      {viewingMember.children_count} F1
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

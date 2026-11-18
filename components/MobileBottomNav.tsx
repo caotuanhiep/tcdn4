@@ -14,8 +14,7 @@ import ProfileModal from "@/components/ProfileModal";
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
 export default function MobileBottomNav() {
-  const { user, openLogin } = useAuth();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const { user, openLogin, openProfile } = useAuth();
   const [activeTab, setActiveTab] = useState("directory");
 
   useEffect(() => {
@@ -117,7 +116,7 @@ export default function MobileBottomNav() {
           {/* 5. Tài khoản / Đăng nhập */}
           {user ? (
             <button
-              onClick={() => setProfileOpen(true)}
+              onClick={openProfile}
               className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-ueh-orange font-bold transition-all"
             >
               <UserCircle2 size={19} className="stroke-[2.2]" />
@@ -135,9 +134,6 @@ export default function MobileBottomNav() {
 
         </div>
       </nav>
-
-      {/* Profile Modal */}
-      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </>
   );
 }
