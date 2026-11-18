@@ -8,7 +8,6 @@ import AlumniDirectory from "@/components/AlumniDirectory";
 import MemoriesGallery from "@/components/MemoriesGallery";
 import GuestbookSection from "@/components/GuestbookSection";
 import CommitteeSection from "@/components/CommitteeSection";
-import BusinessKiosk from "@/components/BusinessKiosk";
 
 export default function HomePage() {
   const [selectedRegion, setSelectedRegion] = useState<string>("all");
@@ -33,17 +32,14 @@ export default function HomePage() {
         onSelectRegion={setSelectedRegion}
       />
 
-      {/* 5. Góc kỷ niệm nổi bật (Layout cân đối so le, nén ảnh tự động, hiển thị người đóng góp + caption) */}
+      {/* 5. Góc kỷ niệm nổi bật (Layout xòe bài độc đáo, nén ảnh tự động, đóng góp nhiều ảnh) */}
       <MemoriesGallery />
 
       {/* 6. Lưu bút TCDN4 (Hiệu ứng thẻ thiệp đêm hội ngộ lung linh) */}
       <GuestbookSection />
 
-      {/* 7. Ban Liên Lạc TCDN4 (Được đưa xuống dưới cùng, chỉ nằm trên Kiosk) */}
+      {/* 7. Ban Liên Lạc TCDN4 (Đội ngũ phụ trách 15 năm K33) */}
       <CommitteeSection />
-
-      {/* 8. Kiosk Doanh nghiệp (2 cột trên Mobile, ưu đãi nội bộ độc quyền) */}
-      <BusinessKiosk />
     </>
   );
 }

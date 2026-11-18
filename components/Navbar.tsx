@@ -11,7 +11,6 @@ import {
   LogOut, 
   Menu, 
   MessageSquare, 
-  Store, 
   UserCircle2, 
   Users, 
   X,
@@ -22,13 +21,19 @@ import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import ProfileModal from "@/components/ProfileModal";
 
-const NAV_ITEMS = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: any;
+  isSubtle?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { href: "#event", label: "Sự kiện", icon: Calendar },
   { href: "#directory", label: "Danh bạ", icon: Users },
   { href: "#committee", label: "Ban liên lạc", icon: HeartHandshake },
   { href: "#memories", label: "Kỷ niệm", icon: ImageIcon },
   { href: "#guestbook", label: "Lưu bút", icon: MessageSquare },
-  { href: "#business", label: "Kiosk", icon: Store, isSubtle: true },
 ];
 
 export default function Navbar() {

@@ -21,7 +21,6 @@ export default function MobileBottomNav() {
     const handleScroll = () => {
       const scrollPos = window.scrollY + 200;
       const sections = [
-        { id: "business", key: "guestbook" },
         { id: "committee", key: "guestbook" },
         { id: "guestbook", key: "guestbook" },
         { id: "memories", key: "memories" },

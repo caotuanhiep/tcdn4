@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   Calendar, 
   CalendarCheck,
@@ -19,7 +19,8 @@ import {
   UserCheck, 
   ShieldCheck, 
   ArrowRight,
-  Bot
+  Bot,
+  CreditCard
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -46,7 +47,7 @@ import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
 
 export default function EventSection() {
   const toast = useToast();
-  const { user, openLogin, openProfile } = useAuth();
+  const { user, profile, openLogin, openProfile } = useAuth();
   const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
   const [registrations, setRegistrations] = useState<Registration[]>(INITIAL_REGISTRATIONS);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -191,12 +192,27 @@ export default function EventSection() {
 
   const confirmedCount = registrations.filter(r => r.status === "confirmed").length;
 
+  // Xác định phiếu đăng ký của người dùng hiện tại nếu đã đăng nhập
+  const currentUserReg = useMemo(() => {
+    if (!user) return null;
+    const userName = (profile?.full_name || user.user_metadata?.full_name || "").toLowerCase().trim();
+    const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
+
+    return registrations.find((r) => {
+      const rName = (r.fullName || "").toLowerCase().trim();
+      const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+      if (userName && rName === userName) return true;
+      if (userPhone && rPhone && rPhone === userPhone) return true;
+      return false;
+    });
+  }, [user, profile, registrations]);
+
   return (
     <section id="event" className="scroll-mt-16 bg-white py-14 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Section Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-10">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3.5 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-3 border border-blue-100">
             <Sparkles size={14} className="text-ueh-orange" /> Kỷ niệm 15 năm tốt nghiệp
           </div>
@@ -208,6 +224,112 @@ export default function EventSection() {
             Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở A - UEH, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
           </p>
         </div>
+
+        {/* Banner Trạng thái Đăng ký & Nộp tiền dành riêng cho người dùng đã đăng nhập */}
+        {user && (
+          <div className="mb-8">
+            {currentUserReg ? (
+              currentUserReg.status === "confirmed" ? (
+                <div className="rounded-3xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 sm:p-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-xs">
+                        <CheckCircle2 size={24} />
+                      </div>
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+                          ✓ Đã đăng ký & hoàn tất đóng phí
+                        </div>
+                        <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
+                          Xin chào {currentUserReg.fullName}! Ban liên lạc đã xác nhận đóng phí tham dự 15 năm của bạn
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 mt-1">
+                          <span>Lớp: <strong className="text-ueh font-bold">{currentUserReg.className}</strong></span>
+                          <span>•</span>
+                          <span>Size áo: <strong className="text-ueh font-bold">{currentUserReg.shirtSize}</strong></span>
+                          <span>•</span>
+                          <span>Người thân đi cùng: <strong className="text-emerald-700 font-bold">+{currentUserReg.guestsCount}</strong></span>
+                          <span>•</span>
+                          <span className="text-slate-500 truncate max-w-xs">Nơi nhận áo: {currentUserReg.address}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1 rounded-xl bg-emerald-600 text-white px-4 py-2 text-xs font-bold shadow-xs">
+                      Sẵn sàng gặp lại ngày 12/12 🎉
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-3xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-4 sm:p-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xs">
+                        <Clock size={24} />
+                      </div>
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-black text-amber-800 uppercase tracking-wide">
+                          ⏳ Đã đăng ký - Đang chờ đối soát chuyển khoản
+                        </div>
+                        <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
+                          Phiếu đăng ký của {currentUserReg.fullName} ({currentUserReg.className}) đang chờ khớp lệnh
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed max-w-xl">
+                          Hệ thống SePay / Ban liên lạc sẽ sớm đối soát tự động khi tiền về tài khoản. Nếu bạn chưa chuyển khoản, vui lòng quét mã VietQR bên cạnh.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setFullName(currentUserReg.fullName);
+                        setClassName(currentUserReg.className);
+                        setPhone(currentUserReg.phone);
+                        setShirtSize(currentUserReg.shirtSize);
+                        setAddress(currentUserReg.address);
+                        setStep("payment");
+                        setIsModalOpen(true);
+                      }}
+                      className="self-start sm:self-auto shrink-0 flex items-center gap-2 rounded-xl bg-ueh-orange px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-orange-600 transition-all active:scale-95"
+                    >
+                      <CreditCard size={15} /> Quét mã QR chuyển khoản
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-sky-50/50 to-white p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-ueh text-white shadow-xs">
+                    <Shirt size={22} className="text-ueh-gold" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm sm:text-base font-bold text-ueh">
+                      Chào {profile?.full_name || "bạn"}! Bạn chưa đăng ký tham gia họp mặt 15 năm và nhận áo đồng phục TC4
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Đăng ký giữ chỗ sớm để Ban tổ chức chuẩn bị áo đúng size và đặt tiệc trưa chu đáo!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (profile) {
+                      setFullName(profile.full_name || "");
+                      setClassName((profile.class_name as any) || "TC10");
+                      setPhone(profile.phone || "");
+                      setShirtSize(profile.shirt_size || "L (Nam)");
+                      setAddress(profile.delivery_address || profile.specific_location || "");
+                    }
+                    setStep("form");
+                    setIsModalOpen(true);
+                  }}
+                  className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-ueh px-5 py-2.5 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-xs"
+                >
+                  <Calendar size={14} /> Đăng ký tham gia ngay →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Thẻ Áo Polo Kỷ Niệm hiển thị trên Mobile (nằm ngay trên mục Thông tin chung) - Dùng ảnh nền trong suốt */}
         <div className="block lg:hidden mb-6 rounded-3xl overflow-hidden border border-orange-200/90 bg-gradient-to-br from-orange-50/90 via-white to-amber-50/60 p-3.5 shadow-md">
