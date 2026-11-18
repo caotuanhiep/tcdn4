@@ -50,6 +50,9 @@ export default function RegistrationsPanel() {
     setList(data);
     try {
       localStorage.setItem("tcdn4_registrations", JSON.stringify(data));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_registration_updated"));
+      }
     } catch {}
   };
 

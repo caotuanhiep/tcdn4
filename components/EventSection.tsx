@@ -114,6 +114,9 @@ export default function EventSection() {
     setRegistrations(newList);
     try {
       localStorage.setItem("tcdn4_registrations", JSON.stringify(newList));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_registration_updated"));
+      }
     } catch {}
   };
 

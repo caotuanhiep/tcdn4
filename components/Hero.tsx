@@ -25,6 +25,46 @@ export default function Hero() {
     return () => clearInterval(interval);
   }, [isPaused]);
 
+  const [stats, setStats] = useState({
+    registeredCount: 0,
+    confirmedCount: 0,
+    guestsCount: 0,
+    overseasCount: 0,
+    classesCount: 0,
+  });
+
+  useEffect(() => {
+    function loadStats() {
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        const regs = stored ? JSON.parse(stored) : [];
+        const confirmed = regs.filter((r: any) => r.status === "confirmed").length;
+        const guests = regs.reduce((sum: number, r: any) => sum + (Number(r.guestsCount) || 0), 0);
+        const overseas = regs.filter((r: any) => 
+          (r.address && /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address)) ||
+          r.region === "overseas"
+        ).length;
+        const uniqueClasses = new Set(regs.map((r: any) => r.className)).size;
+
+        setStats({
+          registeredCount: regs.length,
+          confirmedCount: confirmed,
+          guestsCount: guests,
+          overseasCount: overseas,
+          classesCount: uniqueClasses,
+        });
+      } catch {}
+    }
+
+    loadStats();
+    window.addEventListener("storage", loadStats);
+    window.addEventListener("tcdn4_registration_updated", loadStats);
+    return () => {
+      window.removeEventListener("storage", loadStats);
+      window.removeEventListener("tcdn4_registration_updated", loadStats);
+    };
+  }, []);
+
   const scrollTo = (id: string) => {
     const elem = document.getElementById(id);
     if (elem) {
@@ -179,30 +219,36 @@ export default function Hero() {
         {/* 3. Thẻ thống kê VUI trích từ phiếu đăng ký */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-4 mb-4">
           <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh">35+</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh">{stats.registeredCount}</div>
             <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Đăng ký Hội ngộ 15 Năm</div>
-            <div className="text-[10px] text-slate-400">Các bạn TC10 • TC11 • TC12</div>
+            <div className="text-[10px] text-slate-400">
+              {stats.confirmedCount > 0 ? `Đã đối soát: ${stats.confirmedCount} bạn` : "TC10 • TC11 • TC12"}
+            </div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh" />
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh-orange">16 Bạn</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh-orange">
+              {stats.overseasCount > 0 ? `${stats.overseasCount} Bạn` : "0 Bạn"}
+            </div>
             <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Xuất ngoại & Định cư</div>
             <div className="text-[10px] text-slate-400">Úc, Mỹ, Singapore, Canada...</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh-orange" />
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-emerald-700">168+</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">F1 & Nhóc tì (Con cái)</div>
+            <div className="text-2xl sm:text-4xl font-black text-emerald-700">{stats.guestsCount}</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">F1 & Người thân đi cùng</div>
             <div className="text-[10px] text-slate-400">Gia tài lớn nhất sau 15 năm</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-emerald-600" />
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-sky-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh-light">100%</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Háo hức gặp lại nhau</div>
-            <div className="text-[10px] text-slate-400">Thanh xuân không bao giờ tắt</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh-light">{stats.classesCount}/3 Lớp</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">TC10 • TC11 • TC12</div>
+            <div className="text-[10px] text-slate-400">
+              {stats.classesCount > 0 ? "Đã có đại diện tham gia" : "Thanh xuân không bao giờ tắt"}
+            </div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh-light" />
           </div>
         </div>

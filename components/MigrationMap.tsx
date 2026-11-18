@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Compass, 
   MapPin, 
@@ -63,9 +63,46 @@ export default function MigrationMap({
   onSelectRegion,
 }: MigrationMapProps) {
   const [activeHover, setActiveHover] = useState<string | null>(null);
+  const [regionCounts, setRegionCounts] = useState<{ [key: string]: number }>({
+    hcm: 0,
+    hn: 0,
+    dn: 0,
+    overseas: 0,
+  });
 
-  const center = REGIONS.find((r) => r.isCenter) || REGIONS[0];
-  const totalCount = REGIONS.reduce((acc, curr) => acc + curr.count, 0);
+  useEffect(() => {
+    function computeCounts() {
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        const regs = stored ? JSON.parse(stored) : [];
+        const counts = { hcm: 0, hn: 0, dn: 0, overseas: 0 };
+        regs.forEach((r: any) => {
+          const addr = r.address || "";
+          if (/Hà Nội|hn/i.test(addr)) counts.hn++;
+          else if (/Đà Nẵng|dn/i.test(addr)) counts.dn++;
+          else if (/Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(addr) || r.region === "overseas") counts.overseas++;
+          else counts.hcm++;
+        });
+        setRegionCounts(counts);
+      } catch {}
+    }
+
+    computeCounts();
+    window.addEventListener("storage", computeCounts);
+    window.addEventListener("tcdn4_registration_updated", computeCounts);
+    return () => {
+      window.removeEventListener("storage", computeCounts);
+      window.removeEventListener("tcdn4_registration_updated", computeCounts);
+    };
+  }, []);
+
+  const dynamicRegions = REGIONS.map((r) => ({
+    ...r,
+    count: regionCounts[r.id] ?? 0,
+  }));
+
+  const center = dynamicRegions.find((r) => r.isCenter) || dynamicRegions[0];
+  const totalCount = dynamicRegions.reduce((acc, curr) => acc + curr.count, 0);
 
   const handleRegionClick = (regionId: string) => {
     if (onSelectRegion) {
@@ -131,7 +168,7 @@ export default function MigrationMap({
           >
             Toàn cầu ({totalCount})
           </button>
-          {REGIONS.map((r) => (
+          {dynamicRegions.map((r) => (
             <button
               key={r.id}
               onClick={() => handleRegionClick(r.id)}
@@ -238,7 +275,7 @@ export default function MigrationMap({
             </g>
 
             {/* Other Nodes: Hà Nội, Đà Nẵng, Nước ngoài - To rõ, số to hẳn */}
-            {REGIONS.filter((r) => !r.isCenter).map((region) => {
+            {dynamicRegions.filter((r) => !r.isCenter).map((region) => {
               const isSelected = selectedRegion === region.id;
               const isHovered = activeHover === region.id;
               const cardWidth = 160;

@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   Sparkles,
   Baby,
-  Heart
+  Heart,
+  User
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -41,140 +42,7 @@ export interface AlumniMember {
   is_verified?: boolean;
 }
 
-const ALUMNI_LIST: AlumniMember[] = [
-  {
-    id: 1,
-    name: "Nguyễn Văn An",
-    class: "TC10",
-    job: "Giám đốc Tài chính",
-    company: "Tập đoàn Hòa Bình",
-    location: "TP. Hồ Chí Minh",
-    region: "hcm",
-    phone: "0903123456",
-    bio: "Chuyên gia hoạch định tài chính và M&A với hơn 14 năm kinh nghiệm tại các tập đoàn lớn.",
-  },
-  {
-    id: 2,
-    name: "Trần Thị Bích",
-    class: "TC11",
-    job: "Trưởng phòng Kế toán",
-    company: "Deloitte Vietnam",
-    location: "TP. Hồ Chí Minh",
-    region: "hcm",
-    phone: "0918654321",
-    bio: "Thành viên ACCA, tư vấn thuế và kiểm toán doanh nghiệp niêm yết.",
-  },
-  {
-    id: 3,
-    name: "Lê Hoàng Cường",
-    class: "TC12",
-    job: "Quản lý Quỹ Đầu tư",
-    company: "VinaCapital",
-    location: "Hà Nội",
-    region: "hn",
-    phone: "0982112233",
-    bio: "Phụ trách danh mục đầu tư cổ phiếu ngành năng lượng và công nghệ.",
-  },
-  {
-    id: 4,
-    name: "Phạm Hải Đăng",
-    class: "TC10",
-    job: "CEO & Founder",
-    company: "FinTech Alpha",
-    location: "Đà Nẵng",
-    region: "dn",
-    phone: "0934998877",
-    bio: "Khởi nghiệp giải pháp thanh toán số và ví điện tử cho thị trường du lịch miền Trung.",
-  },
-  {
-    id: 5,
-    name: "Hoàng Minh Em",
-    class: "TC11",
-    job: "Cố vấn Tài chính Cao cấp",
-    company: "KPMG Australia",
-    location: "Sydney, Úc",
-    region: "overseas",
-    phone: "+61412345678",
-    bio: "Định cư tại Sydney, chuyên tư vấn cấu trúc vốn và thuế doanh nghiệp xuyên biên giới.",
-  },
-  {
-    id: 6,
-    name: "Vũ Khánh Phương",
-    class: "TC12",
-    job: "Giám đốc Quản lý Rủi ro",
-    company: "Wells Fargo Bank",
-    location: "San Francisco, Mỹ",
-    region: "overseas",
-    phone: "+14155552671",
-    bio: "Thạc sĩ Tài chính tại Mỹ, nghiên cứu thuật toán đánh giá rủi ro tín dụng ngân hàng.",
-  },
-  {
-    id: 7,
-    name: "Đặng Quốc Hưng",
-    class: "TC10",
-    job: "Trưởng phòng Tín dụng Doanh nghiệp",
-    company: "Vietcombank HCM",
-    location: "TP. Hồ Chí Minh",
-    region: "hcm",
-    phone: "0909887766",
-    bio: "Tài trợ vốn lưu động và dự án bất động sản công nghiệp phía Nam.",
-  },
-  {
-    id: 8,
-    name: "Ngô Mỹ Linh",
-    class: "TC11",
-    job: "Giám đốc Khối Phân tích",
-    company: "SSI Securities",
-    location: "TP. Hồ Chí Minh",
-    region: "hcm",
-    phone: "0912334455",
-    bio: "Thường xuyên xuất hiện trên các diễn đàn kinh tế, nhận định thị trường chứng khoán Việt Nam.",
-  },
-  {
-    id: 9,
-    name: "Bùi Thanh Nam",
-    class: "TC12",
-    job: "Phó Tổng Giám đốc",
-    company: "Bamos Coffee Group",
-    location: "TP. Hồ Chí Minh",
-    region: "hcm",
-    phone: "0945667788",
-    bio: "Vận hành chuỗi cà phê F&B phục vụ không gian học tập và làm việc 24/7.",
-  },
-  {
-    id: 10,
-    name: "Võ Thùy Trang",
-    class: "TC10",
-    job: "CFO",
-    company: "Gowise Global",
-    location: "Đà Nẵng",
-    region: "dn",
-    phone: "0971223344",
-    bio: "Phát triển công nghệ eSIM viễn thông quốc tế cho du khách toàn cầu.",
-  },
-  {
-    id: 11,
-    name: "Nguyễn Quang Vinh",
-    class: "TC11",
-    job: "Giám đốc Đầu tư Mạo hiểm",
-    company: "Nextrans Capital",
-    location: "Hà Nội",
-    region: "hn",
-    phone: "0988776611",
-    bio: "Đầu tư hạt giống và Series A cho các startup công nghệ Việt Nam.",
-  },
-  {
-    id: 12,
-    name: "Đỗ Gia Huy",
-    class: "TC12",
-    job: "Chuyên viên Tài chính Quốc tế",
-    company: "DBS Bank",
-    location: "Singapore",
-    region: "overseas",
-    phone: "+6591234567",
-    bio: "Làm việc tại trung tâm tài chính Marina Bay, quản lý danh mục tài sản cá nhân cao cấp.",
-  },
-];
+const ALUMNI_LIST: AlumniMember[] = [];
 
 interface AlumniDirectoryProps {
   selectedRegion?: string;
@@ -185,60 +53,100 @@ export default function AlumniDirectory({
   selectedRegion = "all",
   onSelectRegion,
 }: AlumniDirectoryProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, openLogin, openProfile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [viewingMember, setViewingMember] = useState<AlumniMember | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(8);
-  const [alumniList, setAlumniList] = useState<AlumniMember[]>(ALUMNI_LIST);
+  const [alumniList, setAlumniList] = useState<AlumniMember[]>([]);
 
-  // Tải danh bạ thực tế từ bảng profiles trên Supabase
+  // Tải danh bạ thực tế từ bảng profiles trên Supabase và danh sách đã đăng ký
   useEffect(() => {
     let active = true;
 
-    async function loadSupabaseProfiles() {
+    async function loadMembers() {
+      const combinedMembers: AlumniMember[] = [];
+      const seenNames = new Set<string>();
+
       try {
         const { data, error } = await getSupabase()
           .from("profiles")
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (!active || error || !data || data.length === 0) return;
+        if (active && !error && data && data.length > 0) {
+          data.forEach((p: any) => {
+            const memberName = p.full_name || "Thành viên K33";
+            combinedMembers.push({
+              id: p.id,
+              name: memberName,
+              class: (p.class_name as any) || "TC10",
+              job: p.job_title || "Cựu sinh viên",
+              company: p.company || "UEH Alumni",
+              location: p.specific_location || (
+                p.location_region === "hn" ? "Hà Nội" :
+                p.location_region === "dn" ? "Đà Nẵng" :
+                p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
+              ),
+              region: (p.location_region as any) || "hcm",
+              phone: p.phone || "",
+              avatar_url: p.avatar_url || "",
+              bio: p.bio || "",
+              marital_status: p.marital_status || "",
+              children_count: p.children_count || 0,
+              is_verified: true,
+            });
+            seenNames.add(memberName.toLowerCase().trim());
+          });
+        }
+      } catch {}
 
-        const liveMembers: AlumniMember[] = data.map((p: any) => ({
-          id: p.id,
-          name: p.full_name || "Thành viên K33",
-          class: (p.class_name as any) || "TC10",
-          job: p.job_title || "Cựu sinh viên",
-          company: p.company || "UEH Alumni",
-          location: p.specific_location || (
-            p.location_region === "hn" ? "Hà Nội" :
-            p.location_region === "dn" ? "Đà Nẵng" :
-            p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
-          ),
-          region: (p.location_region as any) || "hcm",
-          phone: p.phone || "",
-          avatar_url: p.avatar_url || "",
-          bio: p.bio || "",
-          marital_status: p.marital_status || "",
-          children_count: p.children_count || 0,
-          is_verified: true,
-        }));
+      // Đồng thời nạp danh sách cựu sinh viên đã đăng ký tham gia họp mặt 15 năm
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        if (stored) {
+          const regs = JSON.parse(stored);
+          regs.forEach((r: any) => {
+            const rName = (r.fullName || "").trim();
+            if (rName && !seenNames.has(rName.toLowerCase())) {
+              const regRegion: "hcm" | "hn" | "dn" | "overseas" = 
+                /Hà Nội|hn/i.test(r.address) ? "hn" :
+                /Đà Nẵng|dn/i.test(r.address) ? "dn" :
+                /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address) ? "overseas" : "hcm";
 
-        // Ghép danh sách: User thật trên Supabase xếp đầu, sau đó đến các cựu sinh viên mẫu không trùng
-        const liveNames = new Set(liveMembers.map((m) => m.name.toLowerCase()));
-        const remainingSamples = ALUMNI_LIST.filter((m) => !liveNames.has(m.name.toLowerCase()));
+              combinedMembers.push({
+                id: r.id || `reg-${rName}`,
+                name: rName,
+                class: (r.className as any) || "TC10",
+                job: "Cựu sinh viên",
+                company: "TCDN4 K33",
+                location: r.address || "TP. Hồ Chí Minh",
+                region: regRegion,
+                phone: r.phone || "",
+                bio: `Đã đăng ký tham gia họp mặt 15 năm (Áo size: ${r.shirtSize || "L"})`,
+                is_verified: r.status === "confirmed",
+              });
+              seenNames.add(rName.toLowerCase());
+            }
+          });
+        }
+      } catch {}
 
-        setAlumniList([...liveMembers, ...remainingSamples]);
-      } catch {
-        // Fallback giữ nguyên ALUMNI_LIST
+      if (active) {
+        setAlumniList(combinedMembers);
       }
     }
 
-    loadSupabaseProfiles();
+    loadMembers();
+
+    const handleUpdate = () => loadMembers();
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("tcdn4_registration_updated", handleUpdate);
 
     return () => {
       active = false;
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("tcdn4_registration_updated", handleUpdate);
     };
   }, [profile]);
 
@@ -420,7 +328,32 @@ export default function AlumniDirectory({
         </div>
 
         {/* Directory Grid: 2 CỘT TRÊN MOBILE, 4 CỘT TRÊN DESKTOP, VIỀN RÕ RÀNG */}
-        {filteredList.length === 0 ? (
+        {alumniList.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-blue-200 bg-white py-14 px-4 text-center shadow-xs">
+            <Users className="mx-auto h-12 w-12 text-ueh/40 mb-3" />
+            <h3 className="text-base font-bold text-ueh">Danh bạ Cựu Sinh Viên TCDN4 K33</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              Chưa có thành viên nào trong danh bạ. Hãy đăng ký tham gia họp mặt hoặc cập nhật hồ sơ cá nhân để kết nối cùng bạn bè toàn khóa!
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  const eventEl = document.getElementById("event");
+                  if (eventEl) eventEl.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-ueh-light transition-all"
+              >
+                Đăng ký Họp mặt 15 Năm
+              </button>
+              <button
+                onClick={() => (user ? openProfile() : openLogin())}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-white transition-all"
+              >
+                <User size={13} /> {user ? "Cập nhật hồ sơ" : "Đăng nhập cập nhật"}
+              </button>
+            </div>
+          </div>
+        ) : filteredList.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white py-14 text-center">
             <Users className="mx-auto h-12 w-12 text-slate-300 mb-3" />
             <h3 className="text-base font-bold text-slate-700">Không tìm thấy cựu sinh viên phù hợp</h3>

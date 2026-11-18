@@ -1,23 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { 
   Camera, 
-  Video, 
   Upload, 
   Heart, 
   MessageSquare, 
-  Play, 
   Send, 
   X, 
   Sparkles, 
   User, 
-  ChevronDown
+  ChevronDown, 
+  ChevronLeft, 
+  ChevronRight, 
+  Pin, 
+  Layers, 
+  LayoutGrid, 
+  Trash2, 
+  CheckCircle2, 
+  Star,
+  Eye,
+  Plus
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 
-interface CommentItem {
+export interface CommentItem {
   id: string;
   author: string;
   avatar?: string;
@@ -25,129 +33,33 @@ interface CommentItem {
   createdAt: string;
 }
 
-interface AlbumPhoto {
+export interface AlbumPhoto {
   id: string;
   title: string;
-  imgSrc?: string;
+  imgSrc: string;
   type: "image" | "video";
-  category: string;
+  category?: string;
   caption?: string;
   likes: number;
   comments: CommentItem[];
   uploader: string;
-  color?: string;
-  span?: string;
+  uploaderClass?: string;
+  createdAt: number;
+  isPinned?: boolean;
 }
 
-const INITIAL_ALBUM: AlbumPhoto[] = [
-  {
-    id: "photo-1",
-    title: "Tập thể TCDN4 K33 trước Cơ sở A - UEH",
-    imgSrc: "/images/ueh-group.jpg",
-    type: "image",
-    category: "Hội ngộ",
-    caption: "Kỷ niệm ngày hội ngộ 15 năm K33",
-    likes: 28,
-    comments: [
-      { id: "c1", author: "Lê Hoàng Cường", content: "Mọi người tươi quá, nhìn ai cũng phong độ!", createdAt: "Hôm qua" },
-      { id: "c2", author: "Trần Thị Bích", content: "Nhớ trường xưa ghê, hẹn gặp lại mọi người đông đủ!", createdAt: "Hôm nay" },
-    ],
-    uploader: "Ban Liên Lạc",
-    span: "col-span-2 row-span-2",
-  },
-  {
-    id: "photo-2",
-    title: "Lễ Tốt Nghiệp 2011",
-    type: "image",
-    category: "Lễ Tốt Nghiệp",
-    caption: "Ngày nhận bằng tốt nghiệp",
-    likes: 19,
-    comments: [],
-    uploader: "TC12",
-    color: "from-blue-600 to-indigo-800",
-  },
-  {
-    id: "photo-3",
-    title: "Video: 15 Năm Thanh Xuân",
-    type: "video",
-    category: "Video Recap",
-    caption: "Thước phim kỷ niệm sinh viên",
-    likes: 35,
-    comments: [
-      { id: "c3", author: "Phạm Hải Đăng", content: "Xem lại clip xúc động thực sự các bạn ơi!", createdAt: "2 ngày trước" },
-    ],
-    uploader: "TC10",
-    color: "from-purple-600 to-pink-700",
-  },
-  {
-    id: "photo-4",
-    title: "Học kỳ Quân sự",
-    type: "image",
-    category: "Quân sự",
-    caption: "Những ngày trên thao trường",
-    likes: 22,
-    comments: [],
-    uploader: "Nguyễn Văn A",
-    color: "from-emerald-700 to-teal-900",
-  },
-  {
-    id: "photo-5",
-    title: "Canteen Giờ Giải Lao",
-    type: "image",
-    category: "Giảng đường",
-    caption: "Trưa chép bài và uống nước mía",
-    likes: 18,
-    comments: [],
-    uploader: "TC11",
-    color: "from-amber-600 to-orange-800",
-  },
-  {
-    id: "photo-6",
-    title: "Đêm Gala Gặp Gỡ 10 Năm",
-    type: "image",
-    category: "Hội ngộ",
-    caption: "Gặp lại sau 10 năm ra trường",
-    likes: 25,
-    comments: [],
-    uploader: "Ban Liên Lạc",
-    color: "from-sky-600 to-blue-800",
-  },
-  {
-    id: "photo-7",
-    title: "Chuyến Dã Ngoại Vũng Tàu",
-    type: "image",
-    category: "Dã ngoại",
-    caption: "Chuyến đi biển năm 3 đại học",
-    likes: 17,
-    comments: [],
-    uploader: "Hoàng Minh Em",
-    color: "from-teal-600 to-cyan-800",
-  },
-  {
-    id: "photo-8",
-    title: "Đội Văn Nghệ TCDN4 K33",
-    type: "image",
-    category: "Văn nghệ",
-    caption: "Hội diễn văn nghệ truyền thống UEH",
-    likes: 20,
-    comments: [],
-    uploader: "Ngô Mỹ Linh",
-    color: "from-rose-600 to-pink-800",
-  },
-  {
-    id: "photo-9",
-    title: "Bảo Vệ Đề Tài Khóa Luận",
-    type: "image",
-    category: "Học tập",
-    caption: "Kỷ niệm ngày bảo vệ tốt nghiệp K33",
-    likes: 24,
-    comments: [],
-    uploader: "TC12",
-    color: "from-indigo-600 to-purple-800",
-  },
-];
+interface StagedUploadFile {
+  id: string;
+  file: File;
+  preview: string;
+  title: string;
+  caption: string;
+  isPinned: boolean;
+}
 
-// Hàm nén ảnh Client-side bằng Canvas
+const STORAGE_KEY = "tcdn4_memories_gallery";
+
+// Hàm nén ảnh Client-side bằng Canvas (chuẩn dung lượng nhẹ 80-150KB nhưng cực sắc nét)
 async function compressImageFile(file: File, maxWidth = 1600, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -187,20 +99,60 @@ export default function MemoriesGallery() {
   const { user, profile, openLogin } = useAuth();
   const toast = useToast();
 
-  const [photos, setPhotos] = useState<AlbumPhoto[]>(INITIAL_ALBUM);
+  const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
   const [activePhoto, setActivePhoto] = useState<AlbumPhoto | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [likedPhotoIds, setLikedPhotoIds] = useState<string[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState<number>(9); // 9 mục lấp đầy hoàn hảo 3 hàng grid 4 cột
+  const [viewMode, setViewMode] = useState<"fan" | "grid">("fan");
+  const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
+  const [visibleCount, setVisibleCount] = useState<number>(12);
 
-  // New photo form
-  const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] = useState("Kỷ niệm chung");
-  const [newCaption, setNewCaption] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
+  // Multi-upload state
+  const [stagedFiles, setStagedFiles] = useState<StagedUploadFile[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [compressProgress, setCompressProgress] = useState("");
+  const [batchUploaderName, setBatchUploaderName] = useState("");
+  const [batchClass, setBatchClass] = useState<"TC10" | "TC11" | "TC12">("TC10");
+  const [batchCommonCaption, setBatchCommonCaption] = useState("");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load photos from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setPhotos(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const savePhotos = (newPhotos: AlbumPhoto[]) => {
+    setPhotos(newPhotos);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newPhotos));
+    } catch {}
+  };
+
+  // Sắp xếp: Ảnh Ghim (isPinned) luôn nằm lên đầu, tiếp theo là ảnh mới nhất (createdAt giảm dần)
+  const sortedPhotos = useMemo(() => {
+    return [...photos].sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }, [photos]);
+
+  // Đảm bảo activeCardIndex hợp lệ
+  useEffect(() => {
+    if (sortedPhotos.length > 0 && activeCardIndex >= sortedPhotos.length) {
+      setActiveCardIndex(Math.max(0, sortedPhotos.length - 1));
+    }
+  }, [sortedPhotos.length, activeCardIndex]);
 
   const handleToggleLike = (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -212,24 +164,53 @@ export default function MemoriesGallery() {
     }
 
     const isLiked = likedPhotoIds.includes(photoId);
+    let updatedPhotos: AlbumPhoto[];
     if (isLiked) {
       setLikedPhotoIds(likedPhotoIds.filter((id) => id !== photoId));
-      setPhotos((prev) =>
-        prev.map((p) => (p.id === photoId ? { ...p, likes: Math.max(0, p.likes - 1) } : p))
+      updatedPhotos = photos.map((p) =>
+        p.id === photoId ? { ...p, likes: Math.max(0, p.likes - 1) } : p
       );
       if (activePhoto?.id === photoId) {
-        setActivePhoto((prev) => prev ? { ...prev, likes: Math.max(0, prev.likes - 1) } : null);
+        setActivePhoto((prev) => (prev ? { ...prev, likes: Math.max(0, prev.likes - 1) } : null));
       }
     } else {
       setLikedPhotoIds([...likedPhotoIds, photoId]);
-      setPhotos((prev) =>
-        prev.map((p) => (p.id === photoId ? { ...p, likes: p.likes + 1 } : p))
+      updatedPhotos = photos.map((p) =>
+        p.id === photoId ? { ...p, likes: p.likes + 1 } : p
       );
       if (activePhoto?.id === photoId) {
-        setActivePhoto((prev) => prev ? { ...prev, likes: prev.likes + 1 } : null);
+        setActivePhoto((prev) => (prev ? { ...prev, likes: prev.likes + 1 } : null));
       }
       toast.success("Đã thả tim kỷ niệm!");
     }
+    savePhotos(updatedPhotos);
+  };
+
+  const handleTogglePin = (photoId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const updated = photos.map((p) => {
+      if (p.id === photoId) {
+        const nextState = !p.isPinned;
+        toast.success(nextState ? "Đã ghim ảnh lên đầu bộ bài!" : "Đã bỏ ghim ảnh");
+        return { ...p, isPinned: nextState };
+      }
+      return p;
+    });
+    savePhotos(updated);
+    if (activePhoto?.id === photoId) {
+      setActivePhoto((prev) => (prev ? { ...prev, isPinned: !prev.isPinned } : null));
+    }
+  };
+
+  const handleDeletePhoto = (photoId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Bạn có chắc chắn muốn xóa ảnh này khỏi góc kỷ niệm?")) return;
+    const updated = photos.filter((p) => p.id !== photoId);
+    savePhotos(updated);
+    if (activePhoto?.id === photoId) {
+      setActivePhoto(null);
+    }
+    toast.success("Đã xóa ảnh khỏi thư viện");
   };
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -255,263 +236,555 @@ export default function MemoriesGallery() {
     const updatedPhoto = { ...activePhoto, comments: updatedComments };
 
     setActivePhoto(updatedPhoto);
-    setPhotos((prev) => prev.map((p) => (p.id === activePhoto.id ? updatedPhoto : p)));
+    const updatedAll = photos.map((p) => (p.id === activePhoto.id ? updatedPhoto : p));
+    savePhotos(updatedAll);
     setCommentInput("");
     toast.success("Đã đăng bình luận!");
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Chọn NHIỀU ẢNH cùng lúc và nén tự động từng ảnh
+  const handleMultiFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    if (file.type.startsWith("image/")) {
-      setIsCompressing(true);
-      try {
-        const compressedBase64 = await compressImageFile(file, 1400, 0.75);
-        setFilePreview(compressedBase64);
-        setSelectedFile(file);
-        toast.success("Đã tối ưu & nén ảnh thành công!");
-      } catch {
-        toast.error("Không thể xử lý ảnh, vui lòng thử lại!");
-      } finally {
-        setIsCompressing(false);
-      }
-    } else {
-      setSelectedFile(file);
-      setFilePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const handleUploadSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) {
-      toast.error("Vui lòng nhập tên ảnh / khoảnh khắc!");
+    const fileList = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (fileList.length === 0) {
+      toast.error("Vui lòng chọn các file định dạng hình ảnh!");
       return;
     }
 
-    const authorName = profile?.full_name || (user ? "Thành viên lớp" : "Khách");
-    const newItem: AlbumPhoto = {
-      id: `p-${Date.now()}`,
-      title: newTitle.trim(),
-      imgSrc: filePreview || undefined,
-      type: selectedFile?.type.startsWith("video/") ? "video" : "image",
-      category: newCategory,
-      caption: newCaption.trim() || undefined,
-      likes: 1,
-      comments: [],
-      uploader: authorName,
-      color: "from-blue-600 to-sky-700",
-    };
+    setIsCompressing(true);
+    const newStaged: StagedUploadFile[] = [];
 
-    setPhotos([newItem, ...photos]);
-    setIsUploadOpen(false);
-    setNewTitle("");
-    setNewCaption("");
-    setSelectedFile(null);
-    setFilePreview(null);
-    toast.success("Đã đóng góp ảnh kỷ niệm thành công!");
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i];
+      setCompressProgress(`Đang nén tối ưu ${i + 1}/${fileList.length} ảnh...`);
+      try {
+        const compressedBase64 = await compressImageFile(f, 1500, 0.75);
+        const autoTitle = f.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+        newStaged.push({
+          id: `staged-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+          file: f,
+          preview: compressedBase64,
+          title: autoTitle.length > 40 ? autoTitle.slice(0, 40) : autoTitle,
+          caption: "",
+          isPinned: false,
+        });
+      } catch {
+        console.error("Lỗi nén ảnh:", f.name);
+      }
+    }
+
+    setStagedFiles((prev) => [...prev, ...newStaged]);
+    setIsCompressing(false);
+    setCompressProgress("");
+    toast.success(`Đã chuẩn bị ${newStaged.length} ảnh sẵn sàng đăng tải!`);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
-  const displayedPhotos = photos.slice(0, visibleCount);
+  const removeStagedFile = (id: string) => {
+    setStagedFiles((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const updateStagedFile = (id: string, field: "title" | "caption" | "isPinned", value: any) => {
+    setStagedFiles((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleBatchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (stagedFiles.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 bức ảnh để đăng tải!");
+      return;
+    }
+
+    const defaultUploader =
+      batchUploaderName.trim() ||
+      profile?.full_name ||
+      (user ? "Thành viên lớp" : "Cựu sinh viên K33");
+
+    const now = Date.now();
+    const newPhotos: AlbumPhoto[] = stagedFiles.map((staged, idx) => ({
+      id: `p-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
+      imgSrc: staged.preview,
+      type: "image",
+      category: "Kỷ niệm",
+      caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
+      likes: 1,
+      comments: [],
+      uploader: defaultUploader,
+      uploaderClass: batchClass,
+      createdAt: now + idx,
+      isPinned: staged.isPinned,
+    }));
+
+    // Gộp ảnh: Ảnh mới upload sẽ đứng lên trước (chỉ đứng sau các ảnh được Ghim)
+    const updated = [...newPhotos, ...photos];
+    savePhotos(updated);
+
+    // Reset form
+    setStagedFiles([]);
+    setIsUploadOpen(false);
+    setBatchCommonCaption("");
+    setActiveCardIndex(0);
+    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh kỷ niệm mới!`);
+  };
 
   return (
-    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-slate-50 via-blue-50/40 to-slate-100/70 py-14 sm:py-20 relative border-t border-slate-200/60">
+    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-slate-50 via-blue-50/30 to-slate-100 py-14 sm:py-20 relative border-t border-slate-200/60 overflow-hidden">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
-        {/* Header với Tiêu đề Cực To */}
+        {/* Header với Tiêu đề & Nút Hành động */}
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3.5 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-2.5">
-              <Sparkles size={14} className="text-ueh-orange" /> Thư viện ảnh & video
+              <Sparkles size={14} className="text-ueh-orange" /> Thư viện ảnh 15 năm
             </div>
             <h2 className="text-3xl font-black text-ueh sm:text-5xl lg:text-6xl tracking-tight leading-tight">
               Góc Kỷ Niệm TCDN4
             </h2>
             <div className="mt-2.5 h-1 w-20 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
             <p className="mt-3 max-w-xl text-xs sm:text-sm text-slate-600">
-              Kho lưu trữ hình ảnh 15 năm. Mỗi bức ảnh là một mảnh ghép thanh xuân được anh chị em cùng đóng góp.
+              Chiêm ngưỡng bộ bài ký ức thanh xuân. Mỗi bức ảnh là một mảnh ghép kỷ niệm do anh chị em toàn khóa cùng đóng góp.
             </p>
           </div>
 
-          <button
-            onClick={() => setIsUploadOpen(true)}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-ueh-light transition-all self-start md:self-end"
-          >
-            <Upload size={15} /> Đóng Góp Ảnh Mới
-          </button>
-        </div>
-
-        {/* Album Grid Cân Đối (Bo góc chuẩn rounded-2xl, thông tin cực kỳ gọn gàng trên ảnh) */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 auto-rows-[160px] sm:auto-rows-[190px]">
-          {displayedPhotos.map((item) => {
-            const isLiked = likedPhotoIds.includes(item.id);
-            return (
-              <div
-                key={item.id}
-                onClick={() => setActivePhoto(item)}
-                className={`group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-900 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:shadow-md cursor-pointer flex flex-col justify-between ${item.span || ""}`}
-              >
-                {/* Image View or Gradient Background */}
-                <div className="relative h-full w-full overflow-hidden bg-slate-900">
-                  {item.imgSrc ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imgSrc}
-                      alt={item.title}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className={`h-full w-full bg-gradient-to-br ${item.color || "from-[#003B5C] to-indigo-900"} flex flex-col items-center justify-center p-3 text-center`}>
-                      {item.type === "video" ? (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-xs mb-1.5 group-hover:scale-110 transition-transform">
-                          <Play size={18} className="ml-0.5 text-ueh-gold" />
-                        </div>
-                      ) : (
-                        <Camera size={24} className="text-white/60 mb-1 group-hover:scale-110 transition-transform" />
-                      )}
-                      <span className="text-xs font-bold text-white/95 line-clamp-1">{item.title}</span>
-                    </div>
-                  )}
-
-                  {/* Gradient Overlay tối nhẹ phía dưới */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
-
-                  {/* GỌN GÀNG TRÊN ẢNH: BỎ TAG, BỎ COMMENT RƯỜM RÀ. CHỈ GHI AI ĐÓNG GÓP + CAPTION NHỎ */}
-                  <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
-                    <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
-                      <span className="flex items-center gap-1 text-sky-200 truncate">
-                        <User size={11} className="shrink-0" /> {item.uploader}
-                      </span>
-                      {/* Nút thả tim nhỏ gọn */}
-                      <button
-                        onClick={(e) => handleToggleLike(item.id, e)}
-                        className={`flex items-center gap-0.5 text-[10px] shrink-0 transition-colors ${
-                          isLiked ? "text-rose-400 font-bold" : "text-white/80 hover:text-white"
-                        }`}
-                      >
-                        <Heart size={11} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
-                        <span>{item.likes}</span>
-                      </button>
-                    </div>
-
-                    {item.caption && (
-                      <p className="text-[10px] text-slate-300 line-clamp-1 mt-0.5 font-normal">
-                        {item.caption}
-                      </p>
-                    )}
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-end">
+            {/* Chuyển đổi chế độ xem Xòe bài / Lưới */}
+            {sortedPhotos.length > 0 && (
+              <div className="flex rounded-xl bg-slate-200/80 p-1 border border-slate-300">
+                <button
+                  onClick={() => setViewMode("fan")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === "fan"
+                      ? "bg-white text-ueh shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Chế độ xòe bài ký ức độc đáo"
+                >
+                  <Layers size={14} /> Xòe Bài
+                </button>
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === "grid"
+                      ? "bg-white text-ueh shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Chế độ lưới đầy đủ"
+                >
+                  <LayoutGrid size={14} /> Lưới Album
+                </button>
               </div>
-            );
-          })}
+            )}
+
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-ueh-light transition-all active:scale-95"
+            >
+              <Upload size={16} /> Đóng Góp Nhiều Ảnh
+            </button>
+          </div>
         </div>
 
-        {/* CƠ CHẾ XEM THÊM KHI CÓ NHIỀU ẢNH */}
-        {photos.length > displayedPhotos.length && (
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => setVisibleCount((prev) => prev + 4)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-xs transition-all"
-            >
-              Xem thêm ảnh kỷ niệm ({photos.length - displayedPhotos.length})
-              <ChevronDown size={15} />
-            </button>
+        {/* TRƯỜNG HỢP CHƯA CÓ ẢNH NÀO TRONG KHO (EMPTY STATE CỰC ĐẸP) */}
+        {sortedPhotos.length === 0 ? (
+          <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-16 text-center backdrop-blur-sm shadow-sm">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50 text-ueh shadow-inner">
+              <Camera size={36} className="text-ueh" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-ueh">
+              Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên
+            </h3>
+            <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-slate-500">
+              Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm (giảng đường, dã ngoại, lễ tốt nghiệp...) để cùng xòe bộ bài thanh xuân!
+            </p>
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+              >
+                <Upload size={17} /> Đóng Góp Ảnh Mới Ngay
+              </button>
+            </div>
+          </div>
+        ) : viewMode === "fan" ? (
+          /* =========================================================================
+             CHẾ ĐỘ XÒE BÀI ĐỘC ĐÁO (FANNED-OUT CARD DECK 3D)
+             ========================================================================= */
+          <div className="relative py-8 sm:py-12">
+            
+            {/* Bàn nỉ trưng bày bộ bài (Felt Deck Display Canvas) */}
+            <div className="relative mx-auto flex h-[380px] sm:h-[460px] md:h-[500px] w-full max-w-5xl items-center justify-center select-none overflow-hidden sm:overflow-visible">
+              
+              {/* Vòng tròn hào quang phía sau tâm bộ bài */}
+              <div className="absolute h-80 w-80 rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
+
+              {/* Các thẻ bài xòe thành cánh cung */}
+              {sortedPhotos.map((item, idx) => {
+                const diff = idx - activeCardIndex;
+                const absDiff = Math.abs(diff);
+
+                // Chỉ hiển thị tối đa 7 lá bài gần tâm nhất để giữ hiệu ứng xòe bài mượt mà
+                if (absDiff > 4) return null;
+
+                const isCurrent = diff === 0;
+                const isLiked = likedPhotoIds.includes(item.id);
+
+                // Góc xoay và độ dạt theo dạng xòe bài cầm tay
+                const rotateDeg = diff * 5.5; // -16.5deg đến +16.5deg
+                const translateX = diff * (typeof window !== "undefined" && window.innerWidth < 640 ? 46 : 76);
+                const translateY = Math.min(absDiff * 14, 60);
+                const zIndex = 30 - absDiff;
+                const scale = isCurrent ? 1.05 : Math.max(0.85, 1 - absDiff * 0.05);
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      if (isCurrent) {
+                        setActivePhoto(item);
+                      } else {
+                        setActiveCardIndex(idx);
+                      }
+                    }}
+                    style={{
+                      transform: `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotateDeg}deg) scale(${scale})`,
+                      zIndex,
+                    }}
+                    className={`group absolute cursor-pointer rounded-2xl bg-white p-2.5 sm:p-3 pb-8 sm:pb-9 shadow-2xl transition-all duration-300 ease-out hover:-translate-y-6 hover:rotate-0 hover:scale-110 hover:z-50 ${
+                      isCurrent
+                        ? "ring-4 ring-ueh/80 shadow-ueh/30"
+                        : "opacity-90 hover:opacity-100"
+                    }`}
+                  >
+                    {/* Thẻ ảnh dạng Polaroid / Card Game cao cấp */}
+                    <div className="relative h-48 w-36 sm:h-64 sm:w-48 md:h-76 md:w-56 overflow-hidden rounded-xl bg-slate-900 border border-slate-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.imgSrc}
+                        alt={item.title}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+
+                      {/* Huy hiệu Ghim Nổi Bật (Vàng Kim) */}
+                      {item.isPinned && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2 py-0.5 text-[9px] sm:text-[10px] font-black text-slate-950 shadow-md">
+                          <Pin size={11} className="fill-slate-950" /> GHIM ĐẦU
+                        </div>
+                      )}
+
+                      {/* Nút Xem chi tiết nhanh khi hover */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-ueh shadow-lg">
+                          <Eye size={13} /> Xem Lớn
+                        </span>
+                      </div>
+
+                      {/* Lớp gradient nhẹ bảo vệ chữ */}
+                      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 to-transparent" />
+                      
+                      <div className="absolute bottom-1.5 left-2 right-2 text-white text-[10px] sm:text-xs font-bold truncate">
+                        {item.title}
+                      </div>
+                    </div>
+
+                    {/* Phần lề dưới của ảnh Polaroid */}
+                    <div className="mt-2 flex items-center justify-between px-1 text-[10px] sm:text-[11px] text-slate-600 font-semibold">
+                      <span className="flex items-center gap-1 truncate text-ueh max-w-[100px] sm:max-w-[130px]">
+                        <User size={11} className="shrink-0 text-slate-400" /> {item.uploader}
+                      </span>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => handleToggleLike(item.id, e)}
+                          className={`flex items-center gap-0.5 transition-colors ${
+                            isLiked ? "text-rose-500 font-bold" : "text-slate-400 hover:text-rose-500"
+                          }`}
+                          title="Thả tim"
+                        >
+                          <Heart size={12} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
+                          <span>{item.likes}</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => handleTogglePin(item.id, e)}
+                          className={`transition-colors p-0.5 rounded ${
+                            item.isPinned ? "text-amber-500" : "text-slate-300 hover:text-amber-500"
+                          }`}
+                          title={item.isPinned ? "Bỏ ghim" : "Ghim lên đầu"}
+                        >
+                          <Pin size={12} className={item.isPinned ? "fill-amber-500" : ""} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Thanh điều khiển lướt thẻ bài (Next / Prev Controller) */}
+            <div className="mt-4 flex flex-col items-center justify-center gap-3">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setActiveCardIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={activeCardIndex === 0}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-ueh hover:text-ueh disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
+                  aria-label="Thẻ bài trước"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+
+                <div className="text-xs font-bold text-slate-600">
+                  Lá bài <strong className="text-ueh text-sm font-black">{activeCardIndex + 1}</strong> / {sortedPhotos.length}
+                </div>
+
+                <button
+                  onClick={() => setActiveCardIndex((prev) => Math.min(sortedPhotos.length - 1, prev + 1))}
+                  disabled={activeCardIndex >= sortedPhotos.length - 1}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-ueh hover:text-ueh disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
+                  aria-label="Thẻ bài tiếp theo"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+
+              {/* Dải chấm nhỏ hoặc thumbnail lướt nhanh */}
+              <div className="flex max-w-md items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                {sortedPhotos.map((p, idx) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setActiveCardIndex(idx)}
+                    className={`h-2 rounded-full transition-all ${
+                      idx === activeCardIndex
+                        ? "w-6 bg-ueh-orange"
+                        : p.isPinned
+                        ? "w-2.5 bg-amber-400"
+                        : "w-2 bg-slate-300 hover:bg-slate-400"
+                    }`}
+                    title={p.title}
+                  />
+                ))}
+              </div>
+            </div>
+
+          </div>
+        ) : (
+          /* =========================================================================
+             CHẾ ĐỘ LƯỚI ALBUM ĐẦY ĐỦ (GRID MASONRY)
+             ========================================================================= */
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {sortedPhotos.slice(0, visibleCount).map((item) => {
+                const isLiked = likedPhotoIds.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setActivePhoto(item)}
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-2.5 pb-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md flex flex-col justify-between"
+                  >
+                    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-900">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.imgSrc}
+                        alt={item.title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+
+                      {item.isPinned && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow-md">
+                          <Pin size={10} className="fill-slate-950" /> Ghim đầu
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+
+                    <div className="mt-2 px-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <h4 className="text-xs font-bold text-slate-900 group-hover:text-ueh transition-colors truncate">
+                          {item.title}
+                        </h4>
+                        <button
+                          onClick={(e) => handleTogglePin(item.id, e)}
+                          className={`p-1 transition-colors ${
+                            item.isPinned ? "text-amber-500" : "text-slate-300 hover:text-amber-500"
+                          }`}
+                          title={item.isPinned ? "Bỏ ghim" : "Ghim lên đầu"}
+                        >
+                          <Pin size={12} className={item.isPinned ? "fill-amber-500" : ""} />
+                        </button>
+                      </div>
+
+                      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                        <span className="truncate max-w-[120px]">{item.uploader}</span>
+                        <button
+                          onClick={(e) => handleToggleLike(item.id, e)}
+                          className={`flex items-center gap-0.5 ${
+                            isLiked ? "text-rose-500 font-bold" : "text-slate-400 hover:text-rose-500"
+                          }`}
+                        >
+                          <Heart size={11} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
+                          <span>{item.likes}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {sortedPhotos.length > visibleCount && (
+              <div className="text-center">
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + 8)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-xs transition-all"
+                >
+                  Xem thêm ảnh ({sortedPhotos.length - visibleCount})
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
       </div>
 
-      {/* Modal xem chi tiết ảnh và bình luận */}
+      {/* =========================================================================
+          MODAL XEM CHI TIẾT ẢNH & BÌNH LUẬN (LIGHTBOX)
+          ========================================================================= */}
       {activePhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-md animate-in fade-in duration-150"
           onClick={() => setActivePhoto(null)}
         >
           <div
-            className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-slate-900 text-white shadow-2xl md:flex-row animate-in fade-in zoom-in-95 duration-150"
+            className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl md:flex-row"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setActivePhoto(null)}
-              className="absolute right-3.5 top-3.5 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70 transition-colors"
+              className="absolute right-3.5 top-3.5 z-20 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition-colors"
+              aria-label="Đóng"
             >
               <X size={18} />
             </button>
 
-            {/* Left: Image / Video Display */}
-            <div className="flex flex-1 items-center justify-center bg-black p-4 md:p-6">
-              {activePhoto.imgSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={activePhoto.imgSrc}
-                  alt={activePhoto.title}
-                  className="max-h-[60vh] md:max-h-[75vh] w-auto rounded-xl object-contain"
-                />
-              ) : (
-                <div className={`h-64 md:h-80 w-full rounded-xl bg-gradient-to-br ${activePhoto.color || "from-blue-600 to-indigo-900"} flex flex-col items-center justify-center p-6 text-center`}>
-                  <Camera size={44} className="text-white/50 mb-2" />
-                  <h3 className="text-base font-bold text-white">{activePhoto.title}</h3>
-                </div>
-              )}
+            {/* Khung ảnh to */}
+            <div className="flex flex-1 items-center justify-center bg-black p-2 sm:p-4 min-h-[260px] md:min-h-[460px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={activePhoto.imgSrc}
+                alt={activePhoto.title}
+                className="max-h-[55vh] md:max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
+              />
             </div>
 
-            {/* Right: Info & Comments */}
-            <div className="flex w-full flex-col justify-between border-t border-white/10 bg-slate-900 p-4 sm:p-5 md:w-80 md:border-l md:border-t-0">
+            {/* Cột bình luận và thông tin */}
+            <div className="flex w-full md:w-80 lg:w-96 flex-col justify-between border-t md:border-t-0 md:border-l border-white/10 bg-slate-900/95 p-4 sm:p-5">
               <div>
-                <div className="mb-3">
-                  <h3 className="text-sm sm:text-base font-black text-white">{activePhoto.title}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Đóng góp bởi: <strong className="text-white">{activePhoto.uploader}</strong></p>
-                  {activePhoto.caption && (
-                    <p className="mt-1.5 text-xs text-slate-300 italic border-l-2 border-ueh-gold pl-2">
-                      "{activePhoto.caption}"
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-white leading-tight">
+                      {activePhoto.title}
+                    </h3>
+                    <p className="mt-1 text-xs text-sky-300 font-semibold flex items-center gap-1.5">
+                      <User size={12} /> {activePhoto.uploader}
+                      {activePhoto.uploaderClass && (
+                        <span className="rounded bg-blue-900/80 px-1.5 py-0.2 text-[10px] text-sky-200 border border-blue-500/30">
+                          {activePhoto.uploaderClass}
+                        </span>
+                      )}
                     </p>
-                  )}
-                </div>
+                  </div>
 
-                <div className="flex items-center gap-3 py-2 border-y border-white/10 text-xs">
                   <button
-                    onClick={() => handleToggleLike(activePhoto.id)}
-                    className="flex items-center gap-1.5 font-bold text-rose-400 hover:text-rose-300"
+                    onClick={(e) => handleTogglePin(activePhoto.id, e)}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                      activePhoto.isPinned
+                        ? "bg-amber-400 text-slate-950 shadow-xs"
+                        : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                    }`}
                   >
-                    <Heart size={15} className={likedPhotoIds.includes(activePhoto.id) ? "fill-rose-500 text-rose-500" : ""} />
-                    <span>{activePhoto.likes} thích</span>
+                    <Pin size={12} className={activePhoto.isPinned ? "fill-slate-950" : ""} />
+                    <span>{activePhoto.isPinned ? "Đã ghim" : "Ghim đầu"}</span>
                   </button>
-                  <span className="text-slate-400">• {activePhoto.comments.length} bình luận</span>
                 </div>
 
-                {/* Comment list */}
-                <div className="my-2.5 max-h-44 overflow-y-auto space-y-2 pr-1 no-scrollbar">
-                  {activePhoto.comments.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic py-4 text-center">Chưa có bình luận nào.</p>
-                  ) : (
-                    activePhoto.comments.map((c) => (
-                      <div key={c.id} className="rounded-lg bg-white/5 p-2 text-xs">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-sky-300 mb-0.5">
-                          <span>{c.author}</span>
-                          <span className="text-[10px] text-slate-400 font-normal">{c.createdAt}</span>
+                {activePhoto.caption && (
+                  <p className="mt-2.5 rounded-xl bg-white/5 p-2.5 text-xs text-slate-300 leading-relaxed border border-white/10 font-normal">
+                    {activePhoto.caption}
+                  </p>
+                )}
+
+                {/* Nút Like & Xóa */}
+                <div className="mt-3 flex items-center justify-between border-b border-white/10 pb-3">
+                  <button
+                    onClick={(e) => handleToggleLike(activePhoto.id, e)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+                      likedPhotoIds.includes(activePhoto.id)
+                        ? "bg-rose-500 text-white shadow-xs"
+                        : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                    }`}
+                  >
+                    <Heart size={14} className={likedPhotoIds.includes(activePhoto.id) ? "fill-white" : ""} />
+                    <span>{activePhoto.likes} Thích</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => handleDeletePhoto(activePhoto.id, e)}
+                    className="flex items-center gap-1 text-[11px] text-rose-400 hover:text-rose-300 p-1"
+                    title="Xóa ảnh này"
+                  >
+                    <Trash2 size={13} /> Xóa ảnh
+                  </button>
+                </div>
+
+                {/* Danh sách bình luận */}
+                <div className="mt-3">
+                  <div className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1">
+                    <MessageSquare size={13} /> Bình luận ({activePhoto.comments.length})
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-2 no-scrollbar pr-1">
+                    {activePhoto.comments.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 italic py-2">
+                        Chưa có bình luận nào. Hãy để lại lời nhắn đầu tiên!
+                      </p>
+                    ) : (
+                      activePhoto.comments.map((c) => (
+                        <div key={c.id} className="rounded-xl bg-white/5 p-2 text-xs border border-white/5">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
+                            <strong className="text-sky-300">{c.author}</strong>
+                            <span>{c.createdAt}</span>
+                          </div>
+                          <p className="text-slate-200">{c.content}</p>
                         </div>
-                        <p className="text-slate-200">{c.content}</p>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Form Bình luận */}
-              <form onSubmit={handleAddComment} className="mt-2 flex gap-1.5">
+              {/* Form bình luận */}
+              <form onSubmit={handleAddComment} className="mt-3 flex gap-1.5 pt-2 border-t border-white/10">
                 <input
                   type="text"
-                  placeholder="Viết cảm nghĩ..."
+                  placeholder="Viết cảm nghĩ về bức ảnh..."
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
-                  className="flex-1 rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:border-sky-400 focus:outline-none"
+                  className="flex-1 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs text-white placeholder-slate-400 focus:border-sky-400 focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!commentInput.trim()}
-                  className="rounded-xl bg-ueh px-3 py-1.5 text-xs font-bold text-white hover:bg-ueh-light disabled:opacity-50"
+                  className="rounded-xl bg-ueh px-3.5 py-2 text-xs font-bold text-white hover:bg-ueh-light disabled:opacity-40 transition-colors"
                 >
-                  <Send size={13} />
+                  <Send size={14} />
                 </button>
               </form>
             </div>
@@ -519,86 +792,208 @@ export default function MemoriesGallery() {
         </div>
       )}
 
-      {/* Modal đóng góp ảnh có tính năng NÉN ẢNH tự động */}
+      {/* =========================================================================
+          MODAL UPLOAD NHIỀU ẢNH (MULTI-PHOTO UPLOAD VỚI NÉN TỰ ĐỘNG)
+          ========================================================================= */}
       {isUploadOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-5 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
           onClick={() => setIsUploadOpen(false)}
         >
           <div
-            className="relative w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl text-slate-900 animate-in fade-in zoom-in-95 duration-150"
+            className="relative my-8 w-full max-w-2xl rounded-3xl bg-white p-5 sm:p-7 shadow-2xl text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setIsUploadOpen(false)}
-              className="absolute right-3.5 top-3.5 rounded-lg bg-slate-100 p-1 text-slate-400 hover:bg-slate-200"
+              className="absolute right-4 top-4 rounded-full bg-slate-100 p-1.5 text-slate-400 hover:bg-slate-200 transition-colors"
             >
               <X size={18} />
             </button>
 
-            <h3 className="text-base font-black text-ueh mb-1 flex items-center gap-1.5">
-              <Upload size={17} className="text-ueh-orange" /> Đóng Góp Ảnh Kỷ Niệm
-            </h3>
-            <p className="text-xs text-slate-500 mb-3.5">
-              Ảnh tải lên sẽ được tự động nén tối ưu dung lượng và sắc nét.
-            </p>
-
-            <form onSubmit={handleUploadSubmit} className="space-y-3">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-ueh">
+                <Upload size={20} />
+              </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Chọn ảnh từ máy (Tự động nén):
-                </label>
+                <h3 className="text-lg font-black text-ueh">Đóng Góp Nhiều Ảnh Kỷ Niệm</h3>
+                <p className="text-xs text-slate-500">
+                  Chọn một hoặc nhiều ảnh cùng lúc. Ảnh mới đăng sẽ hiển thị lên trước trong bộ bài!
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleBatchSubmit} className="mt-5 space-y-4">
+              
+              {/* Vùng kéo thả / chọn nhiều ảnh */}
+              <div className="rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/40 p-4 sm:p-6 text-center hover:bg-blue-50/70 transition-colors">
                 <input
+                  ref={fileInputRef}
                   type="file"
-                  accept="image/*,video/*"
-                  onChange={handleFileChange}
-                  className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-ueh hover:file:bg-blue-100 cursor-pointer"
+                  multiple
+                  accept="image/*"
+                  onChange={handleMultiFilesSelected}
+                  className="hidden"
+                  id="multi-photo-input"
                 />
+                <label
+                  htmlFor="multi-photo-input"
+                  className="cursor-pointer flex flex-col items-center justify-center"
+                >
+                  <Camera size={32} className="text-ueh mb-2" />
+                  <span className="text-xs sm:text-sm font-bold text-ueh">
+                    Bấm để chọn nhiều ảnh từ thiết bị
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-0.5">
+                    Hỗ trợ JPG, PNG, WEBP (Tự động nén dung lượng nhẹ & sắc nét)
+                  </span>
+                </label>
+
                 {isCompressing && (
-                  <p className="text-[11px] text-ueh font-semibold mt-1">Đang nén ảnh tối ưu...</p>
-                )}
-                {filePreview && (
-                  <div className="mt-2 h-24 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={filePreview} alt="Preview" className="h-full w-full object-cover" />
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-ueh px-3 py-1 text-xs font-semibold text-white">
+                    <span className="h-2 w-2 animate-ping rounded-full bg-amber-400" />
+                    {compressProgress}
                   </div>
                 )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tên ảnh / Khoảnh khắc *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: Nhóm bạn TC10 tại Canteen..."
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:border-ueh focus:bg-white focus:outline-none"
-                />
+              {/* Danh sách ảnh đã chọn chuẩn bị upload */}
+              {stagedFiles.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-700">
+                      Đã chuẩn bị ({stagedFiles.length} ảnh):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStagedFiles([])}
+                      className="text-[11px] font-semibold text-rose-600 hover:underline"
+                    >
+                      Xóa tất cả
+                    </button>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1 no-scrollbar border border-slate-200 rounded-2xl p-2.5 bg-slate-50">
+                    {stagedFiles.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 rounded-xl bg-white p-2 border border-slate-200/80 shadow-2xs"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.preview}
+                          alt="Thumbnail"
+                          className="h-12 w-14 shrink-0 rounded-lg object-cover border border-slate-100"
+                        />
+
+                        <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Tên ảnh..."
+                            value={item.title}
+                            onChange={(e) => updateStagedFile(item.id, "title", e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs focus:bg-white focus:border-ueh focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Chú thích nhỏ (tùy chọn)..."
+                            value={item.caption}
+                            onChange={(e) => updateStagedFile(item.id, "caption", e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs focus:bg-white focus:border-ueh focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Nút Ghim */}
+                        <button
+                          type="button"
+                          onClick={() => updateStagedFile(item.id, "isPinned", !item.isPinned)}
+                          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold shrink-0 transition-colors ${
+                            item.isPinned
+                              ? "bg-amber-100 text-amber-800 border border-amber-300"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          }`}
+                          title="Ghim ảnh này lên đầu bộ bài"
+                        >
+                          <Pin size={11} className={item.isPinned ? "fill-amber-800" : ""} />
+                          <span className="hidden sm:inline">{item.isPinned ? "Đã ghim" : "Ghim"}</span>
+                        </button>
+
+                        {/* Xóa ảnh khỏi queue */}
+                        <button
+                          type="button"
+                          onClick={() => removeStagedFile(item.id)}
+                          className="rounded-lg p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                          title="Bỏ ảnh này"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Thông tin chung của người đóng góp */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tên người đóng góp:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={profile?.full_name || "VD: Nguyễn Văn A..."}
+                    value={batchUploaderName}
+                    onChange={(e) => setBatchUploaderName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:bg-white focus:border-ueh focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Thuộc lớp:
+                  </label>
+                  <select
+                    value={batchClass}
+                    onChange={(e) => setBatchClass(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-ueh focus:bg-white focus:border-ueh focus:outline-none"
+                  >
+                    <option value="TC10">Lớp TC10</option>
+                    <option value="TC11">Lớp TC11</option>
+                    <option value="TC12">Lớp TC12</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Caption ngắn (tùy chọn)
+                  Ghi chú / Chú thích chung cho album (tùy chọn):
                 </label>
                 <input
                   type="text"
-                  placeholder="VD: Buổi trưa cùng nhau ôn thi cuối kỳ..."
-                  value={newCaption}
-                  onChange={(e) => setNewCaption(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:border-ueh focus:bg-white focus:outline-none"
+                  placeholder="VD: Kỷ niệm dã ngoại Vũng Tàu năm 2 đại học..."
+                  value={batchCommonCaption}
+                  onChange={(e) => setBatchCommonCaption(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:bg-white focus:border-ueh focus:outline-none"
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={isCompressing}
-                className="w-full rounded-xl bg-ueh py-2.5 text-xs font-bold text-white hover:bg-ueh-light transition-colors shadow-xs mt-2 disabled:opacity-50"
-              >
-                Lưu và Chia Sẻ Ảnh
-              </button>
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(false)}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={stagedFiles.length === 0 || isCompressing}
+                  className="flex items-center gap-2 rounded-xl bg-ueh px-6 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-ueh-light transition-all shadow-md disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Upload size={15} /> Đăng Tải {stagedFiles.length > 0 ? `(${stagedFiles.length})` : ""} Ảnh Vào Bộ Bài
+                </button>
+              </div>
+
             </form>
           </div>
         </div>

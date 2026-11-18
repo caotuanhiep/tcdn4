@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getSupabase } from "@/lib/supabase/client";
 
 interface ChatMessage {
   id: string;
@@ -24,14 +25,13 @@ interface ChatMessage {
   isMe?: boolean;
 }
 
-const INITIAL_CHAT: ChatMessage[] = [];
+interface BirthdayItem {
+  name: string;
+  class: string;
+  date: string;
+}
 
-const UPCOMING_BIRTHDAYS = [
-  { name: "Trần Thị Bích", class: "TC11", date: "19/11" },
-  { name: "Lê Hoàng Cường", class: "TC12", date: "24/11" },
-  { name: "Đặng Quốc Hưng", class: "TC10", date: "02/12" },
-  { name: "Phạm Hải Đăng", class: "TC10", date: "15/12" },
-];
+const INITIAL_CHAT: ChatMessage[] = [];
 
 const EMOJIS = ["🎉", "❤️", "👍", "🍻", "🎓", "👏"];
 
@@ -41,9 +41,10 @@ export default function EmbeddedCommunityChat() {
 
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
   const [inputText, setInputText] = useState("");
+  const [upcomingBirthdays, setUpcomingBirthdays] = useState<BirthdayItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load from localStorage
+  // Load from localStorage & Supabase
   useEffect(() => {
     try {
       const stored = localStorage.getItem("tcdn4_community_chat");
@@ -51,7 +52,50 @@ export default function EmbeddedCommunityChat() {
         setMessages(JSON.parse(stored));
       }
     } catch {}
-  }, []);
+
+    async function loadBirthdays() {
+      const list: BirthdayItem[] = [];
+
+      // Check current user profile
+      if (profile && profile.birthday) {
+        try {
+          const parts = profile.birthday.split("-");
+          const dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}` : profile.birthday;
+          list.push({
+            name: profile.full_name || "Bạn",
+            class: profile.class_name || "K33",
+            date: dateStr,
+          });
+        } catch {}
+      }
+
+      // Check Supabase profiles
+      try {
+        const { data } = await getSupabase()
+          .from("profiles")
+          .select("full_name, class_name, birthday")
+          .not("birthday", "is", null);
+
+        if (data && data.length > 0) {
+          data.forEach((p: any) => {
+            if (p.birthday && p.full_name !== profile?.full_name) {
+              const parts = p.birthday.split("-");
+              const dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}` : p.birthday;
+              list.push({
+                name: p.full_name,
+                class: p.class_name || "K33",
+                date: dateStr,
+              });
+            }
+          });
+        }
+      } catch {}
+
+      setUpcomingBirthdays(list);
+    }
+
+    loadBirthdays();
+  }, [profile]);
 
   const saveMessages = (newMsgs: ChatMessage[]) => {
     setMessages(newMsgs);
@@ -146,16 +190,22 @@ export default function EmbeddedCommunityChat() {
 
           {/* Dòng chữ chạy ngang tiết kiệm không gian */}
           <div className="flex items-center gap-3 overflow-x-auto no-scrollbar whitespace-nowrap text-[11px]">
-            {UPCOMING_BIRTHDAYS.map((person, idx) => (
-              <span key={person.name} className="inline-flex items-center gap-1">
-                {idx > 0 && <span className="text-amber-300 mx-1">•</span>}
-                <strong className="text-slate-800 font-bold">{person.name}</strong>
-                <span className="text-[10px] text-ueh font-semibold bg-white/70 px-1 rounded border border-amber-200/60">
-                  {person.class}
-                </span>
-                <span className="text-ueh-orange font-bold">({person.date})</span>
+            {upcomingBirthdays.length === 0 ? (
+              <span className="text-[11px] text-slate-500 italic">
+                Chưa có ngày sinh nào được cập nhật trong tháng này. Cập nhật hồ sơ để nhận lời chúc từ bạn bè!
               </span>
-            ))}
+            ) : (
+              upcomingBirthdays.map((person, idx) => (
+                <span key={`${person.name}-${idx}`} className="inline-flex items-center gap-1">
+                  {idx > 0 && <span className="text-amber-300 mx-1">•</span>}
+                  <strong className="text-slate-800 font-bold">{person.name}</strong>
+                  <span className="text-[10px] text-ueh font-semibold bg-white/70 px-1 rounded border border-amber-200/60">
+                    {person.class}
+                  </span>
+                  <span className="text-ueh-orange font-bold">({person.date})</span>
+                </span>
+              ))
+            )}
           </div>
         </div>
 
