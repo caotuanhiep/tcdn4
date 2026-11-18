@@ -122,18 +122,13 @@ export default function Navbar() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           
           {/* Logo Brand */}
-          <Link href="/" className="group flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ueh shadow-md shadow-blue-900/20 transition-transform group-hover:scale-105">
-              <GraduationCap className="h-6 w-6 text-white" />
-            </span>
-            <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tight text-ueh leading-none">
-                TCDN4<span className="ml-1 font-bold text-ueh-orange">Hub</span>
-              </span>
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                K33 • UEH 15 Năm
-              </span>
-            </div>
+          <Link href="/" className="group flex items-center gap-2.5 transition-transform hover:opacity-95">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/logo-header.png"
+              alt="TCDN4 Alumni Hub - K33 UEH"
+              className="h-9 sm:h-11 w-auto max-w-[180px] sm:max-w-[220px] object-contain transition-transform group-hover:scale-102"
+            />
           </Link>
 
           {/* Desktop Nav Items */}

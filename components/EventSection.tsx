@@ -103,18 +103,12 @@ const INITIAL_REGISTRATIONS: Registration[] = [
   },
 ];
 
-const BANK_INFO = {
-  bankName: "MB Bank (Ngân hàng Quân Đội)",
-  bankCode: "MB",
-  accountNumber: "0903123456",
-  accountName: "BAN LIEN LAC TCDN4 K33",
-  amount: 1000000,
-  amountText: "1.000.000 VNĐ",
-};
+import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
 
 export default function EventSection() {
   const toast = useToast();
   const { user, openLogin, openProfile } = useAuth();
+  const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
   const [registrations, setRegistrations] = useState<Registration[]>(INITIAL_REGISTRATIONS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [step, setStep] = useState<"form" | "payment" | "success">("form");
@@ -168,6 +162,7 @@ export default function EventSection() {
   }, []);
 
   useEffect(() => {
+    setBankInfo(getBankInfo());
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
       if (stored) {
@@ -185,9 +180,9 @@ export default function EventSection() {
 
   const transferSyntax = `TCDN4 ${fullName ? fullName.trim().toUpperCase() : "HO TEN"} ${phone ? phone.slice(-4) : "SDT"}`;
 
-  const qrUrl = `https://img.vietqr.io/image/${BANK_INFO.bankCode}-${BANK_INFO.accountNumber}-compact2.png?amount=${BANK_INFO.amount}&addInfo=${encodeURIComponent(
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(
     transferSyntax
-  )}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`;
+  )}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const handleSubmitRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,7 +200,7 @@ export default function EventSection() {
       address: address.trim(),
       guestsCount,
       status: "pending",
-      paidAmount: BANK_INFO.amount,
+      paidAmount: bankInfo.amount,
       createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
       note: note.trim() || undefined,
     };
@@ -243,7 +238,7 @@ export default function EventSection() {
   };
 
   const handleShareToZaloGroup = () => {
-    const message = `🎉 [TCDN4-K33 15 NĂM] Đăng ký mới tham dự sự kiện:\n👤 Họ tên: ${fullName || "Thành viên TCDN4"}\n🎓 Lớp: ${className}\n👕 Size áo: ${shirtSize}\n📍 Địa chỉ nhận áo: ${address}\n💰 Kinh phí: ${BANK_INFO.amountText}\n✨ Link nhóm: ${ZALO_GROUP_URL}`;
+    const message = `🎉 [TCDN4-K33 15 NĂM] Đăng ký mới tham dự sự kiện:\n👤 Họ tên: ${fullName || "Thành viên TCDN4"}\n🎓 Lớp: ${className}\n👕 Size áo: ${shirtSize}\n📍 Địa chỉ nhận áo: ${address}\n💰 Kinh phí: ${bankInfo.amountText}\n✨ Link nhóm: ${ZALO_GROUP_URL}`;
     const zaloShareUrl = `https://zalo.me/share?url=${encodeURIComponent(ZALO_GROUP_URL)}&title=${encodeURIComponent(message)}`;
     window.open(zaloShareUrl, "_blank");
   };
@@ -270,6 +265,41 @@ export default function EventSection() {
           <p className="mx-auto mt-4 max-w-xl text-sm sm:text-base text-slate-600 leading-relaxed">
             Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở A - UEH, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
           </p>
+        </div>
+
+        {/* Thẻ Áo Polo Kỷ Niệm hiển thị trên Mobile (nằm ngay trên mục Thông tin chung) */}
+        <div className="block lg:hidden mb-6 rounded-3xl overflow-hidden border border-orange-200/90 bg-gradient-to-br from-orange-50/90 via-white to-amber-50/60 p-3.5 shadow-md">
+          <div className="flex items-center gap-3.5">
+            <div className="h-24 w-24 shrink-0 rounded-2xl overflow-hidden bg-white border border-orange-100 p-1 flex items-center justify-center shadow-xs">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/uniform-3.png"
+                alt="Áo Polo Kỷ Niệm 15 Năm TCDN4"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <div className="flex-1 text-left">
+              <span className="inline-flex items-center gap-1 rounded-full bg-ueh px-2 py-0.5 text-[10px] font-black text-white mb-1">
+                <Sparkles size={10} className="text-ueh-gold" /> Quà tặng K33
+              </span>
+              <h4 className="text-sm font-black text-ueh">Áo Polo Kỷ Niệm 15 Năm</h4>
+              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                Cotton cá sấu 4 chiều cao cấp, gửi ship tận nhà trước ngày 12/12.
+              </p>
+              <button
+                onClick={() => {
+                  if (!user) {
+                    openLogin();
+                  } else {
+                    openProfile();
+                  }
+                }}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-ueh-orange px-3 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-orange-600"
+              >
+                <Shirt size={12} /> Chọn size áo ngay
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 2 Cards Grid: Thông tin & Lịch trình */}
@@ -754,7 +784,7 @@ export default function EventSection() {
               <div className="mt-4 space-y-4">
                 <div className="rounded-2xl bg-blue-50/70 p-3.5 border border-blue-100 text-center">
                   <div className="text-[11px] uppercase font-bold text-slate-500">Kinh phí (Áo + Suất tiệc)</div>
-                  <div className="text-2xl font-black text-ueh my-0.5">{BANK_INFO.amountText}</div>
+                  <div className="text-2xl font-black text-ueh my-0.5">{bankInfo.amountText}</div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
@@ -773,16 +803,16 @@ export default function EventSection() {
                   <div className="space-y-2 text-xs">
                     <div className="rounded-xl bg-slate-50 p-2 border border-slate-200/60">
                       <div className="text-slate-400 text-[10px]">Ngân hàng:</div>
-                      <div className="font-bold text-slate-800">{BANK_INFO.bankName}</div>
+                      <div className="font-bold text-slate-800">{bankInfo.bankName}</div>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-2 border border-slate-200/60 flex items-center justify-between">
                       <div>
                         <div className="text-slate-400 text-[10px]">Số tài khoản:</div>
-                        <div className="font-bold text-slate-900">{BANK_INFO.accountNumber}</div>
+                        <div className="font-bold text-slate-900">{bankInfo.accountNumber}</div>
                       </div>
                       <button
-                        onClick={() => copyToClipboard(BANK_INFO.accountNumber, "account")}
+                        onClick={() => copyToClipboard(bankInfo.accountNumber, "account")}
                         className="rounded-lg bg-white px-2 py-0.5 text-slate-700 border border-slate-200 text-[11px] font-semibold flex items-center gap-1"
                       >
                         {copiedAccount ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}

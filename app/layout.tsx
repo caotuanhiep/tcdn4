@@ -26,6 +26,11 @@ export const metadata: Metadata = {
   title: "TCDN4 Alumni Hub - K33 UEH",
   description: "Mạng lưới cựu sinh viên TCDN4 - K33 UEH nhân dịp kỷ niệm 15 năm hội ngộ.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/favicon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

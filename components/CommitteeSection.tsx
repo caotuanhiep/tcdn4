@@ -127,12 +127,12 @@ export default function CommitteeSection() {
                   <Phone size={11} className="text-[#003B5C]" /> Gọi điện
                 </a>
                 <a
-                  href="https://zalo.me/g/yodibu606"
+                  href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-[#0068FF] py-1.5 px-1.5 text-[10px] sm:text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs whitespace-nowrap"
                 >
-                  <MessageCircle size={11} /> Zalo
+                  <MessageCircle size={11} /> Nhắn Zalo
                 </a>
               </div>
             </div>

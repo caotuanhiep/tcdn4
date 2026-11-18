@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, ImageIcon, Loader2, Users, ArrowLeft, Bot, LayoutDashboard } from "lucide-react";
+import { CalendarCheck, ImageIcon, Loader2, Users, ArrowLeft, Bot, CreditCard } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import ImagesPanel from "./ImagesPanel";
 import UsersPanel from "./UsersPanel";
 import RegistrationsPanel from "./RegistrationsPanel";
 import ZaloBotSettings from "./ZaloBotSettings";
+import PaymentSettingsPanel from "./PaymentSettingsPanel";
 
-type Tab = "registrations" | "zalobot" | "users" | "images";
+type Tab = "registrations" | "zalobot" | "users" | "images" | "payment";
 
 const TABS = [
   { id: "registrations" as Tab, label: "Đăng ký 15 Năm & Áo", icon: CalendarCheck },
   { id: "zalobot" as Tab, label: "Đấu nối Bot Zalo", icon: Bot },
+  { id: "payment" as Tab, label: "Cấu hình Ngân hàng & QR", icon: CreditCard },
   { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
   { id: "images" as Tab, label: "Quản lý hình ảnh", icon: ImageIcon },
 ];
@@ -81,6 +83,7 @@ export default function AdminShell() {
       <section className="min-w-0 flex-1">
         {tab === "registrations" && <RegistrationsPanel />}
         {tab === "zalobot" && <ZaloBotSettings />}
+        {tab === "payment" && <PaymentSettingsPanel />}
         {tab === "users" && <UsersPanel />}
         {tab === "images" && <ImagesPanel />}
       </section>

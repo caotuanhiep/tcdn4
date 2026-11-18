@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   User, 
+  Camera,
   Calendar, 
   Briefcase, 
   Building, 
@@ -21,10 +22,13 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Upload,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getSupabase } from "@/lib/supabase/client";
 
 const PRESET_AVATARS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
@@ -44,23 +48,17 @@ const OVERSEAS_PRESETS = [
   "Châu Âu",
 ];
 
+import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
+
 const SHIRT_SIZES = [
   "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
   "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)"
 ];
 
-const BANK_INFO = {
-  bankName: "Ngân hàng TMCP Quân Đội (MB Bank)",
-  bankCode: "MB",
-  accountNumber: "0903123456",
-  accountName: "BAN LIEN LAC TCDN4 K33",
-  amount: 1000000,
-  amountText: "1.000.000 VNĐ",
-};
-
 export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const { user, profile, updateProfile } = useAuth();
   const toast = useToast();
+  const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
 
   const [activeTab, setActiveTab] = useState<"info" | "attendance">("info");
 
@@ -90,16 +88,66 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
+  useEffect(() => {
+    setBankInfo(getBankInfo());
+  }, []);
+
   // Lời nhắn lưu bút & Ảnh kỷ niệm (nếu không đi trực tiếp)
   const [guestbookMessage, setGuestbookMessage] = useState("");
   const [memoryPhotoUrl, setMemoryPhotoUrl] = useState("");
 
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Xử lý upload avatar từ máy / điện thoại trực tiếp lên Supabase Storage
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Vui lòng chọn ảnh dung lượng dưới 5MB!");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split(".").pop() || "png";
+      const fileName = `avatar_${user?.id || "guest"}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await getSupabase()
+        .storage
+        .from("alumni-media")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        // Fallback đọc dạng data URL nếu bucket chưa cấp quyền upload client
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setAvatarUrl(ev.target?.result as string);
+          toast.success("Đã chọn ảnh đại diện mới!");
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const { data: publicData } = getSupabase()
+          .storage
+          .from("alumni-media")
+          .getPublicUrl(filePath);
+
+        setAvatarUrl(publicData.publicUrl);
+        toast.success("Tải ảnh đại diện lên thành công!");
+      }
+    } catch (err: any) {
+      toast.error(`Lỗi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const transferSyntax = `TCDN4 ${fullName ? fullName.trim().toUpperCase() : "HO TEN"} ${phone ? phone.slice(-4) : "SDT"}`;
-  const qrUrl = `https://img.vietqr.io/image/${BANK_INFO.bankCode}-${BANK_INFO.accountNumber}-compact2.png?amount=${BANK_INFO.amount}&addInfo=${encodeURIComponent(
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(
     transferSyntax
-  )}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`;
+  )}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +193,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
             address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
             guestsCount,
             status: "pending",
-            paidAmount: BANK_INFO.amount,
+            paidAmount: bankInfo.amount,
             createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
           };
           if (existingIdx >= 0) {
@@ -167,7 +215,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
               shirtSize,
               phone: phone.trim(),
               address: deliveryAddress.trim() || "Tại sự kiện",
-              paidAmount: BANK_INFO.amount,
+              paidAmount: bankInfo.amount,
             }),
           });
         } catch {}
@@ -264,11 +312,21 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           {/* TAB 1: THÔNG TIN HỒ SƠ DANH BẠ */}
           {activeTab === "info" && (
             <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Avatar Section */}
-              <div className="flex items-center gap-4 p-3 rounded-2xl border border-slate-100 bg-slate-50/60">
+              {/* Khuyến khích đổi ảnh đại diện cá nhân rõ mặt */}
+              <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 p-3 text-xs text-amber-900 flex items-start gap-2.5">
+                <Sparkles size={17} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong className="text-amber-800">Khuyến khích:</strong> Bạn hãy tải lên ảnh đại diện cá nhân rõ mặt để bạn bè cùng khóa TC10, TC11, TC12 dễ dàng nhận ra nhau sau 15 năm nhé!
+                </div>
+              </div>
+
+              {/* Avatar Section & Upload Button */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/60">
                 <div className="relative shrink-0">
-                  <div className="h-16 w-16 overflow-hidden rounded-full ring-3 ring-blue-100 shadow-sm bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-xl">
-                    {avatarUrl ? (
+                  <div className="h-18 w-18 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl">
+                    {uploadingAvatar ? (
+                      <Loader2 size={24} className="animate-spin text-white" />
+                    ) : avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={avatarUrl} alt={fullName} className="h-full w-full object-cover" />
                     ) : (
@@ -277,15 +335,29 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
 
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-slate-700 mb-1">Ảnh đại diện</div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-ueh px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh-light transition-colors">
+                      <Camera size={14} className="text-ueh-gold" />
+                      <span>{uploadingAvatar ? "Đang tải ảnh..." : "Tải ảnh từ máy / điện thoại"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAvatarFileChange}
+                        disabled={uploadingAvatar}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400 mr-1">Hoặc chọn avatar:</span>
                     {PRESET_AVATARS.map((src, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => setAvatarUrl(src)}
-                        className={`h-7 w-7 overflow-hidden rounded-full ring-2 transition-transform hover:scale-110 ${
+                        className={`h-6 w-6 overflow-hidden rounded-full ring-2 transition-transform hover:scale-110 ${
                           avatarUrl === src ? "ring-ueh scale-110" : "ring-transparent opacity-60 hover:opacity-100"
                         }`}
                       >
@@ -294,7 +366,6 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                       </button>
                     ))}
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Tự động lấy từ Google hoặc chọn ảnh trên</span>
                 </div>
               </div>
 
@@ -814,9 +885,9 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                 <img src={qrUrl} alt="VietQR" className="w-full h-auto" />
               </div>
               <div className="mt-3 text-xs font-semibold text-slate-700">
-                <div>{BANK_INFO.bankName}</div>
-                <div className="font-mono font-bold text-slate-900">{BANK_INFO.accountNumber} - {BANK_INFO.accountName}</div>
-                <div className="text-emerald-600 font-black mt-1">Số tiền: {BANK_INFO.amountText}</div>
+                <div>{bankInfo.bankName}</div>
+                <div className="font-mono font-bold text-slate-900">{bankInfo.accountNumber} - {bankInfo.accountName}</div>
+                <div className="text-emerald-600 font-black mt-1">Số tiền: {bankInfo.amountText}</div>
               </div>
               <button
                 type="button"

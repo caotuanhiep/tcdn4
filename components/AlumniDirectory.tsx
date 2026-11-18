@@ -538,20 +538,31 @@ export default function AlumniDirectory({
             <div className="flex gap-2">
               {viewingMember.phone && (
                 <a
-                  href={`tel:${viewingMember.phone}`}
+                  href={`tel:${viewingMember.phone.replace(/[^0-9]/g, "")}`}
                   className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-300 py-2.5 text-xs font-bold text-slate-800 hover:border-ueh hover:text-ueh transition-colors shadow-2xs"
                 >
                   <Phone size={14} className="text-emerald-600" /> Gọi điện
                 </a>
               )}
-              <a
-                href={ZALO_GROUP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
-              >
-                <MessageCircle size={14} /> Nhóm Zalo
-              </a>
+              {viewingMember.phone ? (
+                <a
+                  href={`https://zalo.me/${viewingMember.phone.replace(/[^0-9]/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+                >
+                  <MessageCircle size={14} /> Nhắn Zalo
+                </a>
+              ) : (
+                <a
+                  href={ZALO_GROUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+                >
+                  <MessageCircle size={14} /> Nhắn Zalo
+                </a>
+              )}
             </div>
           </div>
         </div>
