@@ -250,8 +250,8 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Right Controls: Install Icon + Hamburger */}
-          <div className="flex items-center gap-2 md:hidden">
+          {/* Mobile Right Controls: Install Icon + Login Icon/Avatar + Hamburger */}
+          <div className="flex items-center gap-1.5 md:hidden">
             <button
               onClick={handleInstallApp}
               title="Cài đặt App"
@@ -259,6 +259,29 @@ export default function Navbar() {
             >
               <Smartphone size={17} />
             </button>
+
+            {/* Icon Login hoặc Avatar trên Mobile Header */}
+            {user ? (
+              <button
+                onClick={() => setProfileOpen(true)}
+                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-ueh text-white font-bold text-xs shadow-2xs"
+              >
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt={name} className="h-full w-full object-cover" />
+                ) : (
+                  initial
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={openLogin}
+                title="Đăng nhập"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-ueh text-white shadow-2xs"
+              >
+                <LogIn size={17} />
+              </button>
+            )}
 
             <button
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-ueh focus:outline-none"

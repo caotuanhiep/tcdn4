@@ -106,8 +106,8 @@ const BANK_INFO = {
   bankCode: "MB",
   accountNumber: "0903123456",
   accountName: "BAN LIEN LAC TCDN4 K33",
-  amount: 500000,
-  amountText: "500.000 VNĐ",
+  amount: 1000000,
+  amountText: "1.000.000 VNĐ",
 };
 
 export default function EventSection() {
@@ -127,6 +127,7 @@ export default function EventSection() {
   const [copiedAccount, setCopiedAccount] = useState(false);
   const [copiedSyntax, setCopiedSyntax] = useState(false);
   const [filterClass, setFilterClass] = useState<string>("all");
+  const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
 
   useEffect(() => {
     try {
@@ -576,9 +577,18 @@ export default function EventSection() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                      Size Áo Kỷ Niệm *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold uppercase text-slate-600">
+                        Size Áo Kỷ Niệm *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowShirtSizePopup(true)}
+                        className="text-[11px] font-bold text-blue-600 hover:text-ueh hover:underline"
+                      >
+                        📐 Xem bảng & mẫu áo
+                      </button>
+                    </div>
                     <select
                       value={shirtSize}
                       onChange={(e) => setShirtSize(e.target.value)}
@@ -773,6 +783,85 @@ export default function EventSection() {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Popup xem chi tiết Mẫu áo & Bảng Size */}
+      {showShirtSizePopup && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowShirtSizePopup(false)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl text-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowShirtSizePopup(false)}
+              className="absolute right-3.5 top-3.5 rounded-lg bg-slate-100 p-1 text-slate-400 hover:bg-slate-200"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-base font-black text-ueh mb-1 flex items-center gap-1.5">
+              <Shirt size={17} className="text-ueh-orange" /> Mẫu Áo & Bảng Size Kỷ Niệm 15 Năm
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Áo Polo chất liệu Cotton cá sấu cao cấp, logo thêu sắc nét TCDN4 K33 UEH.
+            </p>
+
+            {/* Khung mô phỏng áo kỷ niệm */}
+            <div className="relative mb-4 h-48 w-full overflow-hidden rounded-xl border border-blue-100 bg-gradient-to-br from-[#003B5C] to-[#005a8c] p-4 text-white flex flex-col justify-between shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-bold text-ueh-gold">
+                  Áo Polo Kỷ Niệm 15 Năm
+                </span>
+                <span className="text-[10px] text-white/80 font-bold">UEH Deep Blue #003366</span>
+              </div>
+
+              <div className="text-center my-auto">
+                <div className="inline-block rounded-xl bg-white/10 p-3 border border-white/20 backdrop-blur-xs">
+                  <div className="text-lg font-black tracking-tight text-white">TCDN4 <span className="text-ueh-gold">K33</span></div>
+                  <div className="text-[9px] uppercase tracking-widest text-slate-200 font-semibold">15 Years Reunion • UEH</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-blue-200">
+                <span>Cổ bẻ dệt bo vàng cam</span>
+                <span>Chất vải thoáng mát, co giãn 4 chiều</span>
+              </div>
+            </div>
+
+            {/* Bảng tra cứu size chuẩn */}
+            <div className="overflow-hidden rounded-xl border border-slate-200 text-xs">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="p-2">Size</th>
+                    <th className="p-2">Dành cho</th>
+                    <th className="p-2">Cân nặng</th>
+                    <th className="p-2">Chiều cao</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-[11px]">
+                  <tr><td className="p-2 font-bold text-ueh">S (Nữ)</td><td className="p-2">Nữ</td><td className="p-2">&lt; 48 kg</td><td className="p-2">1m48 - 1m55</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh">M (Nữ)</td><td className="p-2">Nữ</td><td className="p-2">48 - 54 kg</td><td className="p-2">1m53 - 1m60</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh">L (Nữ)</td><td className="p-2">Nữ</td><td className="p-2">55 - 62 kg</td><td className="p-2">1m58 - 1m65</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh-orange">M (Nam)</td><td className="p-2">Nam</td><td className="p-2">55 - 64 kg</td><td className="p-2">1m60 - 1m68</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh-orange">L (Nam)</td><td className="p-2">Nam</td><td className="p-2">65 - 73 kg</td><td className="p-2">1m68 - 1m75</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh-orange">XL (Nam)</td><td className="p-2">Nam</td><td className="p-2">74 - 82 kg</td><td className="p-2">1m72 - 1m80</td></tr>
+                  <tr><td className="p-2 font-bold text-ueh-orange">XXL (Nam)</td><td className="p-2">Nam</td><td className="p-2">&gt; 82 kg</td><td className="p-2">&gt; 1m78</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <button
+              onClick={() => setShowShirtSizePopup(false)}
+              className="mt-4 w-full rounded-xl bg-ueh py-2.5 text-xs font-bold text-white hover:bg-ueh-light transition-colors"
+            >
+              Đã hiểu, quay lại chọn size
+            </button>
           </div>
         </div>
       )}

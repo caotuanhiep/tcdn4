@@ -87,26 +87,26 @@ export default function Hero() {
           </button>
         </div>
 
-        {/* 3. Thẻ thống kê VUI trích từ phiếu đăng ký (Con cái, độc thân, xe cộ, gu nhậu...) */}
+        {/* 3. Thẻ thống kê VUI trích từ phiếu đăng ký (Số người đăng ký, xuất ngoại, F1, háo hức) */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-4 mb-4">
           <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh">168+</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">F1 & Nhóc tì (Con cái)</div>
-            <div className="text-[10px] text-slate-400">Gia tài lớn nhất sau 15 năm</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh">35+</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Đăng ký Hội ngộ 15 Năm</div>
+            <div className="text-[10px] text-slate-400">Các bạn TC10 • TC11 • TC12</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh" />
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh-orange">12%</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Độc thân vui vẻ</div>
-            <div className="text-[10px] text-slate-400">Vẫn đợi người mở lời tại K33</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh-orange">16 Bạn</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Xuất ngoại & Định cư</div>
+            <div className="text-[10px] text-slate-400">Úc, Mỹ, Singapore, Canada...</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh-orange" />
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-emerald-700">95%</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Uống nước ngọt & Đưa đón</div>
-            <div className="text-[10px] text-slate-400">Tài xế chuẩn mực của gia đình</div>
+            <div className="text-2xl sm:text-4xl font-black text-emerald-700">168+</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">F1 & Nhóc tì (Con cái)</div>
+            <div className="text-[10px] text-slate-400">Gia tài lớn nhất sau 15 năm</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-emerald-600" />
           </div>
 
