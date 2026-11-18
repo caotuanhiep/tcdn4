@@ -248,6 +248,25 @@ export default function AlumniDirectory({
     }
   };
 
+  const classCounts = useMemo(() => {
+    return {
+      all: alumniList.length,
+      TC10: alumniList.filter((m) => m.class === "TC10").length,
+      TC11: alumniList.filter((m) => m.class === "TC11").length,
+      TC12: alumniList.filter((m) => m.class === "TC12").length,
+    };
+  }, [alumniList]);
+
+  const regionCounts = useMemo(() => {
+    return {
+      all: alumniList.length,
+      hcm: alumniList.filter((m) => m.region === "hcm").length,
+      hn: alumniList.filter((m) => m.region === "hn").length,
+      dn: alumniList.filter((m) => m.region === "dn").length,
+      overseas: alumniList.filter((m) => m.region === "overseas").length,
+    };
+  }, [alumniList]);
+
   const filteredList = useMemo(() => {
     return alumniList.filter((member) => {
       if (selectedRegion !== "all" && member.region !== selectedRegion) {
@@ -289,8 +308,8 @@ export default function AlumniDirectory({
           </p>
         </div>
 
-        {/* Search & 2 DÒNG FILTER RIÊNG BIỆT (DÒNG KHU VỰC NẰM TRÊN 1 HÀNG TRƯỢT SANG PHẢI KHÔNG NHẢY DÒNG) */}
-        <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+        {/* Search & Executive Filter Hub (Thiết kế chuyên nghiệp, Segmented Control sắc nét) */}
+        <div className="mb-8 rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-sm">
           {/* Ô tìm kiếm */}
           <div className="relative mb-5">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -300,78 +319,107 @@ export default function AlumniDirectory({
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setVisibleCount(6);
+                setVisibleCount(8);
               }}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-10 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:border-ueh focus:bg-white focus:outline-none focus:ring-2 focus:ring-ueh/20 transition-all"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 py-3.5 pl-11 pr-24 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:border-ueh focus:bg-white focus:outline-none focus:ring-2 focus:ring-ueh/20 transition-all shadow-inner"
             />
-            {searchTerm && (
+            {searchTerm ? (
               <button
                 onClick={() => setSearchTerm("")}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
               >
                 <X size={16} />
               </button>
+            ) : (
+              <span className="hidden sm:inline-flex absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-slate-200/60 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                {filteredList.length} thành viên
+              </span>
             )}
           </div>
 
-          {/* DÒNG 1: LỌC THEO LỚP */}
-          <div className="mb-4 flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1.5 min-w-[70px]">
-              <GraduationCap size={14} className="text-ueh" /> Lớp:
-            </span>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {(["all", "TC10", "TC11", "TC12"] as const).map((cls) => (
+          {/* DÒNG 1: LỌC THEO LỚP - Segmented Control Cao Cấp */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-ueh flex items-center gap-1.5">
+                <GraduationCap size={15} className="text-ueh-orange" /> Lọc theo Lớp
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">Chọn lớp muốn xem</span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/70 whitespace-nowrap">
+              {[
+                { id: "all", label: "Tất cả các lớp", count: classCounts.all },
+                { id: "TC10", label: "Lớp TC10", count: classCounts.TC10 },
+                { id: "TC11", label: "Lớp TC11", count: classCounts.TC11 },
+                { id: "TC12", label: "Lớp TC12", count: classCounts.TC12 },
+              ].map((c) => (
                 <button
-                  key={cls}
+                  key={c.id}
                   onClick={() => {
-                    setSelectedClass(cls);
-                    setVisibleCount(6);
+                    setSelectedClass(c.id);
+                    setVisibleCount(8);
                   }}
-                  className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
-                    selectedClass === cls
-                      ? "bg-ueh text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  className={`flex items-center gap-1.5 rounded-xl px-3.5 sm:px-4 py-2 text-xs font-bold transition-all shrink-0 ${
+                    selectedClass === c.id
+                      ? "bg-ueh text-white shadow-md ring-1 ring-ueh"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/80"
                   }`}
                 >
-                  {cls === "all" ? "Tất cả các lớp" : cls}
+                  <span>{c.label}</span>
+                  <span className={`rounded-md px-1.5 py-0.2 text-[10px] font-black ${
+                    selectedClass === c.id ? "bg-white/20 text-white" : "bg-slate-200/90 text-slate-700"
+                  }`}>
+                    {c.count}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 5. DÒNG 2: LỌC THEO KHU VỰC (BẮT BUỘC NẰM TRÊN 1 HÀNG, TRƯỢT SANG PHẢI XEM THÊM, KO NHẢY DÒNG) */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 whitespace-nowrap pt-3 border-t border-slate-100">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1.5 min-w-[70px]">
-              <MapPin size={14} className="text-rose-500" /> Khu vực:
-            </span>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* DÒNG 2: LỌC THEO KHU VỰC - Segmented Control Cao Cấp */}
+          <div>
+            <div className="flex items-center justify-between mb-2 pt-2 border-t border-slate-100">
+              <span className="text-xs font-black uppercase tracking-wider text-ueh flex items-center gap-1.5">
+                <MapPin size={15} className="text-rose-500" /> Lọc theo Khu Vực
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">Nơi sinh sống & làm việc</span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/70 whitespace-nowrap">
               {[
-                { id: "all", label: "Toàn cầu (Tất cả)" },
-                { id: "hcm", label: "TP. Hồ Chí Minh" },
-                { id: "hn", label: "Hà Nội" },
-                { id: "dn", label: "Đà Nẵng" },
-                { id: "overseas", label: "Nước ngoài" },
-              ].map((reg) => (
-                <button
-                  key={reg.id}
-                  onClick={() => {
-                    handleRegionClick(reg.id);
-                    setVisibleCount(8);
-                  }}
-                  className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
-                    selectedRegion === reg.id
-                      ? "bg-ueh-light text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-ueh"
-                  }`}
-                >
-                  {reg.label}
-                </button>
-              ))}
+                { id: "all", label: "Toàn cầu", count: regionCounts.all, icon: Globe },
+                { id: "hcm", label: "TP. Hồ Chí Minh", count: regionCounts.hcm, icon: MapPin },
+                { id: "hn", label: "Hà Nội", count: regionCounts.hn, icon: MapPin },
+                { id: "dn", label: "Đà Nẵng", count: regionCounts.dn, icon: MapPin },
+                { id: "overseas", label: "Nước ngoài", count: regionCounts.overseas, icon: Globe },
+              ].map((reg) => {
+                const Icon = reg.icon;
+                return (
+                  <button
+                    key={reg.id}
+                    onClick={() => {
+                      handleRegionClick(reg.id);
+                      setVisibleCount(8);
+                    }}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+                      selectedRegion === reg.id
+                        ? "bg-ueh-light text-white shadow-md ring-1 ring-ueh-light"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-white/80"
+                    }`}
+                  >
+                    <Icon size={13} className={selectedRegion === reg.id ? "text-ueh-gold" : "text-slate-400"} />
+                    <span>{reg.label}</span>
+                    <span className={`rounded-md px-1.5 py-0.2 text-[10px] font-black ${
+                      selectedRegion === reg.id ? "bg-white/20 text-white" : "bg-slate-200/90 text-slate-700"
+                    }`}>
+                      {reg.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* Directory Grid: 4 cột trên Desktop, 2 cột trên Tablet, Nền Gradient nhẹ nhàng, Ảnh to bên trái */}
+        {/* Directory Grid: 2 CỘT TRÊN MOBILE, 4 CỘT TRÊN DESKTOP, VIỀN RÕ RÀNG */}
         {filteredList.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white py-14 text-center">
             <Users className="mx-auto h-12 w-12 text-slate-300 mb-3" />
@@ -379,25 +427,31 @@ export default function AlumniDirectory({
             <p className="text-xs text-slate-500 mt-1">Vui lòng thử tìm kiếm với từ khóa hoặc bộ lọc khác.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {displayedList.map((member) => {
-              // Nền gradient màu nhẹ nhàng phù hợp từng lớp
-              const gradientBg = member.class === "TC10"
-                ? "bg-gradient-to-br from-white via-sky-50/50 to-blue-50/60 border-blue-100/90"
+              // Viền thẻ rõ ràng, sắc nét và có phân biệt màu lớp
+              const cardBorder = member.class === "TC10"
+                ? "border-2 border-blue-200/90 hover:border-ueh"
                 : member.class === "TC11"
-                ? "bg-gradient-to-br from-white via-amber-50/40 to-orange-50/50 border-amber-100/90"
-                : "bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/50 border-emerald-100/90";
+                ? "border-2 border-amber-200/90 hover:border-ueh-orange"
+                : "border-2 border-emerald-200/90 hover:border-emerald-600";
+
+              const gradientBg = member.class === "TC10"
+                ? "bg-gradient-to-br from-white via-sky-50/40 to-blue-50/50"
+                : member.class === "TC11"
+                ? "bg-gradient-to-br from-white via-amber-50/30 to-orange-50/40"
+                : "bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/40";
 
               return (
                 <div
                   key={member.id}
                   onClick={() => setViewingMember(member)}
-                  className={`group relative flex flex-col justify-between rounded-3xl border ${gradientBg} p-3.5 sm:p-4 shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-ueh/50 hover:shadow-md cursor-pointer`}
+                  className={`group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl ${cardBorder} ${gradientBg} p-2.5 sm:p-4 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:shadow-md cursor-pointer`}
                 >
-                  {/* Top: Ảnh Avatar to bên trái, Thông tin bên phải */}
-                  <div className="flex items-start gap-3">
+                  {/* Top section: Avatar to bên trái, Thông tin bên phải */}
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     {/* Avatar lớn bên trái */}
-                    <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-ueh via-ueh-light to-ueh-orange text-white font-black text-lg sm:text-2xl shadow-xs group-hover:scale-105 transition-transform overflow-hidden border-2 border-white">
+                    <div className="relative flex h-14 w-14 sm:h-18 sm:w-18 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-ueh via-ueh-light to-ueh-orange text-white font-black text-base sm:text-2xl shadow-xs group-hover:scale-105 transition-transform overflow-hidden border-2 border-white">
                       {member.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -409,7 +463,7 @@ export default function AlumniDirectory({
                         member.name.charAt(member.name.lastIndexOf(" ") + 1)
                       )}
                       {user && user.id === member.id && (
-                        <span className="absolute bottom-1 right-1 rounded-md bg-emerald-600 px-1 py-0.2 text-[8px] font-black text-white shadow-2xs">
+                        <span className="absolute bottom-0.5 right-0.5 rounded-md bg-emerald-600 px-1 py-0.2 text-[8px] font-black text-white shadow-2xs">
                           Bạn
                         </span>
                       )}
@@ -417,8 +471,8 @@ export default function AlumniDirectory({
 
                     {/* Thông tin cựu sinh viên bên phải */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-ueh border border-slate-200/80 shadow-2xs">
+                      <div className="flex items-center justify-between gap-1 mb-0.5 sm:mb-1">
+                        <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-ueh border border-slate-200/90 shadow-2xs">
                           {member.class}
                         </span>
                         {member.is_verified && (
@@ -431,35 +485,35 @@ export default function AlumniDirectory({
                       <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-ueh transition-colors line-clamp-1">
                         {member.name}
                       </h3>
-                      <p className="text-[11px] font-semibold text-slate-700 line-clamp-1 mt-0.5">
+                      <p className="text-[10px] sm:text-xs font-semibold text-slate-700 line-clamp-1 mt-0.5">
                         {member.job}
                       </p>
-                      <p className="text-[10px] text-slate-500 line-clamp-1">
+                      <p className="text-[9px] sm:text-[11px] text-slate-500 line-clamp-1">
                         {member.company}
                       </p>
                     </div>
                   </div>
 
                   {/* Bottom: Vị trí & Nút Zalo / Chi tiết */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 truncate max-w-[130px]">
-                      <MapPin size={11} className="text-rose-500 shrink-0" />
+                  <div className="mt-2.5 sm:mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-[9px] sm:text-[11px] text-slate-500 truncate max-w-[80px] sm:max-w-[130px]">
+                      <MapPin size={10} className="text-rose-500 shrink-0" />
                       <span className="truncate">{member.location}</span>
                     </span>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5">
                       {member.phone && (
                         <a
                           href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="rounded-lg bg-white px-2 py-0.5 text-[10px] font-bold text-[#0068FF] border border-blue-200/80 hover:bg-blue-50 transition-colors shadow-2xs"
+                          className="rounded-lg bg-white px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-[#0068FF] border border-blue-200 hover:bg-blue-50 transition-colors shadow-2xs"
                         >
                           Zalo
                         </a>
                       )}
-                      <span className="text-[10px] font-bold text-ueh group-hover:underline">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-ueh group-hover:underline">
                         Xem →
                       </span>
                     </div>

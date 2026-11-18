@@ -24,8 +24,8 @@ const REGIONS: MapRegion[] = [
     name: "TP. Hồ Chí Minh",
     shortName: "TP.HCM",
     count: 68,
-    x: 210,
-    y: 280,
+    x: 160,
+    y: 380,
     isCenter: true,
   },
   {
@@ -33,7 +33,7 @@ const REGIONS: MapRegion[] = [
     name: "Hà Nội",
     shortName: "Hà Nội",
     count: 22,
-    x: 270,
+    x: 360,
     y: 95,
   },
   {
@@ -41,15 +41,15 @@ const REGIONS: MapRegion[] = [
     name: "Đà Nẵng",
     shortName: "Đà Nẵng",
     count: 14,
-    x: 340,
-    y: 190,
+    x: 480,
+    y: 235,
   },
   {
     id: "overseas",
     name: "Nước ngoài",
     shortName: "Quốc tế",
     count: 16,
-    x: 580,
+    x: 740,
     y: 160,
   },
 ];
@@ -75,8 +75,18 @@ export default function MigrationMap({
   };
 
   const calculateArc = (to: MapRegion) => {
-    const mx = (center.x + to.x) / 2;
-    const my = (center.y + to.y) / 2 - 70;
+    let mx = (center.x + to.x) / 2;
+    let my = (center.y + to.y) / 2;
+    if (to.id === "hn") {
+      mx = 220;
+      my = 170;
+    } else if (to.id === "dn") {
+      mx = 290;
+      my = 270;
+    } else if (to.id === "overseas") {
+      mx = 430;
+      my = 150;
+    }
     return `M ${center.x} ${center.y} Q ${mx} ${my} ${to.x} ${to.y}`;
   };
 
@@ -145,20 +155,20 @@ export default function MigrationMap({
           ))}
         </div>
 
-        {/* Interactive Responsive Map: Điểm vàng TP.HCM to rõ, bỏ chú thích Cơ sở B theo yêu cầu */}
-        <div className="relative h-[320px] sm:h-[400px] md:h-[460px] w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#001D33] shadow-lg">
+        {/* Interactive Responsive Map: Không gian cực rộng, TP.HCM góc trái to rõ, thẻ & số to nổi bật */}
+        <div className="relative h-[400px] sm:h-[480px] md:h-[540px] lg:h-[580px] w-full overflow-hidden rounded-3xl border border-slate-800 bg-[#00172B] shadow-2xl">
           {/* Subtle grid pattern */}
           <div
-            className="absolute inset-0 opacity-20"
+            className="absolute inset-0 opacity-25"
             style={{
-              backgroundImage: "radial-gradient(#38bdf8 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
+              backgroundImage: "radial-gradient(#38bdf8 1.5px, transparent 1.5px)",
+              backgroundSize: "28px 28px",
             }}
           />
 
           <svg
             className="absolute inset-0 h-full w-full"
-            viewBox="0 0 720 440"
+            viewBox="0 0 880 500"
             preserveAspectRatio="xMidYMid meet"
           >
             {/* Arcs */}
@@ -169,21 +179,21 @@ export default function MigrationMap({
                   <path
                     d={calculateArc(region)}
                     fill="none"
-                    stroke={isHighlighted ? "rgba(232, 119, 34, 0.7)" : "rgba(56, 189, 248, 0.25)"}
-                    strokeWidth={isHighlighted ? 3.5 : 2}
+                    stroke={isHighlighted ? "rgba(232, 119, 34, 0.75)" : "rgba(56, 189, 248, 0.28)"}
+                    strokeWidth={isHighlighted ? 4 : 2.5}
                   />
                   <path
                     d={calculateArc(region)}
                     fill="none"
                     stroke={isHighlighted ? "#E87722" : "#38bdf8"}
-                    strokeWidth={isHighlighted ? 2 : 1.5}
+                    strokeWidth={isHighlighted ? 2.5 : 1.8}
                     className="arc-dash"
                   />
                 </g>
               );
             })}
 
-            {/* Điểm Vàng TP.HCM TO RÕ RÀNG */}
+            {/* Điểm Vàng TP.HCM TO RÕ RÀNG Ở GÓC TRÁI */}
             <g
               className="cursor-pointer group"
               onClick={() => handleRegionClick(center.id)}
@@ -193,54 +203,54 @@ export default function MigrationMap({
               <circle
                 cx={center.x}
                 cy={center.y}
-                r={26}
+                r={36}
                 className="fill-yellow-400 animate-ping"
                 opacity="0.2"
               />
               <circle
                 cx={center.x}
                 cy={center.y}
-                r={16}
+                r={22}
                 className="fill-ueh-orange"
                 opacity="0.35"
               />
               <circle
                 cx={center.x}
                 cy={center.y}
-                r={8}
-                className="fill-yellow-400 stroke-2 stroke-white shadow-md"
+                r={11}
+                className="fill-yellow-400 stroke-[3] stroke-white shadow-xl"
               />
 
               {/* Thẻ Card to rõ ràng cho điểm đến TP.HCM - NẰM DƯỚI NÚT VÀNG */}
-              <g transform={`translate(${center.x - 70}, ${center.y + 18})`}>
+              <g transform={`translate(${center.x - 90}, ${center.y + 20})`}>
                 <rect
-                  width="140"
-                  height="34"
-                  rx="8"
+                  width="180"
+                  height="46"
+                  rx="10"
                   fill="#002b4d"
                   stroke="#F5A800"
-                  strokeWidth="1.5"
-                  className="shadow-md"
+                  strokeWidth="2"
+                  className="shadow-xl"
                 />
-                <circle cx="20" cy="17" r="7" fill="#F5A800" />
-                <text x="20" y="20.5" textAnchor="middle" fill="#001D33" fontSize="9" fontWeight="900" fontFamily="var(--font-inter), system-ui, sans-serif">
+                <circle cx="24" cy="23" r="10" fill="#F5A800" />
+                <text x="24" y="27" textAnchor="middle" fill="#001D33" fontSize="11" fontWeight="900" fontFamily="var(--font-inter), system-ui, sans-serif">
                   ★
                 </text>
-                <text x="36" y="16" fill="#ffffff" fontSize="12" fontWeight="800" fontFamily="var(--font-inter), system-ui, sans-serif">
+                <text x="44" y="20" fill="#ffffff" fontSize="14" fontWeight="900" fontFamily="var(--font-inter), system-ui, sans-serif">
                   TP. Hồ Chí Minh
                 </text>
-                <text x="36" y="27" fill="#F5A800" fontSize="10" fontWeight="700" fontFamily="var(--font-inter), system-ui, sans-serif">
-                  {center.count} thành viên
+                <text x="44" y="36" fill="#F5A800" fontSize="12" fontWeight="800" fontFamily="var(--font-inter), system-ui, sans-serif">
+                  {center.count} thành viên (Trung tâm)
                 </text>
               </g>
             </g>
 
-            {/* Other Nodes: Hà Nội, Đà Nẵng, Nước ngoài */}
+            {/* Other Nodes: Hà Nội, Đà Nẵng, Nước ngoài - To rõ, số to hẳn */}
             {REGIONS.filter((r) => !r.isCenter).map((region) => {
               const isSelected = selectedRegion === region.id;
               const isHovered = activeHover === region.id;
-              const cardWidth = 124;
-              const cardHeight = 32;
+              const cardWidth = 160;
+              const cardHeight = 44;
 
               return (
                 <g
@@ -253,47 +263,48 @@ export default function MigrationMap({
                   <circle
                     cx={region.x}
                     cy={region.y}
-                    r={isSelected || isHovered ? 16 : 10}
+                    r={isSelected || isHovered ? 20 : 12}
                     className="fill-sky-400 animate-pulse"
                     opacity={isSelected ? "0.4" : "0.2"}
                   />
                   <circle
                     cx={region.x}
                     cy={region.y}
-                    r={isSelected || isHovered ? 6 : 4}
+                    r={isSelected || isHovered ? 8 : 5}
                     className={isSelected ? "fill-white" : "fill-sky-400"}
                   />
 
-                  {/* Card to rõ */}
-                  <g transform={`translate(${region.x - cardWidth / 2}, ${region.y - 42})`}>
+                  {/* Card to rõ hơn, số to hẳn */}
+                  <g transform={`translate(${region.x - cardWidth / 2}, ${region.y - 54})`}>
                     <rect
                       width={cardWidth}
                       height={cardHeight}
-                      rx="8"
+                      rx="10"
                       fill={isSelected ? "#004B87" : "#002440"}
                       stroke={isSelected ? "#38bdf8" : "#1e3a8a"}
-                      strokeWidth={isSelected ? 1.5 : 1}
+                      strokeWidth={isSelected ? 2 : 1.2}
+                      className="shadow-xl"
                     />
                     <text
-                      x={cardWidth / 2 - 10}
-                      y="20"
+                      x={cardWidth / 2 - 16}
+                      y="27"
                       textAnchor="middle"
                       fill="#ffffff"
-                      fontSize="12"
-                      fontWeight="800"
-                      fontFamily="sans-serif"
+                      fontSize="14"
+                      fontWeight="900"
+                      fontFamily="var(--font-inter), system-ui, sans-serif"
                     >
                       {region.shortName}
                     </text>
-                    <circle cx={cardWidth - 16} cy="16" r="9" fill="#38bdf8" />
+                    <circle cx={cardWidth - 22} cy="22" r="14" fill={isSelected ? "#38bdf8" : "#0284c7"} />
                     <text
-                      x={cardWidth - 16}
-                      y="20"
+                      x={cardWidth - 22}
+                      y="27"
                       textAnchor="middle"
-                      fill="#001D33"
-                      fontSize="9"
+                      fill="#ffffff"
+                      fontSize="13"
                       fontWeight="900"
-                      fontFamily="sans-serif"
+                      fontFamily="var(--font-inter), system-ui, sans-serif"
                     >
                       {region.count}
                     </text>
@@ -303,8 +314,8 @@ export default function MigrationMap({
             })}
           </svg>
 
-          {/* Simple Clean Legend (Bottom Left) */}
-          <div className="absolute bottom-3 left-3 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-white backdrop-blur-md text-[11px]">
+          {/* Simple Clean Legend (Top Right / Bottom Right) */}
+          <div className="absolute bottom-4 right-4 rounded-xl border border-white/10 bg-black/50 px-3.5 py-2 text-white backdrop-blur-md text-xs">
             <span className="text-yellow-400 font-bold">Điểm đến TCDN4</span> • Lan tỏa từ giảng đường UEH
           </div>
         </div>

@@ -156,23 +156,23 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* Nút bấm Button Đăng ký và Khám phá danh bạ (Nằm ngay bên dưới hình ảnh) */}
-        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4 mb-8">
+        {/* Nút bấm Button Đăng ký và Khám phá danh bạ (To lớn, nổi bật trên Desktop) */}
+        <div className="flex flex-col items-center justify-center gap-3.5 sm:flex-row sm:gap-5 mb-10">
           <button
             onClick={handleRegisterClick}
-            className="group flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-ueh px-8 py-3.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-blue-900/25 transition-all hover:bg-ueh-light hover:-translate-y-0.5"
+            className="group flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-full bg-ueh px-8 py-3.5 sm:px-10 sm:py-4.5 text-base sm:text-lg font-black text-white shadow-xl shadow-blue-900/30 transition-all hover:bg-ueh-light hover:-translate-y-1 hover:shadow-2xl active:translate-y-0"
           >
-            <Calendar size={18} className="text-ueh-gold" />
-            Đăng ký Sự kiện 15 Năm
-            <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
+            <Calendar size={20} className="text-ueh-gold" />
+            <span>Đăng ký Gặp mặt 15 năm</span>
+            <ChevronRight size={20} className="transition-transform group-hover:translate-x-1.5" />
           </button>
 
           <button
             onClick={() => scrollTo("directory")}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border-2 border-slate-300 bg-white px-8 py-3.5 text-sm sm:text-base font-bold text-slate-700 shadow-xs transition-all hover:border-ueh hover:text-ueh hover:-translate-y-0.5"
+            className="flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-full border-2 border-slate-300 bg-white px-8 py-3.5 sm:px-10 sm:py-4.5 text-base sm:text-lg font-bold text-slate-700 shadow-sm transition-all hover:border-ueh hover:text-ueh hover:-translate-y-1 hover:shadow-md active:translate-y-0"
           >
-            <Users size={18} className="text-ueh" />
-            Khám phá Danh bạ
+            <Users size={20} className="text-ueh" />
+            <span>Khám phá Danh bạ</span>
           </button>
         </div>
 
