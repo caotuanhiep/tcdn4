@@ -129,6 +129,41 @@ export default function EventSection() {
   const [filterClass, setFilterClass] = useState<string>("all");
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
 
+  // Bộ đếm lùi (Countdown Timer) tới Thứ 7 ngày 12/12/2026 (09:30:00)
+  const [mounted, setMounted] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  }>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    setMounted(true);
+    // Mốc thời gian chốt: Thứ 7 ngày 12/12/2026 lúc 09:30 AM
+    const target = new Date("2026-12-12T09:30:00").getTime();
+
+    const calculateTime = () => {
+      const now = new Date().getTime();
+      const difference = target - now;
+
+      if (difference > 0) {
+        setTimeLeft({
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+          minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
+          seconds: Math.floor((difference % (1000 * 60)) / 1000),
+        });
+      } else {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      }
+    };
+
+    calculateTime();
+    const timer = setInterval(calculateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
@@ -237,72 +272,105 @@ export default function EventSection() {
         {/* 2 Cards Grid: Thông tin & Lịch trình */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 mb-12">
           
-          {/* Card Thông tin chung (Left 5 Cols) */}
-          <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50/50 via-white to-blue-50/30 p-5 sm:p-7 shadow-2xs">
+          {/* Card Thông tin chung (Left 5 Cols) - Nền cam nhẹ nổi bật & Đếm ngược */}
+          <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-orange-200/90 bg-gradient-to-br from-[#FFF7ED] via-[#FFFDFB] to-[#FFEDD5]/40 p-5 sm:p-7 shadow-md shadow-orange-500/5 ring-1 ring-orange-200/50">
             <div>
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg sm:text-xl font-bold text-ueh flex items-center gap-2 whitespace-nowrap">
-                  <Calendar className="text-ueh" size={20} /> Thông tin chung
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/10 text-ueh-orange">
+                    <Calendar size={18} />
+                  </div>
+                  <span>Thông tin chung</span>
                 </h3>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 whitespace-nowrap">
-                  Private & Thân mật
+                <span className="rounded-full bg-orange-100/90 border border-orange-200/80 px-2.5 py-0.5 text-[11px] font-bold text-ueh-orange whitespace-nowrap">
+                  Chốt Thứ 7 ngày 12/12
                 </span>
               </div>
 
-              <div className="space-y-4">
+              {/* Widget Đếm Ngược Thời Gian (Countdown Timer) */}
+              <div className="mb-5 rounded-2xl border border-orange-200/80 bg-white/95 p-3.5 shadow-2xs backdrop-blur-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-orange-900/80 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-ueh-orange animate-pulse" /> Đếm ngược đến ngày hội ngộ
+                  </span>
+                  <span className="text-[10px] font-bold text-ueh-orange bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200/60">
+                    12/12/2026
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="rounded-xl bg-gradient-to-b from-orange-500 to-amber-600 p-2 text-white shadow-2xs">
+                    <div className="text-xl sm:text-2xl font-black leading-none">{mounted ? String(timeLeft.days).padStart(2, "0") : "--"}</div>
+                    <div className="text-[9px] uppercase tracking-wider font-semibold text-orange-100 mt-1">Ngày</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-2 text-white shadow-2xs">
+                    <div className="text-xl sm:text-2xl font-black leading-none">{mounted ? String(timeLeft.hours).padStart(2, "0") : "--"}</div>
+                    <div className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-1">Giờ</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-2 text-white shadow-2xs">
+                    <div className="text-xl sm:text-2xl font-black leading-none">{mounted ? String(timeLeft.minutes).padStart(2, "0") : "--"}</div>
+                    <div className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-1">Phút</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-2 text-white shadow-2xs">
+                    <div className="text-xl sm:text-2xl font-black leading-none text-orange-400">{mounted ? String(timeLeft.seconds).padStart(2, "0") : "--"}</div>
+                    <div className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-1">Giây</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3.5">
                 <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-blue-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh-orange shadow-2xs border border-orange-200/70">
                     <Clock size={18} />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Thời gian</div>
-                    <div className="text-sm font-bold text-slate-800">Trưa Thứ 7, ngày 12/12 hoặc 19/12</div>
-                    <div className="text-xs text-slate-500">Khung giờ: 09:30 - 14:00</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Thời gian</div>
+                    <div className="text-sm font-bold text-slate-900">Thứ 7, ngày 12/12/2026</div>
+                    <div className="text-xs font-semibold text-ueh-orange">Khung giờ: 09:30 - 14:00 (Đã chốt)</div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-blue-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
                     <MapPin size={18} />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Địa điểm</div>
-                    <div className="text-sm font-bold text-slate-800">Cơ sở B - UEH (279 Nguyễn Tri Phương)</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Địa điểm</div>
+                    <div className="text-sm font-bold text-slate-900">Cơ sở B - UEH (279 Nguyễn Tri Phương)</div>
                     <div className="text-xs text-slate-500">& Nhà hàng VIP phòng riêng (trung tâm Q.10)</div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-blue-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
                     <Users size={18} />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Quy mô</div>
-                    <div className="text-sm font-bold text-slate-800">Tập thể TC10, TC11, TC12 (~35 bạn)</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quy mô</div>
+                    <div className="text-sm font-bold text-slate-900">Tập thể TC10, TC11, TC12 (~35 bạn)</div>
                     <div className="text-xs text-slate-500">Kèm gia đình & F1 (tùy chọn)</div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-blue-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
                     <Shirt size={18} />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Quà tặng</div>
-                    <div className="text-sm font-bold text-slate-800">Áo Polo Kỷ niệm 15 Năm TCDN4</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quà tặng</div>
+                    <div className="text-sm font-bold text-slate-900">Áo Polo Kỷ niệm 15 Năm TCDN4</div>
                     <div className="text-xs text-slate-500">Gửi ship tận nơi trước ngày gặp mặt</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 pt-5 border-t border-blue-100">
+            <div className="mt-6 pt-5 border-t border-orange-200/80">
               <button
                 onClick={() => {
                   setStep("form");
                   setIsModalOpen(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ueh py-3.5 px-5 text-sm font-bold text-white shadow-md shadow-blue-900/25 transition-all hover:bg-ueh-light whitespace-nowrap"
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light py-3.5 px-5 text-sm font-bold text-white shadow-md shadow-blue-900/25 transition-all hover:opacity-95 whitespace-nowrap"
               >
                 <Shirt size={18} className="text-ueh-gold shrink-0" />
                 <span>Đăng ký & Chọn size áo</span>
