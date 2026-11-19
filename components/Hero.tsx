@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile } from "lucide-react";
-import EmbeddedCommunityChat from "@/components/EmbeddedCommunityChat";
 import { useAuth } from "@/components/AuthProvider";
 import { getSupabase } from "@/lib/supabase/client";
 
@@ -277,9 +276,6 @@ export default function Hero() {
             <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500" />
           </div>
         </div>
-
-        {/* 4. Box Chat & Sinh nhật chạy ngang */}
-        <EmbeddedCommunityChat />
 
       </div>
     </section>

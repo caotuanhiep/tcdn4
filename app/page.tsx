@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Hero from "@/components/Hero";
 import EventSection from "@/components/EventSection";
+import EmbeddedCommunityChat from "@/components/EmbeddedCommunityChat";
 import MigrationMap from "@/components/MigrationMap";
 import AlumniDirectory from "@/components/AlumniDirectory";
 import MemoriesGallery from "@/components/MemoriesGallery";
@@ -14,13 +15,20 @@ export default function HomePage() {
 
   return (
     <>
-      {/* 1. Hero Section (Tiêu đề cực to, Ảnh Cơ sở A lên trên nút, thống kê vui con cái/độc thân, Box Chat nhúng cân đối) */}
+      {/* 1. Hero Section (Tiêu đề cực to, Ảnh banner, thống kê điểm danh/độc thân) */}
       <Hero />
 
-      {/* 2. Chương trình 15 năm Tốt nghiệp (Đăng ký áo, VietQR/SePay, Đấu nối Bot Zalo tự động) */}
+      {/* 2. Chương trình 15 năm Gặp mặt (Đưa lên thế chỗ cho box chat ngay sau Hero) */}
       <EventSection />
 
-      {/* 3. Dấu chân TCDN4 (Bản đồ di cư, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
+      {/* 3. Box Chat Cộng Đồng & Chúc Mừng Sinh Nhật (Đưa xuống thế chỗ cho EventSection) */}
+      <section className="bg-gradient-to-b from-white via-slate-50/70 to-slate-100/60 py-10 sm:py-14 px-4 sm:px-6 border-b border-slate-200/60 overflow-hidden">
+        <div className="mx-auto max-w-5xl">
+          <EmbeddedCommunityChat />
+        </div>
+      </section>
+
+      {/* 4. Dấu chân TCDN4 (Bản đồ di cư, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
       <MigrationMap
         selectedRegion={selectedRegion}
         onSelectRegion={setSelectedRegion}
