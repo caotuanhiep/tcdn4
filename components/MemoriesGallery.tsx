@@ -293,6 +293,47 @@ export default function MemoriesGallery() {
     }
   }, [sortedPhotos.length, activeCardIndex]);
 
+  // Chuyển ảnh kế tiếp / trước đó trong modal xem ảnh (Lightbox)
+  const handleNextPhoto = useCallback(() => {
+    if (!activePhoto || sortedPhotos.length <= 1) return;
+    const currentIndex = sortedPhotos.findIndex((p) => p.id === activePhoto.id);
+    const nextIndex = (currentIndex + 1) % sortedPhotos.length;
+    setActivePhoto(sortedPhotos[nextIndex]);
+  }, [activePhoto, sortedPhotos]);
+
+  const handlePrevPhoto = useCallback(() => {
+    if (!activePhoto || sortedPhotos.length <= 1) return;
+    const currentIndex = sortedPhotos.findIndex((p) => p.id === activePhoto.id);
+    const prevIndex = (currentIndex - 1 + sortedPhotos.length) % sortedPhotos.length;
+    setActivePhoto(sortedPhotos[prevIndex]);
+  }, [activePhoto, sortedPhotos]);
+
+  // Hỗ trợ phím mũi tên Left / Right và Esc khi đang xem ảnh
+  useEffect(() => {
+    if (!activePhoto) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Không chuyển ảnh nếu đang gõ chữ vào ô nhập bình luận
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        handleNextPhoto();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        handlePrevPhoto();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setActivePhoto(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activePhoto, handleNextPhoto, handlePrevPhoto]);
+
   const handleToggleLike = (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
@@ -1212,14 +1253,56 @@ export default function MemoriesGallery() {
               <X size={18} />
             </button>
 
-            {/* Khung ảnh to */}
-            <div className="flex flex-1 items-center justify-center bg-black p-2 sm:p-4 min-h-[260px] md:min-h-[460px]">
+            {/* Khung ảnh to: Hỗ trợ Click ảnh chuyển tiếp, nút Mũi tên Trái/Phải và Phím điều hướng */}
+            <div
+              onClick={handleNextPhoto}
+              className="relative flex flex-1 items-center justify-center bg-black p-2 sm:p-4 min-h-[280px] md:min-h-[480px] cursor-pointer select-none group"
+              title="Click vào ảnh để chuyển ảnh kế tiếp (hoặc dùng phím mũi tên ◀ ▶)"
+            >
+              {/* Nút lùi ảnh trước đó */}
+              {sortedPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrevPhoto();
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
+                  title="Ảnh trước đó (Phím ◀)"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+              )}
+
+              {/* Nút chuyển ảnh tiếp theo */}
+              {sortedPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNextPhoto();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
+                  title="Ảnh kế tiếp (Phím ▶ hoặc Click vào ảnh)"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              )}
+
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={activePhoto.imgSrc}
                 alt={activePhoto.title}
-                className="max-h-[55vh] md:max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
+                className="max-h-[55vh] md:max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl transition-all duration-200"
               />
+
+              {/* Badge số thứ tự ảnh & hướng dẫn */}
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-black/75 px-3.5 py-1 text-[11px] font-bold text-white backdrop-blur-md border border-white/20 shadow-md pointer-events-none">
+                <span>
+                  Ảnh {sortedPhotos.findIndex((p) => p.id === activePhoto.id) + 1} / {sortedPhotos.length}
+                </span>
+                <span className="text-slate-400 hidden sm:inline">• Click ảnh hoặc bấm phím ◀ ▶</span>
+              </div>
             </div>
 
             {/* Cột bình luận và thông tin */}
