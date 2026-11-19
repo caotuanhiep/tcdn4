@@ -651,7 +651,7 @@ export default function MemoriesGallery() {
             title="Tạo chủ đề / bộ ảnh mới"
           >
             <Plus size={13} />
-            <span>+ Tạo chủ đề mới</span>
+            <span>Tạo chủ đề mới</span>
           </button>
         </div>
 
