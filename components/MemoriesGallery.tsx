@@ -53,12 +53,25 @@ export interface AlbumPhoto {
 
 export const DEFAULT_TOPICS = [
   "Thời sinh viên",
-  "Cuộc sống hiện tại",
-  "Dã ngoại & du lịch",
-  "Họp lớp, hẹn hò",
-  "Hội ngộ 15 năm (2026)",
-  "Chưa phân loại",
+  "Dã ngoại",
+  "Hiện tại",
+  "Du lịch, gặp gỡ",
+  "Kỷ niệm 15 năm",
+  "Khác",
 ];
+
+// Hàm chuẩn hóa chủ đề: Ảnh nào chưa chọn chủ đề hoặc thuộc nhóm cũ đều vào "Khác"
+export function resolveTopic(t?: string): string {
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
+    return "Khác";
+  }
+  const clean = t.trim();
+  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
+  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
+  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
+  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  return clean;
+}
 
 interface StagedUploadFile {
   id: string;
@@ -151,7 +164,8 @@ export default function MemoriesGallery() {
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((p: AlbumPhoto) => {
             if (!seenIds.has(p.id)) {
-              list.push(p);
+              const top = resolveTopic(p.topic || p.category);
+              list.push({ ...p, topic: top, category: top });
               seenIds.add(p.id);
             }
           });
@@ -172,7 +186,8 @@ export default function MemoriesGallery() {
           if (Array.isArray(cdnData)) {
             cdnData.forEach((p: AlbumPhoto) => {
               if (!seenIds.has(p.id)) {
-                list.push(p);
+                const top = resolveTopic(p.topic || p.category);
+                list.push({ ...p, topic: top, category: top });
                 seenIds.add(p.id);
               }
             });
@@ -189,7 +204,8 @@ export default function MemoriesGallery() {
         if (Array.isArray(parsed)) {
           parsed.forEach((p: AlbumPhoto) => {
             if (!seenIds.has(p.id)) {
-              list.push(p);
+              const top = resolveTopic(p.topic || p.category);
+              list.push({ ...p, topic: top, category: top });
               seenIds.add(p.id);
             }
           });
@@ -224,8 +240,7 @@ export default function MemoriesGallery() {
   const allTopics = useMemo(() => {
     const set = new Set<string>(DEFAULT_TOPICS);
     photos.forEach((p) => {
-      let t = p.topic || p.category;
-      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      const t = resolveTopic(p.topic || p.category);
       if (t && t !== "all") {
         set.add(t);
       }
@@ -237,17 +252,16 @@ export default function MemoriesGallery() {
   const topicCollections = useMemo(() => {
     const map = new Map<string, AlbumPhoto[]>();
 
-    // Đảm bảo các chủ đề mặc định luôn có sẵn
+    // Đảm bảo các chủ đề mặc định luôn có sẵn theo đúng thứ tự yêu cầu
     DEFAULT_TOPICS.forEach((t) => map.set(t, []));
 
     // Thêm các chủ đề có ảnh
     photos.forEach((p) => {
-      let t = p.topic || p.category;
-      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      const t = resolveTopic(p.topic || p.category);
       if (!map.has(t)) {
         map.set(t, []);
       }
-      map.get(t)!.push(p);
+      map.get(t)!.push({ ...p, topic: t, category: t });
     });
 
     const collections: { topic: string; photos: AlbumPhoto[]; count: number }[] = [];
@@ -265,16 +279,23 @@ export default function MemoriesGallery() {
       });
     });
 
-    // Sắp xếp bộ sưu tập: Bộ có nhiều ảnh đứng trước
-    return collections.sort((a, b) => b.count - a.count);
+    // Giữ đúng thứ tự các topic như yêu cầu:
+    // 1. Thời sinh viên, 2. Dã ngoại, 3. Hiện tại, 4. Du lịch, gặp gỡ, 5. Kỷ niệm 15 năm, 6. Khác
+    return collections.sort((a, b) => {
+      const idxA = DEFAULT_TOPICS.indexOf(a.topic);
+      const idxB = DEFAULT_TOPICS.indexOf(b.topic);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return b.count - a.count;
+    });
   }, [photos]);
 
   // Lọc theo Topic được chọn
   const filteredPhotos = useMemo(() => {
     if (!selectedTopic || selectedTopic === "all") return photos;
     return photos.filter((p) => {
-      let t = p.topic || p.category;
-      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      const t = resolveTopic(p.topic || p.category);
       return t === selectedTopic;
     });
   }, [photos, selectedTopic]);
@@ -523,9 +544,10 @@ export default function MemoriesGallery() {
 
     setIsSubmittingCloud(true);
 
-    const finalTopic = isCustomTopic
-      ? (customTopicName.trim() || DEFAULT_TOPICS[0])
-      : activeUploadTopic;
+    const rawTopic = isCustomTopic
+      ? (customTopicName.trim() || "Khác")
+      : (activeUploadTopic || "Khác");
+    const finalTopic = resolveTopic(rawTopic);
 
     const defaultUploader =
       profile?.full_name?.trim() ||
@@ -699,8 +721,7 @@ export default function MemoriesGallery() {
 
           {allTopics.map((topic) => {
             const count = photos.filter((p) => {
-              let t = p.topic || p.category;
-              if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+              const t = resolveTopic(p.topic || p.category);
               return t === topic;
             }).length;
             const isSelected = selectedTopic === topic;

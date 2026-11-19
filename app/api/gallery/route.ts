@@ -37,6 +37,18 @@ const DEFAULT_INITIAL_PHOTOS: AlbumPhoto[] = [
   },
 ];
 
+export function normalizeTopic(t?: string): string {
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
+    return "Khác";
+  }
+  const clean = t.trim();
+  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
+  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
+  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
+  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  return clean;
+}
+
 // Helper: Tải manifest ảnh từ Supabase Storage
 async function loadManifest(): Promise<AlbumPhoto[]> {
   try {
@@ -46,7 +58,10 @@ async function loadManifest(): Promise<AlbumPhoto[]> {
       const text = await data.text();
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((p: AlbumPhoto) => {
+          const top = normalizeTopic(p.topic || p.category);
+          return { ...p, topic: top, category: top };
+        });
       }
     }
   } catch (err) {
@@ -82,12 +97,13 @@ async function saveManifest(photos: AlbumPhoto[]): Promise<boolean> {
 async function trySaveToDbTable(photo: AlbumPhoto) {
   try {
     const supabase = getSupabaseAdmin();
+    const top = normalizeTopic(photo.topic || photo.category);
     await supabase.from("gallery").insert({
       image_url: photo.imgSrc,
       title: photo.title,
       caption: photo.caption || null,
-      category: photo.topic || photo.category || "Chưa phân loại",
-      topic: photo.topic || photo.category || "Chưa phân loại",
+      category: top,
+      topic: top,
       uploader: photo.uploader,
       uploader_name: photo.uploader,
       uploader_class: photo.uploaderClass || "TC10",
@@ -137,7 +153,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Không tìm thấy tệp ảnh nào" }, { status: 400 });
       }
 
-      const topic = (formData.get("topic") as string) || (formData.get("category") as string) || "Chưa phân loại";
+      const rawTopic = (formData.get("topic") as string) || (formData.get("category") as string);
+      const topic = normalizeTopic(rawTopic);
       const uploader = (formData.get("uploader") as string) || "Ban liên lạc (Admin)";
       const uploaderClass = (formData.get("uploaderClass") as string) || "TC10";
       const commonTitle = (formData.get("title") as string) || "";
@@ -212,7 +229,8 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "add" && body.photo) {
       const currentList = await loadManifest();
-      const newPhoto = body.photo;
+      const top = normalizeTopic(body.photo.topic || body.photo.category);
+      const newPhoto = { ...body.photo, topic: top, category: top };
       const updatedManifest = [newPhoto, ...currentList];
       await saveManifest(updatedManifest);
       await trySaveToDbTable(newPhoto);
@@ -221,7 +239,11 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "add_batch" && Array.isArray(body.photos)) {
       const currentList = await loadManifest();
-      const updatedManifest = [...body.photos, ...currentList];
+      const normalizedBatch = body.photos.map((p: any) => {
+        const top = normalizeTopic(p.topic || p.category);
+        return { ...p, topic: top, category: top };
+      });
+      const updatedManifest = [...normalizedBatch, ...currentList];
       await saveManifest(updatedManifest);
       return NextResponse.json({ success: true, photos: updatedManifest });
     }

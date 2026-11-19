@@ -9,12 +9,25 @@ const MEMORIES_STORAGE_KEY = "tcdn4_memories_gallery";
 
 export const DEFAULT_TOPICS = [
   "Thời sinh viên",
-  "Cuộc sống hiện tại",
-  "Dã ngoại & du lịch",
-  "Họp lớp, hẹn hò",
-  "Hội ngộ 15 năm (2026)",
-  "Chưa phân loại",
+  "Dã ngoại",
+  "Hiện tại",
+  "Du lịch, gặp gỡ",
+  "Kỷ niệm 15 năm",
+  "Khác",
 ];
+
+// Hàm chuẩn hóa chủ đề: Ảnh nào chưa chọn chủ đề hoặc thuộc nhóm cũ đều vào "Khác"
+export function resolveTopic(t?: string): string {
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
+    return "Khác";
+  }
+  const clean = t.trim();
+  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
+  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
+  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
+  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  return clean;
+}
 
 const INITIAL_ADMIN_PHOTOS = [
   {
@@ -61,8 +74,7 @@ export default function ImagesPanel() {
         const data = await res.json();
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((p: any) => {
-            let topic = p.topic || p.category || "Chưa phân loại";
-            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
+            const topic = resolveTopic(p.topic || p.category);
             list.push({
               id: p.id,
               image_url: p.imgSrc || p.image_url,
@@ -90,8 +102,7 @@ export default function ImagesPanel() {
         if (Array.isArray(parsed)) {
           parsed.forEach((p: any) => {
             if (!seenIds.has(p.id)) {
-              let topic = p.topic || p.category || "Chưa phân loại";
-              if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
+              const topic = resolveTopic(p.topic || p.category);
               list.push({
                 id: p.id,
                 image_url: p.imgSrc || p.image_url,
@@ -135,14 +146,15 @@ export default function ImagesPanel() {
   const allAvailableTopics = useMemo(() => {
     const set = new Set<string>(DEFAULT_TOPICS);
     items.forEach((it) => {
-      if (it.topic && it.topic !== "all") set.add(it.topic);
+      const top = resolveTopic(it.topic);
+      if (top && top !== "all") set.add(top);
     });
     return Array.from(set);
   }, [items]);
 
   const filteredItems = useMemo(() => {
     if (selectedFilterTopic === "all") return items;
-    return items.filter((it) => it.topic === selectedFilterTopic);
+    return items.filter((it) => resolveTopic(it.topic) === selectedFilterTopic);
   }, [items, selectedFilterTopic]);
 
   const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,7 +173,8 @@ export default function ImagesPanel() {
   const handleUploadNew = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const finalTopic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
+    const rawTopic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
+    const finalTopic = resolveTopic(rawTopic);
 
     if (uploadMode === "file") {
       if (selectedFiles.length === 0) {
