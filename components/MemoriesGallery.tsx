@@ -515,10 +515,15 @@ export default function MemoriesGallery() {
       : activeUploadTopic;
 
     const defaultUploader =
-      batchUploaderName.trim() ||
-      profile?.full_name ||
+      profile?.full_name?.trim() ||
       user.email?.split("@")[0] ||
-      "Thành viên K33";
+      batchUploaderName.trim() ||
+      "Cựu sinh viên K33";
+
+    const resolvedClass =
+      (profile?.class_name as any) ||
+      batchClass ||
+      "TC10";
 
     const now = Date.now();
     const newPhotos: AlbumPhoto[] = [];
@@ -567,7 +572,7 @@ export default function MemoriesGallery() {
         likes: 1,
         comments: [],
         uploader: defaultUploader,
-        uploaderClass: batchClass,
+        uploaderClass: resolvedClass,
         createdAt: now + idx,
         isPinned: staged.isPinned,
       };
@@ -584,7 +589,7 @@ export default function MemoriesGallery() {
           category: finalTopic,
           topic: finalTopic,
           uploader: defaultUploader,
-          uploader_class: batchClass,
+          uploader_class: resolvedClass,
           user_id: user.id,
           is_pinned: staged.isPinned,
         });
@@ -826,53 +831,86 @@ export default function MemoriesGallery() {
                         </span>
                       </div>
 
-                      {/* KHU VỰC XÒE BÀI MINI (STACK DECK FAN PREVIEW) */}
+                      {/* KHU VỰC THẺ ẢNH BỘ SƯU TẬP FULL TRÀN VIỀN (STACKED PHOTO DECK PREVIEW) */}
                       <div
                         onClick={() => {
                           setSelectedTopic(col.topic);
                           setViewMode("fan");
                           setActiveCardIndex(0);
                         }}
-                        className="relative my-2 h-44 sm:h-48 w-full cursor-pointer flex items-center justify-center rounded-2xl bg-gradient-to-b from-slate-100/80 via-blue-50/40 to-slate-50 p-2 overflow-hidden border border-slate-100 group-hover:border-blue-200 transition-colors"
+                        className="relative my-2 pt-1.5 pr-2 h-48 sm:h-52 w-full cursor-pointer select-none"
                         title={`Bấm để mở xòe bài bộ "${col.topic}"`}
                       >
                         {!hasPhotos ? (
-                          <div className="flex flex-col items-center justify-center text-center p-3">
-                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-2xs text-slate-300">
-                              <Camera size={20} />
+                          <div className="h-full w-full flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-gradient-to-br from-slate-100/90 via-blue-50/40 to-slate-100 border-2 border-dashed border-slate-200 group-hover:border-blue-300 transition-colors">
+                            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-xs text-slate-300 group-hover:text-ueh group-hover:scale-105 transition-all">
+                              <Camera size={22} />
                             </div>
-                            <span className="text-xs font-bold text-slate-400">Chưa có bức ảnh nào</span>
+                            <span className="text-xs font-bold text-slate-500">Chưa có bức ảnh nào</span>
                             <span className="text-[10px] text-slate-400 mt-0.5">Bấm Thêm ảnh để mở đầu bộ bài!</span>
                           </div>
                         ) : (
-                          /* Xòe 2-3 lá bài mini có góc nghiêng và mở rộng khi hover */
-                          <div className="relative h-full w-44 flex items-center justify-center">
-                            {/* Lá bài thứ 3 (lót dưới nghiêng trái) */}
-                            {col.photos[2] && (
-                              <div className="absolute h-32 w-24 sm:h-36 sm:w-28 rounded-xl overflow-hidden shadow-md border-2 border-white -rotate-12 -translate-x-6 translate-y-1 transition-all duration-300 group-hover:-rotate-16 group-hover:-translate-x-9 group-hover:scale-105">
+                          <div className="relative h-full w-full">
+                            {/* Lớp ảnh thứ 3 phía sau (chỉ hiện khi có từ 3 ảnh trở lên) */}
+                            {col.photos.length >= 3 && col.photos[2] && (
+                              <div className="absolute inset-0 rounded-2xl bg-slate-300 shadow-md border-2 border-white translate-x-3 -translate-y-2.5 rotate-3 transition-transform duration-300 group-hover:translate-x-4.5 group-hover:-translate-y-3.5 group-hover:rotate-6 overflow-hidden opacity-75">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={col.photos[2].imgSrc} alt="deck layer" className="h-full w-full object-cover" />
+                                <img
+                                  src={col.photos[2].imgSrc}
+                                  alt=""
+                                  className="h-full w-full object-cover filter brightness-95"
+                                />
                               </div>
                             )}
 
-                            {/* Lá bài thứ 2 (lót giữa nghiêng phải) */}
-                            {col.photos[1] && (
-                              <div className="absolute h-32 w-24 sm:h-36 sm:w-28 rounded-xl overflow-hidden shadow-md border-2 border-white rotate-10 translate-x-6 translate-y-1 transition-all duration-300 group-hover:rotate-14 group-hover:translate-x-9 group-hover:scale-105">
+                            {/* Lớp ảnh thứ 2 phía sau (chỉ hiện khi có từ 2 ảnh trở lên) */}
+                            {col.photos.length >= 2 && col.photos[1] && (
+                              <div className="absolute inset-0 rounded-2xl bg-slate-200 shadow-md border-2 border-white translate-x-1.5 -translate-y-1.5 rotate-1 transition-transform duration-300 group-hover:translate-x-2.5 group-hover:-translate-y-2 group-hover:rotate-2.5 overflow-hidden opacity-90">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={col.photos[1].imgSrc} alt="deck layer" className="h-full w-full object-cover" />
+                                <img
+                                  src={col.photos[1].imgSrc}
+                                  alt=""
+                                  className="h-full w-full object-cover filter brightness-95"
+                                />
                               </div>
                             )}
 
-                            {/* Lá bài thứ 1 (trên cùng ở giữa) */}
-                            {col.photos[0] && (
-                              <div className="relative h-36 w-28 sm:h-40 sm:w-32 rounded-xl overflow-hidden shadow-xl border-2 border-white transition-all duration-300 group-hover:scale-110 z-10">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={col.photos[0].imgSrc} alt="deck top" className="h-full w-full object-cover" />
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent p-2 text-white">
-                                  <p className="text-[10px] font-bold truncate leading-tight">{col.photos[0].title}</p>
+                            {/* Lớp ảnh chính tràn viền (Full-bleed cover) */}
+                            <div className="relative h-full w-full rounded-2xl overflow-hidden shadow-md border-2 border-white transition-all duration-300 group-hover:shadow-xl group-hover:scale-[1.01] bg-slate-900">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={col.photos[0].imgSrc}
+                                alt={col.photos[0].title}
+                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+
+                              {/* Badge đếm số lượng ảnh kiểu kính mờ nổi bật */}
+                              <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 rounded-full bg-slate-950/75 backdrop-blur-md px-2.5 py-1 text-[11px] font-bold text-white border border-white/20 shadow-md">
+                                <Layers size={12} className="text-ueh-gold" />
+                                <span>{col.count} ảnh</span>
+                              </div>
+
+                              {col.count > 1 && (
+                                <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 rounded-full bg-ueh/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-white border border-white/20 shadow-xs">
+                                  <span>Tập {col.count} ảnh</span>
+                                </div>
+                              )}
+
+                              {/* Lớp phủ chân ảnh với tiêu đề & CTA Xòe bài */}
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/45 to-transparent p-3 pt-8 text-white flex items-end justify-between z-10">
+                                <div className="min-w-0 pr-2">
+                                  <p className="text-xs font-bold truncate drop-shadow-sm">
+                                    {col.photos[0].title}
+                                  </p>
+                                  <span className="text-[10px] text-blue-200 flex items-center gap-1 mt-0.5">
+                                    <Eye size={10} /> Bấm để mở xòe bài
+                                  </span>
+                                </div>
+                                <div className="shrink-0 flex items-center justify-center h-7 w-7 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 group-hover:bg-ueh group-hover:border-ueh group-hover:scale-110 transition-all shadow-xs">
+                                  <Layers size={13} />
                                 </div>
                               </div>
-                            )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1617,34 +1655,25 @@ export default function MemoriesGallery() {
                 </div>
               )}
 
-              {/* Thông tin chung của người đóng góp */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tên người đóng góp:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={profile?.full_name || "VD: Nguyễn Văn A..."}
-                    value={batchUploaderName}
-                    onChange={(e) => setBatchUploaderName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:bg-white focus:border-ueh focus:outline-none"
-                  />
+              {/* Thông tin người đóng góp (Tự động nhận diện từ tài khoản đã đăng nhập, không cần nhập lại) */}
+              <div className="rounded-2xl bg-gradient-to-r from-blue-50/80 via-sky-50/50 to-slate-50 border border-blue-200/80 p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ueh text-white font-black text-xs shadow-2xs">
+                    {(profile?.full_name || user?.email || "SV").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-slate-500">Đóng góp với tư cách:</p>
+                    <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      {profile?.full_name || user?.email?.split("@")[0] || "Cựu sinh viên TCDN4"}
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Thuộc lớp:
-                  </label>
-                  <select
-                    value={batchClass}
-                    onChange={(e) => setBatchClass(e.target.value as any)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-ueh focus:bg-white focus:border-ueh focus:outline-none"
-                  >
-                    <option value="TC10">Lớp TC10</option>
-                    <option value="TC11">Lớp TC11</option>
-                    <option value="TC12">Lớp TC12</option>
-                  </select>
+                <div className="shrink-0 flex items-center gap-1.5 rounded-full bg-white px-3 py-1 border border-blue-200 shadow-2xs">
+                  <span className="text-[10px] font-medium text-slate-500">Lớp:</span>
+                  <span className="text-xs font-black text-ueh">
+                    {profile?.class_name ? `Lớp ${profile.class_name}` : "TC10"}
+                  </span>
                 </div>
               </div>
 
