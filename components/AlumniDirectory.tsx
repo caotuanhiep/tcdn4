@@ -33,7 +33,7 @@ export interface AlumniMember {
   job: string;
   company: string;
   location: string;
-  region: "hcm" | "hn" | "dn" | "overseas";
+  region: "hcm" | "hn" | "dn" | "other" | "overseas";
   email?: string;
   phone?: string;
   avatar_url?: string;
@@ -41,6 +41,7 @@ export interface AlumniMember {
   marital_status?: string;
   children_count?: number;
   is_verified?: boolean;
+  role?: string;
 }
 
 const ALUMNI_LIST: AlumniMember[] = [];
@@ -87,16 +88,17 @@ export default function AlumniDirectory({
               company: p.company || "UEH Alumni",
               location: p.specific_location || (
                 p.location_region === "hn" ? "Hà Nội" :
-                p.location_region === "dn" ? "Đà Nẵng" :
+                (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
                 p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
               ),
-              region: (p.location_region as any) || "hcm",
+              region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
               phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
               avatar_url: p.avatar_url || "",
               bio: p.bio || "",
               marital_status: p.marital_status || "",
               children_count: p.children_count || 0,
               is_verified: true,
+              role: p.role || "member",
             });
             seenNames.add(memberName.toLowerCase().trim());
           });
@@ -111,9 +113,9 @@ export default function AlumniDirectory({
           regs.forEach((r: any) => {
             const rName = (r.fullName || "").trim();
             if (rName && !seenNames.has(rName.toLowerCase())) {
-              const regRegion: "hcm" | "hn" | "dn" | "overseas" = 
+              const regRegion: "hcm" | "hn" | "other" | "overseas" = 
                 /Hà Nội|hn/i.test(r.address) ? "hn" :
-                /Đà Nẵng|dn/i.test(r.address) ? "dn" :
+                /Đà Nẵng|dn|Huế|Nha Trang|Cần Thơ|Hải Phòng|Bình Dương|Đồng Nai|Vũng Tàu|Lâm Đồng|Đà Lạt|Quảng Nam|Quy Nhơn/i.test(r.address) ? "other" :
                 /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address) ? "overseas" : "hcm";
 
               combinedMembers.push({
@@ -174,15 +176,19 @@ export default function AlumniDirectory({
       all: alumniList.length,
       hcm: alumniList.filter((m) => m.region === "hcm").length,
       hn: alumniList.filter((m) => m.region === "hn").length,
-      dn: alumniList.filter((m) => m.region === "dn").length,
+      other: alumniList.filter((m) => m.region === "other" || (m.region as any) === "dn").length,
       overseas: alumniList.filter((m) => m.region === "overseas").length,
     };
   }, [alumniList]);
 
   const filteredList = useMemo(() => {
     return alumniList.filter((member) => {
-      if (selectedRegion !== "all" && member.region !== selectedRegion) {
-        return false;
+      if (selectedRegion !== "all") {
+        if (selectedRegion === "other") {
+          if (member.region !== "other" && (member.region as any) !== "dn") return false;
+        } else if (member.region !== selectedRegion) {
+          return false;
+        }
       }
       if (selectedClass !== "all" && member.class !== selectedClass) {
         return false;
@@ -300,8 +306,8 @@ export default function AlumniDirectory({
                 { id: "all", label: "Toàn cầu", count: regionCounts.all, icon: Globe },
                 { id: "hcm", label: "TP. Hồ Chí Minh", count: regionCounts.hcm, icon: MapPin },
                 { id: "hn", label: "Hà Nội", count: regionCounts.hn, icon: MapPin },
-                { id: "dn", label: "Đà Nẵng", count: regionCounts.dn, icon: MapPin },
-                { id: "overseas", label: "Nước ngoài", count: regionCounts.overseas, icon: Globe },
+                { id: "other", label: "Tỉnh khác", count: regionCounts.other, icon: MapPin },
+                { id: "overseas", label: "Xuất ngoại", count: regionCounts.overseas, icon: Globe },
               ].map((reg) => {
                 const Icon = reg.icon;
                 return (
@@ -409,9 +415,16 @@ export default function AlumniDirectory({
                     {/* Thông tin cựu sinh viên bên phải */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1 mb-0.5 sm:mb-1">
-                        <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-ueh border border-slate-200/90 shadow-2xs">
-                          {member.class}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-ueh border border-slate-200/90 shadow-2xs">
+                            {member.class}
+                          </span>
+                          {(member.role === "committee" || member.role === "admin") && (
+                            <span className="rounded-md bg-amber-500 text-white px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase shadow-2xs">
+                              {member.role === "admin" ? "Admin" : "Ban liên lạc"}
+                            </span>
+                          )}
+                        </div>
                         {member.is_verified && (
                           <span className="flex items-center gap-0.5 text-[9px] font-bold text-[#0068FF]">
                             <CheckCircle2 size={11} />
@@ -528,10 +541,15 @@ export default function AlumniDirectory({
                     <CheckCircle2 size={16} className="text-[#0068FF] shrink-0" />
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh">
                     Lớp {viewingMember.class}
                   </span>
+                  {(viewingMember.role === "committee" || viewingMember.role === "admin") && (
+                    <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-bold border border-amber-300">
+                      ★ {viewingMember.role === "admin" ? "Super Admin" : "Ban liên lạc TCDN4"}
+                    </span>
+                  )}
                   {viewingMember.marital_status && (
                     <span className="rounded-md bg-orange-50 px-2 py-0.5 text-xs font-semibold text-ueh-orange">
                       {viewingMember.marital_status === "married" ? "Đã kết hôn" : "Độc thân"}

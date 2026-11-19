@@ -11,17 +11,32 @@ const BANNER_SLIDES = [
   { id: 3, src: "/images/banner-2.png", alt: "TCDN4 K33 - Hội Ngộ 15 Năm (2)", caption: "Thanh xuân gắn kết TC10 • TC11 • TC12" },
 ];
 
+const SHIRT_SLIDES = [
+  { id: 1, src: "/images/shirt-flat.jpg", alt: "Mẫu Áo Polo Kỷ Niệm 15 Năm TCDN4 (Áo phẳng)" },
+  { id: 2, src: "/images/shirt-model.jpg", alt: "Mẫu Áo Polo Kỷ Niệm 15 Năm TCDN4 (Mẫu mặc)" },
+];
+
 export default function Hero() {
   const { user, openLogin, openProfile } = useAuth();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [currentShirtSlide, setCurrentShirtSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Tự động xoay vòng ảnh slider 3s
+  // Tự động xoay vòng ảnh slider bên trái 3s
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % BANNER_SLIDES.length);
     }, 3000);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
+  // Tự động xoay vòng 2 ảnh áo kỷ niệm bên phải chậm hơn slide trái (5.5s)
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => {
+      setCurrentShirtSlide((prev) => (prev + 1) % SHIRT_SLIDES.length);
+    }, 5500);
     return () => clearInterval(interval);
   }, [isPaused]);
 
@@ -187,15 +202,46 @@ export default function Hero() {
               </div>
             </div>
 
-            {/* Cột phải (4 Cols trên Desktop): Bạn mẫu mặc áo Full chiều cao, bo viền đồng điệu - Ẩn trên Mobile */}
+            {/* Cột phải (4 Cols trên Desktop): Slider 2 ảnh áo kỷ niệm tự đổi chậm hơn cột trái - Bo viền đồng điệu */}
             <div className="hidden lg:flex lg:col-span-4 flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-2 sm:p-2.5 shadow-xl">
-              <div className="relative flex-1 w-full overflow-hidden rounded-2xl bg-gradient-to-b from-slate-50 via-blue-50/40 to-slate-100 flex items-center justify-center p-1 min-h-[300px]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/images/model-uniform-transparent.png"
-                  alt="Mẫu Áo Polo Kỷ Niệm 15 Năm TCDN4"
-                  className="h-full max-h-[360px] w-auto object-contain object-bottom transition-transform duration-300 hover:scale-105"
-                />
+              <div className="relative flex-1 w-full overflow-hidden rounded-2xl bg-slate-900/5 min-h-[300px]">
+                {SHIRT_SLIDES.map((slide, idx) => (
+                  <div
+                    key={slide.id}
+                    className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                      idx === currentShirtSlide ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={slide.src}
+                      alt={slide.alt}
+                      className="h-full w-full object-cover object-center transition-transform duration-500 hover:scale-105"
+                    />
+                  </div>
+                ))}
+
+                {/* Badge chuyển ảnh nhỏ gọn & Indicator */}
+                <div className="absolute bottom-2.5 left-0 right-0 z-20 flex items-center justify-center">
+                  <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20">
+                    {SHIRT_SLIDES.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentShirtSlide(idx)}
+                        className={`h-1.5 rounded-full transition-all ${
+                          idx === currentShirtSlide ? "w-5 bg-ueh-orange" : "w-1.5 bg-white/60 hover:bg-white"
+                        }`}
+                        aria-label={`Mẫu áo ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="absolute top-2.5 left-2.5 z-20">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ueh/90 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-black text-white shadow-xs">
+                    <Sparkles size={11} className="text-ueh-gold" /> Áo Polo K33
+                  </span>
+                </div>
               </div>
 
               <div className="pt-2 px-1">

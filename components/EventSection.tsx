@@ -39,6 +39,7 @@ interface Registration {
   paidAmount: number;
   createdAt: string;
   note?: string;
+  avatarUrl?: string;
 }
 
 const INITIAL_REGISTRATIONS: Registration[] = [];
@@ -58,6 +59,7 @@ export default function EventSection() {
   const [phone, setPhone] = useState("");
   const [shirtSize, setShirtSize] = useState("L (Nam)");
   const [address, setAddress] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("/images/avatar-boy.png");
   const [guestsCount, setGuestsCount] = useState(0);
   const [note, setNote] = useState("");
 
@@ -141,6 +143,7 @@ export default function EventSection() {
       phone: phone.trim(),
       shirtSize,
       address: address.trim(),
+      avatarUrl,
       guestsCount,
       status: "pending",
       paidAmount: bankInfo.amount,
@@ -221,7 +224,7 @@ export default function EventSection() {
           </h2>
           <div className="mx-auto mt-3 h-1.5 w-24 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
           <p className="mx-auto mt-4 max-w-xl text-sm sm:text-base text-slate-600 leading-relaxed">
-            Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở A - UEH, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
+            Buổi gặp gỡ thân mật quay lại giảng đường Cơ sở B - UEH, nhận áo kỷ niệm và sẻ chia chặng đường 15 năm cùng bạn bè.
           </p>
         </div>
 
@@ -337,9 +340,9 @@ export default function EventSection() {
             <div className="h-28 w-24 shrink-0 rounded-2xl overflow-hidden bg-gradient-to-b from-slate-100 to-blue-50/60 border border-orange-100 p-1 flex items-center justify-center shadow-xs">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/model-uniform-transparent.png"
+                src="/images/shirt-flat.jpg"
                 alt="Áo Polo Kỷ Niệm 15 Năm TCDN4"
-                className="h-full w-auto object-contain object-bottom"
+                className="h-full w-full object-cover rounded-xl"
               />
             </div>
             <div className="flex-1 text-left">
@@ -675,9 +678,14 @@ export default function EventSection() {
                       {/* 1. Họ và tên: whitespace-nowrap */}
                       <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
                         <div className="inline-flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-ueh">
-                            {idx + 1}
-                          </span>
+                          {reg.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={reg.avatarUrl} alt={reg.fullName} className="h-6 w-6 rounded-full object-cover border border-slate-200" />
+                          ) : (
+                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-ueh">
+                              {idx + 1}
+                            </span>
+                          )}
                           <span className="whitespace-nowrap">{reg.fullName}</span>
                           {reg.guestsCount > 0 && (
                             <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">
@@ -757,6 +765,34 @@ export default function EventSection() {
 
             {step === "form" && (
               <form onSubmit={handleSubmitRegistration} className="mt-4 space-y-3.5">
+                {/* Chọn nhanh Avatar */}
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-blue-50/70 border border-blue-100">
+                  <span className="text-[11px] font-bold text-ueh flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-ueh-orange" /> Chọn nhanh Avatar:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {[
+                      { id: "boy", src: "/images/avatar-boy.png", label: "Nam UEH" },
+                      { id: "girl", src: "/images/avatar-girl.png", label: "Nữ UEH" },
+                    ].map((av) => (
+                      <button
+                        key={av.id}
+                        type="button"
+                        onClick={() => setAvatarUrl(av.src)}
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-bold border transition-all ${
+                          avatarUrl === av.src
+                            ? "bg-ueh text-white border-ueh shadow-xs scale-105"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-ueh"
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={av.src} alt={av.label} className="h-4 w-4 rounded-full object-cover" />
+                        <span>{av.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">

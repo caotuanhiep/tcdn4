@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon } from "lucide-react";
+import { useCallback, useEffect, useState, useRef } from "react";
+import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon, Link2, CheckCircle2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 
@@ -14,7 +14,7 @@ const INITIAL_ADMIN_PHOTOS = [
     user_id: "admin",
     is_pinned: true,
     created_at: new Date().toISOString(),
-    title: "Tập thể TCDN4 K33 trước Cơ sở A - UEH",
+    title: "Tập thể TCDN4 K33 trước Cơ sở B - UEH",
   },
 ];
 
@@ -22,9 +22,16 @@ export default function ImagesPanel() {
   const toast = useToast();
   const [items, setItems] = useState<any[]>(INITIAL_ADMIN_PHOTOS);
   const [loading, setLoading] = useState(false);
+  
+  // Upload State
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
   const [uploadUrl, setUploadUrl] = useState("");
   const [photoTitle, setPhotoTitle] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [uploadingToSupabase, setUploadingToSupabase] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const list: any[] = [];
@@ -90,61 +97,184 @@ export default function ImagesPanel() {
     };
   }, [load]);
 
+  const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+    setSelectedFiles(files);
+
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+
+    if (!photoTitle && files.length === 1) {
+      setPhotoTitle(files[0].name.replace(/\.[^/.]+$/, ""));
+    }
+  };
+
   const handleUploadNew = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadUrl.trim()) return;
 
-    const newId = `img-${Date.now()}`;
-    const title = photoTitle.trim() || "Ảnh kỷ niệm mới";
-    const newItem = {
-      id: newId,
-      image_url: uploadUrl.trim(),
-      user_id: "Ban liên lạc (Admin)",
-      is_pinned: false,
-      created_at: new Date().toISOString(),
-      title,
-      source: "memories",
-    };
+    if (uploadMode === "file") {
+      if (selectedFiles.length === 0) {
+        toast.error("Vui lòng chọn ít nhất 1 tệp ảnh từ thiết bị!");
+        return;
+      }
 
-    setItems([newItem, ...items]);
-    setUploadUrl("");
-    setPhotoTitle("");
-    setIsUploading(false);
+      setUploadingToSupabase(true);
+      try {
+        const addedItems: any[] = [];
+        const memoriesToAdd: any[] = [];
 
-    // Thêm vào memories gallery trong localStorage
-    try {
-      const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
-      const list = stored ? JSON.parse(stored) : [];
-      list.unshift({
-        id: newId,
-        title,
-        imgSrc: uploadUrl.trim(),
-        type: "image",
-        category: "Kỷ niệm",
-        likes: 1,
-        comments: [],
-        uploader: "Ban liên lạc (Admin)",
-        uploaderClass: "TC10",
-        createdAt: Date.now(),
-        isPinned: false,
-      });
-      localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(list));
-      window.dispatchEvent(new Event("tcdn4_memories_updated"));
-    } catch {}
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          const fileExt = file.name.split(".").pop() || "jpg";
+          const fileName = `admin_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `gallery/${fileName}`;
 
-    // Thử thêm vào Supabase nếu bảng gallery sẵn sàng
-    try {
-      await getSupabase().from("gallery").insert({
+          let publicUrl = "";
+
+          // Upload lên Supabase Storage bucket 'alumni-media'
+          const { error: uploadError } = await getSupabase()
+            .storage
+            .from("alumni-media")
+            .upload(filePath, file, { upsert: true });
+
+          if (!uploadError) {
+            const { data: publicData } = getSupabase()
+              .storage
+              .from("alumni-media")
+              .getPublicUrl(filePath);
+            publicUrl = publicData.publicUrl;
+          } else {
+            // Fallback đọc dạng Base64 data URL
+            publicUrl = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => resolve(ev.target?.result as string);
+              reader.readAsDataURL(file);
+            });
+          }
+
+          const newId = `img-${Date.now()}-${i}`;
+          const itemTitle = photoTitle.trim() || file.name.replace(/\.[^/.]+$/, "");
+
+          // 1. Lưu vào bảng gallery Supabase
+          try {
+            await getSupabase().from("gallery").insert({
+              id: newId,
+              image_url: publicUrl,
+              user_id: "admin",
+              uploader_name: "Ban liên lạc (Admin)",
+              is_pinned: false,
+              created_at: new Date().toISOString(),
+              title: itemTitle,
+            });
+          } catch {}
+
+          const itemObj = {
+            id: newId,
+            image_url: publicUrl,
+            user_id: "Ban liên lạc (Admin)",
+            is_pinned: false,
+            created_at: new Date().toISOString(),
+            title: itemTitle,
+            source: "supabase",
+          };
+
+          addedItems.push(itemObj);
+
+          memoriesToAdd.push({
+            id: newId,
+            title: itemTitle,
+            imgSrc: publicUrl,
+            type: "image",
+            category: "Kỷ niệm",
+            likes: 1,
+            comments: [],
+            uploader: "Ban liên lạc (Admin)",
+            uploaderClass: "TC10",
+            createdAt: Date.now(),
+            isPinned: false,
+          });
+        }
+
+        // Lưu vào memories gallery localStorage
+        try {
+          const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
+          const list = stored ? JSON.parse(stored) : [];
+          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify([...memoriesToAdd, ...list]));
+          window.dispatchEvent(new Event("tcdn4_memories_updated"));
+        } catch {}
+
+        setItems([...addedItems, ...items]);
+        setSelectedFiles([]);
+        setPreviewUrls([]);
+        setPhotoTitle("");
+        setIsUploading(false);
+        toast.success(`Đã upload ${addedItems.length} ảnh lên Supabase thành công!`);
+      } catch (err: any) {
+        toast.error(`Lỗi khi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
+      } finally {
+        setUploadingToSupabase(false);
+      }
+    } else {
+      // Mode URL
+      if (!uploadUrl.trim()) {
+        toast.error("Vui lòng nhập link ảnh!");
+        return;
+      }
+
+      const newId = `img-${Date.now()}`;
+      const title = photoTitle.trim() || "Ảnh kỷ niệm mới";
+      const newItem = {
         id: newId,
         image_url: uploadUrl.trim(),
-        user_id: "admin",
+        user_id: "Ban liên lạc (Admin)",
         is_pinned: false,
         created_at: new Date().toISOString(),
         title,
-      });
-    } catch {}
+        source: "memories",
+      };
 
-    toast.success("Đã thêm ảnh vào kho lưu trữ thành công!");
+      setItems([newItem, ...items]);
+      setUploadUrl("");
+      setPhotoTitle("");
+      setIsUploading(false);
+
+      // Thêm vào memories gallery trong localStorage
+      try {
+        const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
+        const list = stored ? JSON.parse(stored) : [];
+        list.unshift({
+          id: newId,
+          title,
+          imgSrc: uploadUrl.trim(),
+          type: "image",
+          category: "Kỷ niệm",
+          likes: 1,
+          comments: [],
+          uploader: "Ban liên lạc (Admin)",
+          uploaderClass: "TC10",
+          createdAt: Date.now(),
+          isPinned: false,
+        });
+        localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(list));
+        window.dispatchEvent(new Event("tcdn4_memories_updated"));
+      } catch {}
+
+      // Thêm vào Supabase
+      try {
+        await getSupabase().from("gallery").insert({
+          id: newId,
+          image_url: uploadUrl.trim(),
+          user_id: "admin",
+          uploader_name: "Ban liên lạc (Admin)",
+          is_pinned: false,
+          created_at: new Date().toISOString(),
+          title,
+        });
+      } catch {}
+
+      toast.success("Đã thêm ảnh vào kho lưu trữ thành công!");
+    }
   };
 
   const togglePin = async (it: any) => {
@@ -152,7 +282,6 @@ export default function ImagesPanel() {
     const updated = items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned } : x));
     setItems(updated);
 
-    // Cập nhật vào memories localStorage
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
       if (stored) {
@@ -167,7 +296,6 @@ export default function ImagesPanel() {
       }
     } catch {}
 
-    // Cập nhật Supabase
     try {
       await getSupabase().from("gallery").update({ is_pinned: nextPinned }).eq("id", it.id);
     } catch {}
@@ -180,7 +308,6 @@ export default function ImagesPanel() {
     const updated = items.filter((x) => x.id !== it.id);
     setItems(updated);
 
-    // Xóa trong memories localStorage
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
       if (stored) {
@@ -193,7 +320,6 @@ export default function ImagesPanel() {
       }
     } catch {}
 
-    // Xóa trong Supabase
     try {
       await getSupabase().from("gallery").delete().eq("id", it.id);
     } catch {}
@@ -207,7 +333,7 @@ export default function ImagesPanel() {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-ueh">Khu Vực Quản Lý & Upload Hình Ảnh</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Admin và Ban liên lạc có thể xem toàn bộ ảnh thành viên đóng góp, ghim ảnh lên đầu hoặc xóa/upload trực tiếp hình ảnh.
+            Admin có thể chủ động tải ảnh trực tiếp từ máy / điện thoại lưu lên Supabase Storage hoặc xem và ghim ảnh thành viên đóng góp.
           </p>
         </div>
 
@@ -215,44 +341,135 @@ export default function ImagesPanel() {
           onClick={() => setIsUploading(!isUploading)}
           className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-xs self-start sm:self-auto"
         >
-          <Plus size={15} /> Upload Thêm Ảnh
+          <Plus size={15} /> Upload Thêm Ảnh Mới
         </button>
       </div>
 
-      {/* Form Upload Thêm Ảnh */}
+      {/* Form Upload Thêm Ảnh Chủ Động */}
       {isUploading && (
-        <form onSubmit={handleUploadNew} className="mb-6 rounded-2xl border border-blue-100 bg-blue-50/50 p-4 shadow-xs animate-in fade-in space-y-3">
-          <h3 className="text-xs font-bold uppercase text-ueh">Thêm ảnh vào thư viện kỷ niệm:</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <form onSubmit={handleUploadNew} className="mb-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/80 via-white to-sky-50/50 p-4 sm:p-5 shadow-md animate-in fade-in space-y-4">
+          <div className="flex items-center justify-between border-b border-blue-100 pb-2.5">
+            <h3 className="text-xs sm:text-sm font-bold uppercase text-ueh flex items-center gap-1.5">
+              <Upload size={16} className="text-ueh-orange" /> Upload ảnh lưu trữ lên Supabase
+            </h3>
+            
+            {/* Chuyển chế độ File / URL */}
+            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200/60 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setUploadMode("file")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  uploadMode === "file" ? "bg-ueh text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <ImageIcon size={13} /> Tải từ máy
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadMode("url")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  uploadMode === "url" ? "bg-ueh text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Link2 size={13} /> Dán link URL
+              </button>
+            </div>
+          </div>
+
+          {uploadMode === "file" ? (
+            <div>
+              {/* Drag & drop or Click file picker */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="cursor-pointer border-2 border-dashed border-blue-300 rounded-2xl bg-white/80 p-6 text-center hover:bg-blue-50/50 hover:border-ueh transition-all group"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFilesSelect}
+                  className="hidden"
+                />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100/70 text-ueh group-hover:scale-110 transition-transform">
+                  <Upload size={22} />
+                </div>
+                <p className="mt-2 text-xs sm:text-sm font-bold text-slate-700">
+                  Nhấn để chọn ảnh từ máy / điện thoại (Hỗ trợ chọn nhiều ảnh)
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Định dạng PNG, JPG, WebP — Tự động lưu lên Supabase Storage bucket <code>alumni-media</code>
+                </p>
+              </div>
+
+              {/* Preview thumbnails */}
+              {previewUrls.length > 0 && (
+                <div className="mt-3 flex items-center gap-2 overflow-x-auto p-1 no-scrollbar">
+                  {previewUrls.map((url, idx) => (
+                    <div key={idx} className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-blue-200 shadow-2xs">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`preview ${idx}`} className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                  <span className="text-xs font-bold text-ueh pl-2 whitespace-nowrap">
+                    Đã chọn {previewUrls.length} ảnh
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <input
+                type="text"
+                required
+                placeholder="Dán link ảnh (https://... hoặc /images/...)"
+                value={uploadUrl}
+                onChange={(e) => setUploadUrl(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-800 focus:border-ueh focus:outline-none"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Tiêu đề ảnh / Ghi chú kỷ niệm:</label>
             <input
               type="text"
-              required
-              placeholder="Dán link ảnh (https://... hoặc /images/...)"
-              value={uploadUrl}
-              onChange={(e) => setUploadUrl(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-ueh focus:outline-none"
-            />
-            <input
-              type="text"
-              placeholder="Tiêu đề ảnh (VD: Kỷ niệm Cơ sở B...)"
+              placeholder="VD: Kỷ niệm gặp mặt tại Cơ sở B - UEH..."
               value={photoTitle}
               onChange={(e) => setPhotoTitle(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-ueh focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 focus:border-ueh focus:outline-none"
             />
           </div>
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-blue-100">
             <button
               type="button"
-              onClick={() => setIsUploading(false)}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              disabled={uploadingToSupabase}
+              onClick={() => {
+                setIsUploading(false);
+                setSelectedFiles([]);
+                setPreviewUrls([]);
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-ueh px-5 py-1.5 text-xs font-bold text-white hover:bg-ueh-light shadow-xs"
+              disabled={uploadingToSupabase}
+              className="flex items-center gap-1.5 rounded-xl bg-ueh px-6 py-2 text-xs font-bold text-white hover:bg-ueh-light shadow-xs disabled:opacity-50"
             >
-              Lưu Ảnh
+              {uploadingToSupabase ? (
+                <>
+                  <Loader2 size={14} className="animate-spin text-white" />
+                  <span>Đang tải lên Supabase...</span>
+                </>
+              ) : (
+                <>
+                  <Upload size={14} />
+                  <span>Lưu & Đăng Lên Thư Viện</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -261,7 +478,7 @@ export default function ImagesPanel() {
       {/* Grid Ảnh */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((it) => (
-          <div key={it.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs flex flex-col justify-between">
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs flex flex-col justify-between transition-all hover:shadow-md">
             <div>
               <div className="relative aspect-video bg-slate-900 overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -269,6 +486,11 @@ export default function ImagesPanel() {
                 {it.is_pinned && (
                   <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-ueh px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
                     <Pin size={10} /> Ghim nổi bật
+                  </span>
+                )}
+                {it.source === "supabase" && (
+                  <span className="absolute right-2 top-2 rounded-md bg-emerald-600/90 backdrop-blur-2xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                    Supabase
                   </span>
                 )}
               </div>

@@ -44,12 +44,26 @@ export default function EmbeddedCommunityChat() {
   const [upcomingBirthdays, setUpcomingBirthdays] = useState<BirthdayItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load from localStorage & Supabase
+  // Load from localStorage & Supabase (Lọc sạch các tin nhắn mẫu cũ)
   useEffect(() => {
     try {
       const stored = localStorage.getItem("tcdn4_community_chat");
       if (stored) {
-        setMessages(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(
+            (m: any) =>
+              m.id !== "msg-1" &&
+              m.id !== "msg-2" &&
+              m.id !== "msg-3" &&
+              !m.text?.includes("Chào cả nhà! Anh chị em đã đăng ký áo hết chưa?") &&
+              !m.text?.includes("Mình vừa chuyển khoản đăng ký 2 vé luôn rồi nè") &&
+              !m.text?.includes("Hôm đó lớp mình tập trung sớm 9h30 ở sảnh Cơ sở A nha mọi người!") &&
+              !m.text?.includes("Cơ sở A nha mọi người")
+          );
+          setMessages(cleaned);
+          localStorage.setItem("tcdn4_community_chat", JSON.stringify(cleaned));
+        }
       }
     } catch {}
 

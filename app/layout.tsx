@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ZaloWidget from "@/components/ZaloWidget";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import TeacherSecurityModal from "@/components/TeacherSecurityModal";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -107,6 +108,8 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
+            {/* Lớp bảo vệ vui vẻ: Xác thực đúng thầy giáo K33 */}
+            <TeacherSecurityModal />
             {/* Thanh menu định hướng phong cách App ở chân trang trên Mobile */}
             <MobileBottomNav />
           </AuthProvider>

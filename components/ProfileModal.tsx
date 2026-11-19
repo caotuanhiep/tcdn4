@@ -30,13 +30,32 @@ import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
 
+const CHIBI_AVATARS = [
+  { id: "boy", src: "/images/avatar-boy.png", label: "Bé Trai UEH" },
+  { id: "girl", src: "/images/avatar-girl.png", label: "Bé Gái UEH" },
+];
+
 const PRESET_AVATARS = [
+  "/images/avatar-boy.png",
+  "/images/avatar-girl.png",
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
   "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80",
+];
+
+const OTHER_PROVINCES_PRESETS = [
+  "Đà Nẵng",
+  "Nha Trang (Khánh Hòa)",
+  "Thừa Thiên Huế",
+  "Cần Thơ",
+  "Hải Phòng",
+  "Bình Dương",
+  "Đồng Nai",
+  "Bà Rịa - Vũng Tàu",
+  "Lâm Đồng (Đà Lạt)",
+  "Quảng Nam",
+  "Bình Định (Quy Nhơn)",
 ];
 
 const OVERSEAS_PRESETS = [
@@ -67,7 +86,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const [className, setClassName] = useState(profile?.class_name || "TC10");
   const [jobTitle, setJobTitle] = useState(profile?.job_title || "");
   const [company, setCompany] = useState(profile?.company || "");
-  const [location, setLocation] = useState(profile?.location_region || "hcm");
+  const [location, setLocation] = useState(profile?.location_region === "dn" ? "other" : (profile?.location_region || "hcm"));
   const [specificLocation, setSpecificLocation] = useState(profile?.specific_location || "");
   const [birthday, setBirthday] = useState(profile?.birthday || "1989-11-20");
   const [phone, setPhone] = useState(profile?.phone || "");
@@ -178,6 +197,22 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         delivery_address: deliveryAddress.trim(),
       });
 
+      // Bắn thông báo Điểm danh thành viên mới vào Zalo Bot
+      try {
+        fetch("/api/zalo-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "checkin",
+            fullName: fullName.trim(),
+            className,
+            jobTitle: jobTitle.trim(),
+            company: company.trim(),
+            location: specificLocation.trim() || (location === "hcm" ? "TP.HCM" : location === "hn" ? "Hà Nội" : "Tỉnh khác"),
+          }),
+        });
+      } catch {}
+
       // 2. Nếu đăng ký tham gia -> cập nhật vào danh sách sự kiện EventSection (localStorage)
       if (attendanceStatus === "attending") {
         try {
@@ -210,12 +245,14 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              type: "registration",
               fullName: fullName.trim(),
               className,
               shirtSize,
               phone: phone.trim(),
               address: deliveryAddress.trim() || "Tại sự kiện",
               paidAmount: bankInfo.amount,
+              guestsCount,
             }),
           });
         } catch {}
@@ -353,10 +390,30 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                         disabled={uploadingAvatar}
                       />
                     </label>
+
+                    {/* 2 Chibi Avatars Chọn nhanh theo yêu cầu */}
+                    <div className="flex items-center gap-1.5">
+                      {CHIBI_AVATARS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setAvatarUrl(item.src)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold border transition-all ${
+                            avatarUrl === item.src
+                              ? "bg-ueh text-white border-ueh shadow-xs scale-105"
+                              : "bg-white text-slate-700 border-slate-200 hover:border-ueh"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.src} alt={item.label} className="h-4 w-4 rounded-full object-cover" />
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-slate-400 mr-1">Hoặc chọn avatar:</span>
+                    <span className="text-[10px] text-slate-400 mr-1">Hoặc ảnh khác:</span>
                     {PRESET_AVATARS.map((src, idx) => (
                       <button
                         key={idx}
@@ -415,8 +472,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                   {[
                     { id: "hcm", label: "TP. Hồ Chí Minh" },
                     { id: "hn", label: "Hà Nội" },
-                    { id: "dn", label: "Đà Nẵng" },
-                    { id: "overseas", label: "Quốc tế / Hải ngoại" },
+                    { id: "other", label: "Tỉnh khác" },
+                    { id: "overseas", label: "Xuất Ngoại" },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -433,8 +490,38 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
 
-                {/* Nếu chọn Quốc tế / Hải ngoại -> Hiện danh sách chọn Quốc gia */}
-                {location === "overseas" ? (
+                {/* Nếu chọn Tỉnh khác -> Hiện danh sách chọn Tỉnh lớn + ô điền thêm */}
+                {location === "other" ? (
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
+                    <span className="text-[11px] font-bold text-ueh block mb-1.5">
+                      📍 Chọn nhanh tỉnh / thành phố:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {OTHER_PROVINCES_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setSpecificLocation(preset)}
+                          className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                            specificLocation === preset
+                              ? "bg-ueh text-white border-ueh shadow-2xs"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-ueh"
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={specificLocation}
+                      onChange={(e) => setSpecificLocation(e.target.value)}
+                      placeholder="Hoặc điền thêm tỉnh thành của bạn (VD: Đà Nẵng, Nha Trang, Huế...)"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                    />
+                  </div>
+                ) : location === "overseas" ? (
+                  /* Nếu chọn Xuất Ngoại -> Hiện danh sách Quốc gia */
                   <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
                     <span className="text-[11px] font-bold text-ueh-orange block mb-1.5">
                       🌏 Bạn đang sinh sống / làm việc tại quốc gia nào?

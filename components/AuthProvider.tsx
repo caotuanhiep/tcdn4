@@ -190,7 +190,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       profile,
       loading,
-      isAdmin: profile?.role === "admin" || user?.email === "caotuanhiep@gmail.com" || user?.email?.includes("admin") || false,
+      isAdmin:
+        profile?.role === "admin" ||
+        profile?.role === "committee" ||
+        user?.email === "caotuanhiep@gmail.com" ||
+        user?.email?.includes("admin") ||
+        false,
       openLogin,
       openProfile,
       closeProfile,
