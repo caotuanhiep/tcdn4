@@ -138,48 +138,50 @@ export default function MemoriesGallery() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tải danh sách ảnh từ Supabase (cả khách chưa đăng nhập cũng xem được) và kết hợp localStorage
+  // Tải danh sách ảnh từ Supabase (cả khách chưa đăng nhập / mở ẩn danh cũng xem được) và kết hợp localStorage
   const loadStoredPhotos = useCallback(async () => {
     const list: AlbumPhoto[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Tải ảnh từ Supabase Cloud Database (bảng gallery)
+    // 1. Tải ảnh từ Supabase Cloud qua API /api/gallery
     try {
-      const { data: dbGallery } = await getSupabase()
-        .from("gallery")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (dbGallery && dbGallery.length > 0) {
-        dbGallery.forEach((g: any) => {
-          const img = g.image_url || g.url;
-          if (img && !seenIds.has(g.id)) {
-            let photoTopic = g.topic || g.category || "Chưa phân loại";
-            if (photoTopic === "Kỷ niệm" || !photoTopic) {
-              photoTopic = "Chưa phân loại";
+      const res = await fetch("/api/gallery");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.photos && Array.isArray(data.photos)) {
+          data.photos.forEach((p: AlbumPhoto) => {
+            if (!seenIds.has(p.id)) {
+              list.push(p);
+              seenIds.add(p.id);
             }
-            list.push({
-              id: g.id,
-              title: g.title || "Ảnh kỷ niệm",
-              imgSrc: img,
-              type: "image",
-              category: photoTopic,
-              topic: photoTopic,
-              caption: g.caption || undefined,
-              likes: g.likes || 1,
-              comments: [],
-              uploader: g.uploader || "Thành viên K33",
-              uploaderClass: g.uploader_class || "TC10",
-              createdAt: g.created_at ? new Date(g.created_at).getTime() : Date.now(),
-              isPinned: Boolean(g.is_pinned),
-            });
-            seenIds.add(g.id);
-          }
-        });
+          });
+        }
       }
-    } catch {}
+    } catch (err) {
+      console.warn("Lỗi tải ảnh qua API /api/gallery:", err);
+    }
 
-    // 2. Kết hợp với ảnh trong localStorage
+    // 2. Tải dự phòng trực tiếp từ Supabase Storage CDN nếu API có độ trễ
+    if (list.length === 0 && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      try {
+        const cdnRes = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/alumni-media/gallery/gallery-manifest.json?t=${Date.now()}`
+        );
+        if (cdnRes.ok) {
+          const cdnData = await cdnRes.json();
+          if (Array.isArray(cdnData)) {
+            cdnData.forEach((p: AlbumPhoto) => {
+              if (!seenIds.has(p.id)) {
+                list.push(p);
+                seenIds.add(p.id);
+              }
+            });
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Kết hợp với ảnh trong localStorage nếu có
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -373,9 +375,10 @@ export default function MemoriesGallery() {
       openLogin();
       return;
     }
+    let nextState = false;
     const updated = photos.map((p) => {
       if (p.id === photoId) {
-        const nextState = !p.isPinned;
+        nextState = !p.isPinned;
         toast.success(nextState ? "Đã ghim ảnh lên đầu bộ bài!" : "Đã bỏ ghim ảnh");
         return { ...p, isPinned: nextState };
       }
@@ -385,6 +388,13 @@ export default function MemoriesGallery() {
     if (activePhoto?.id === photoId) {
       setActivePhoto((prev) => (prev ? { ...prev, isPinned: !prev.isPinned } : null));
     }
+
+    // Đồng bộ lên Cloud
+    fetch("/api/gallery", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: photoId, isPinned: nextState }),
+    }).catch(() => {});
   };
 
   const handleDeletePhoto = (photoId: string, e?: React.MouseEvent) => {
@@ -405,6 +415,9 @@ export default function MemoriesGallery() {
       setActivePhoto(null);
     }
     toast.success("Đã xóa ảnh khỏi thư viện");
+
+    // Đồng bộ xóa trên Cloud
+    fetch(`/api/gallery?id=${photoId}`, { method: "DELETE" }).catch(() => {});
   };
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -528,72 +541,53 @@ export default function MemoriesGallery() {
     const now = Date.now();
     const newPhotos: AlbumPhoto[] = [];
 
-    for (let idx = 0; idx < stagedFiles.length; idx++) {
-      const staged = stagedFiles[idx];
-      setUploadProgressText(`Đang tải ảnh ${idx + 1}/${stagedFiles.length} lên Cloud Supabase...`);
+    setUploadProgressText("Đang đồng bộ ảnh lên Cloud Supabase...");
 
-      let finalImgUrl = staged.preview;
-
-      // Upload file trực tiếp lên Supabase Storage bucket 'alumni-media'
-      try {
-        const fileExt = (staged.file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const filePath = `gallery/${user.id}/${now}-${idx}-${Math.random().toString(36).slice(2, 6)}.${fileExt}`;
-
-        const { data: upRes, error: upErr } = await getSupabase()
-          .storage
-          .from("alumni-media")
-          .upload(filePath, staged.file, {
-            contentType: staged.file.type || "image/jpeg",
-            upsert: true,
-          });
-
-        if (!upErr && upRes) {
-          const { data: pubData } = getSupabase()
-            .storage
-            .from("alumni-media")
-            .getPublicUrl(filePath);
-          if (pubData?.publicUrl) {
-            finalImgUrl = pubData.publicUrl;
-          }
-        }
-      } catch (err) {
-        console.warn("Storage upload:", err);
+    // Upload files qua API /api/gallery để lưu trực tiếp lên Supabase Storage với quyền Service Role
+    try {
+      const formData = new FormData();
+      stagedFiles.forEach((staged) => formData.append("files", staged.file));
+      formData.append("topic", finalTopic);
+      formData.append("uploader", defaultUploader);
+      formData.append("uploaderClass", resolvedClass);
+      if (batchCommonCaption.trim()) {
+        formData.append("caption", batchCommonCaption.trim());
       }
 
-      const photoId = `p-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
-      const newPhotoItem: AlbumPhoto = {
-        id: photoId,
-        title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
-        imgSrc: finalImgUrl,
-        type: "image",
-        category: finalTopic,
-        topic: finalTopic,
-        caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
-        likes: 1,
-        comments: [],
-        uploader: defaultUploader,
-        uploaderClass: resolvedClass,
-        createdAt: now + idx,
-        isPinned: staged.isPinned,
-      };
+      const res = await fetch("/api/gallery", {
+        method: "POST",
+        body: formData,
+      });
 
-      newPhotos.push(newPhotoItem);
+      const result = await res.json();
+      if (res.ok && result.success && Array.isArray(result.addedPhotos)) {
+        newPhotos.push(...result.addedPhotos);
+      }
+    } catch (err) {
+      console.warn("Lỗi upload qua /api/gallery, chuyển sang fallback:", err);
+    }
 
-      // Lưu bản ghi vào bảng gallery trên Supabase
-      try {
-        await getSupabase().from("gallery").insert({
+    // Fallback nếu API chưa hoàn tất: Dùng ảnh nén base64 cục bộ
+    if (newPhotos.length === 0) {
+      for (let idx = 0; idx < stagedFiles.length; idx++) {
+        const staged = stagedFiles[idx];
+        const photoId = `p-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
+        newPhotos.push({
           id: photoId,
-          image_url: finalImgUrl,
-          title: newPhotoItem.title,
-          caption: newPhotoItem.caption || null,
+          title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
+          imgSrc: staged.preview,
+          type: "image",
           category: finalTopic,
           topic: finalTopic,
+          caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
+          likes: 1,
+          comments: [],
           uploader: defaultUploader,
-          uploader_class: resolvedClass,
-          user_id: user.id,
-          is_pinned: staged.isPinned,
+          uploaderClass: resolvedClass,
+          createdAt: now + idx,
+          isPinned: staged.isPinned,
         });
-      } catch {}
+      }
     }
 
     // Gộp ảnh: Ảnh mới upload sẽ đứng lên trước (chỉ đứng sau các ảnh được Ghim)

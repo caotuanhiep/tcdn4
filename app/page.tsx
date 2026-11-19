@@ -21,9 +21,9 @@ export default function HomePage() {
       {/* 2. Chương trình 15 năm Gặp mặt (Đưa lên thế chỗ cho box chat ngay sau Hero) */}
       <EventSection />
 
-      {/* 3. Box Chat Cộng Đồng & Chúc Mừng Sinh Nhật (Đưa xuống thế chỗ cho EventSection) */}
-      <section className="bg-gradient-to-b from-white via-slate-50/70 to-slate-100/60 py-10 sm:py-14 px-4 sm:px-6 border-b border-slate-200/60 overflow-hidden">
-        <div className="mx-auto max-w-5xl">
+      {/* 3. Box Chat Cộng Đồng & Chúc Mừng Sinh Nhật (Độ rộng chuẩn max-w-6xl đồng bộ toàn trang) */}
+      <section className="bg-gradient-to-b from-white via-slate-50/70 to-slate-100/60 py-8 sm:py-12 border-b border-slate-200/60 overflow-hidden">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <EmbeddedCommunityChat />
         </div>
       </section>

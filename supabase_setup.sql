@@ -49,6 +49,20 @@ CREATE TABLE IF NOT EXISTS public.gallery (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Tự động bổ sung đầy đủ các cột nếu bảng gallery đã được tạo từ trước:
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS url TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS caption TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Chưa phân loại';
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS topic TEXT DEFAULT 'Chưa phân loại';
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS uploader TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS uploader_name TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS uploader_class TEXT;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.gallery ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0;
+
 -- Bật RLS cho bảng gallery
 ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
 

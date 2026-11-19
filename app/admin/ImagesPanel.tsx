@@ -54,52 +54,59 @@ export default function ImagesPanel() {
     const list: any[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Tải ảnh từ Góc Kỷ Niệm (tcdn4_memories_gallery do thành viên đóng góp)
+    // 1. Tải ảnh đồng bộ từ API Cloud (/api/gallery) lưu trên Supabase Storage
+    try {
+      const res = await fetch("/api/gallery");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.photos && Array.isArray(data.photos)) {
+          data.photos.forEach((p: any) => {
+            let topic = p.topic || p.category || "Chưa phân loại";
+            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
+            list.push({
+              id: p.id,
+              image_url: p.imgSrc || p.image_url,
+              user_id: p.uploader || "Ban liên lạc (Admin)",
+              is_pinned: !!p.isPinned,
+              created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+              title: p.title || "Ảnh kỷ niệm",
+              topic: topic,
+              category: topic,
+              source: "supabase",
+            });
+            seenIds.add(p.id);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Lỗi tải ảnh từ /api/gallery:", err);
+    }
+
+    // 2. Kết hợp với ảnh trong localStorage nếu có
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           parsed.forEach((p: any) => {
-            let topic = p.topic || p.category || "Chưa phân loại";
-            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
-            list.push({
-              id: p.id,
-              image_url: p.imgSrc || p.image_url,
-              user_id: p.uploader || "Thành viên",
-              is_pinned: !!p.isPinned,
-              created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
-              title: p.title || "Ảnh kỷ niệm",
-              topic: topic,
-              category: topic,
-              source: "memories",
-            });
-            seenIds.add(p.id);
+            if (!seenIds.has(p.id)) {
+              let topic = p.topic || p.category || "Chưa phân loại";
+              if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
+              list.push({
+                id: p.id,
+                image_url: p.imgSrc || p.image_url,
+                user_id: p.uploader || "Thành viên",
+                is_pinned: !!p.isPinned,
+                created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+                title: p.title || "Ảnh kỷ niệm",
+                topic: topic,
+                category: topic,
+                source: "memories",
+              });
+              seenIds.add(p.id);
+            }
           });
         }
-      }
-    } catch {}
-
-    // 2. Tải ảnh từ Supabase gallery
-    try {
-      const { data, error } = await getSupabase()
-        .from("gallery")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
-        data.forEach((d: any) => {
-          if (!seenIds.has(d.id)) {
-            let topic = d.topic || d.category || "Chưa phân loại";
-            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
-            list.push({
-              ...d,
-              topic,
-              category: topic,
-              source: "supabase",
-            });
-            seenIds.add(d.id);
-          }
-        });
       }
     } catch {}
 
@@ -164,103 +171,53 @@ export default function ImagesPanel() {
 
       setUploadingToSupabase(true);
       try {
-        const addedItems: any[] = [];
-        const memoriesToAdd: any[] = [];
-
-        for (let i = 0; i < selectedFiles.length; i++) {
-          const file = selectedFiles[i];
-          const fileExt = file.name.split(".").pop() || "jpg";
-          const fileName = `admin_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-          const filePath = `gallery/${fileName}`;
-
-          let publicUrl = "";
-
-          // Upload lên Supabase Storage bucket 'alumni-media'
-          const { error: uploadError } = await getSupabase()
-            .storage
-            .from("alumni-media")
-            .upload(filePath, file, { upsert: true });
-
-          if (!uploadError) {
-            const { data: publicData } = getSupabase()
-              .storage
-              .from("alumni-media")
-              .getPublicUrl(filePath);
-            publicUrl = publicData.publicUrl;
-          } else {
-            // Fallback đọc dạng Base64 data URL
-            publicUrl = await new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onload = (ev) => resolve(ev.target?.result as string);
-              reader.readAsDataURL(file);
-            });
-          }
-
-          const newId = `img-${Date.now()}-${i}`;
-          const itemTitle = photoTitle.trim() || file.name.replace(/\.[^/.]+$/, "");
-
-          // 1. Lưu vào bảng gallery Supabase
-          try {
-            await getSupabase().from("gallery").insert({
-              id: newId,
-              image_url: publicUrl,
-              user_id: "admin",
-              uploader_name: "Ban liên lạc (Admin)",
-              uploader_class: "TC10",
-              is_pinned: false,
-              created_at: new Date().toISOString(),
-              title: itemTitle,
-              topic: finalTopic,
-              category: finalTopic,
-            });
-          } catch {}
-
-          const itemObj = {
-            id: newId,
-            image_url: publicUrl,
-            user_id: "Ban liên lạc (Admin)",
-            is_pinned: false,
-            created_at: new Date().toISOString(),
-            title: itemTitle,
-            topic: finalTopic,
-            category: finalTopic,
-            source: "supabase",
-          };
-
-          addedItems.push(itemObj);
-
-          memoriesToAdd.push({
-            id: newId,
-            title: itemTitle,
-            imgSrc: publicUrl,
-            type: "image",
-            category: finalTopic,
-            topic: finalTopic,
-            likes: 1,
-            comments: [],
-            uploader: "Ban liên lạc (Admin)",
-            uploaderClass: "TC10",
-            createdAt: Date.now(),
-            isPinned: false,
-          });
+        const formData = new FormData();
+        selectedFiles.forEach((f) => formData.append("files", f));
+        formData.append("topic", finalTopic);
+        formData.append("uploader", "Ban liên lạc (Admin)");
+        formData.append("uploaderClass", "TC10");
+        if (photoTitle.trim()) {
+          formData.append("title", photoTitle.trim());
         }
 
-        // Lưu vào memories gallery localStorage
+        const res = await fetch("/api/gallery", {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+          throw new Error(result.error || "Không thể lưu ảnh lên Cloud");
+        }
+
+        const addedItems = (result.addedPhotos || []).map((p: any) => ({
+          id: p.id,
+          image_url: p.imgSrc,
+          user_id: p.uploader,
+          is_pinned: !!p.isPinned,
+          created_at: new Date(p.createdAt || Date.now()).toISOString(),
+          title: p.title,
+          topic: p.topic,
+          category: p.category,
+          source: "supabase",
+        }));
+
+        // Đồng bộ vào memories gallery localStorage để các tab mở sẵn cũng thấy ngay
         try {
           const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
           const list = stored ? JSON.parse(stored) : [];
-          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify([...memoriesToAdd, ...list]));
+          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify([...(result.addedPhotos || []), ...list]));
           window.dispatchEvent(new Event("tcdn4_memories_updated"));
         } catch {}
 
-        setItems([...addedItems, ...items]);
+        setItems((prev) => [...addedItems, ...prev]);
         setSelectedFiles([]);
         setPreviewUrls([]);
         setPhotoTitle("");
         setIsCustomTopic(false);
         setCustomTopicName("");
         setIsUploading(false);
-        toast.success(`Đã upload ${addedItems.length} ảnh vào bộ "${finalTopic}" thành công!`);
+        toast.success(`Đã upload ${addedItems.length} ảnh vào bộ "${finalTopic}" lên Cloud thành công!`);
       } catch (err: any) {
         toast.error(`Lỗi khi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
       } finally {
@@ -275,6 +232,29 @@ export default function ImagesPanel() {
 
       const newId = `img-${Date.now()}`;
       const title = photoTitle.trim() || "Ảnh kỷ niệm mới";
+      const newPhotoObj = {
+        id: newId,
+        title,
+        imgSrc: uploadUrl.trim(),
+        type: "image",
+        category: finalTopic,
+        topic: finalTopic,
+        likes: 1,
+        comments: [],
+        uploader: "Ban liên lạc (Admin)",
+        uploaderClass: "TC10",
+        createdAt: Date.now(),
+        isPinned: false,
+      };
+
+      try {
+        await fetch("/api/gallery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", photo: newPhotoObj }),
+        });
+      } catch {}
+
       const newItem = {
         id: newId,
         image_url: uploadUrl.trim(),
@@ -284,7 +264,7 @@ export default function ImagesPanel() {
         title,
         topic: finalTopic,
         category: finalTopic,
-        source: "memories",
+        source: "supabase",
       };
 
       setItems([newItem, ...items]);
@@ -298,38 +278,9 @@ export default function ImagesPanel() {
       try {
         const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
         const list = stored ? JSON.parse(stored) : [];
-        list.unshift({
-          id: newId,
-          title,
-          imgSrc: uploadUrl.trim(),
-          type: "image",
-          category: finalTopic,
-          topic: finalTopic,
-          likes: 1,
-          comments: [],
-          uploader: "Ban liên lạc (Admin)",
-          uploaderClass: "TC10",
-          createdAt: Date.now(),
-          isPinned: false,
-        });
+        list.unshift(newPhotoObj);
         localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(list));
         window.dispatchEvent(new Event("tcdn4_memories_updated"));
-      } catch {}
-
-      // Thêm vào Supabase
-      try {
-        await getSupabase().from("gallery").insert({
-          id: newId,
-          image_url: uploadUrl.trim(),
-          user_id: "admin",
-          uploader_name: "Ban liên lạc (Admin)",
-          uploader_class: "TC10",
-          is_pinned: false,
-          created_at: new Date().toISOString(),
-          title,
-          topic: finalTopic,
-          category: finalTopic,
-        });
       } catch {}
 
       toast.success(`Đã thêm ảnh vào bộ "${finalTopic}" thành công!`);
@@ -340,6 +291,14 @@ export default function ImagesPanel() {
     const nextPinned = !it.is_pinned;
     const updated = items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned } : x));
     setItems(updated);
+
+    try {
+      await fetch("/api/gallery", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, isPinned: nextPinned }),
+      });
+    } catch {}
 
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
@@ -355,10 +314,6 @@ export default function ImagesPanel() {
       }
     } catch {}
 
-    try {
-      await getSupabase().from("gallery").update({ is_pinned: nextPinned }).eq("id", it.id);
-    } catch {}
-
     toast.success(nextPinned ? "Đã ghim ảnh lên đầu." : "Đã bỏ ghim ảnh.");
   };
 
@@ -366,6 +321,10 @@ export default function ImagesPanel() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa ảnh này khỏi thư viện?")) return;
     const updated = items.filter((x) => x.id !== it.id);
     setItems(updated);
+
+    try {
+      await fetch(`/api/gallery?id=${it.id}`, { method: "DELETE" });
+    } catch {}
 
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
@@ -377,10 +336,6 @@ export default function ImagesPanel() {
           window.dispatchEvent(new Event("tcdn4_memories_updated"));
         }
       }
-    } catch {}
-
-    try {
-      await getSupabase().from("gallery").delete().eq("id", it.id);
     } catch {}
 
     toast.success("Đã xóa ảnh thành công.");

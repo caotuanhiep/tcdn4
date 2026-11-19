@@ -163,8 +163,8 @@ export default function EmbeddedCommunityChat() {
   };
 
   return (
-    <div className="w-full mt-6">
-      <div className="overflow-hidden rounded-2xl border border-blue-200/80 bg-white shadow-lg text-left">
+    <div className="w-full">
+      <div className="overflow-hidden rounded-3xl border border-blue-200/80 bg-white shadow-lg text-left">
         
         {/* Chat Box Header: Tối ưu chuyên nghiệp */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 bg-gradient-to-r from-[#003B5C] to-[#004e7a] px-4 sm:px-6 py-3 text-white">
