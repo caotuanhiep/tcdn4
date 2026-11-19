@@ -1049,28 +1049,30 @@ export default function MemoriesGallery() {
           <div className="relative py-8 sm:py-12">
             
             {/* Bàn nỉ trưng bày bộ bài (Felt Deck Display Canvas) */}
-            <div className="relative mx-auto flex h-[380px] sm:h-[460px] md:h-[500px] w-full max-w-5xl items-center justify-center select-none overflow-hidden sm:overflow-visible">
+            <div className="relative mx-auto flex h-[440px] xs:h-[480px] sm:h-[530px] md:h-[590px] lg:h-[630px] w-full max-w-6xl items-center justify-center select-none overflow-hidden sm:overflow-visible">
               
               {/* Vòng tròn hào quang phía sau tâm bộ bài */}
-              <div className="absolute h-80 w-80 rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
+              <div className="absolute h-96 w-96 rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
 
               {/* Các thẻ bài xòe thành cánh cung */}
               {sortedPhotos.map((item, idx) => {
                 const diff = idx - activeCardIndex;
                 const absDiff = Math.abs(diff);
 
-                // Chỉ hiển thị tối đa 7 lá bài gần tâm nhất để giữ hiệu ứng xòe bài mượt mà
-                if (absDiff > 4) return null;
+                // Chỉ hiển thị tối đa 5 lá bài gần tâm nhất trên mobile và 7 lá trên desktop
+                if (absDiff > 3) return null;
 
                 const isCurrent = diff === 0;
                 const isLiked = likedPhotoIds.includes(item.id);
 
                 // Góc xoay và độ dạt theo dạng xòe bài cầm tay
-                const rotateDeg = diff * 5.5; // -16.5deg đến +16.5deg
-                const translateX = diff * (typeof window !== "undefined" && window.innerWidth < 640 ? 46 : 76);
-                const translateY = Math.min(absDiff * 14, 60);
+                // Trên mobile lá bài to chiếm ~78% màn hình, các lá bên cạnh lấp ló ở 2 mép
+                const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+                const rotateDeg = diff * (isMobile ? 3.5 : 5);
+                const translateX = diff * (isMobile ? 38 : 88);
+                const translateY = Math.min(absDiff * (isMobile ? 8 : 14), isMobile ? 30 : 55);
                 const zIndex = 30 - absDiff;
-                const scale = isCurrent ? 1.05 : Math.max(0.85, 1 - absDiff * 0.05);
+                const scale = isCurrent ? 1 : Math.max(0.88, 1 - absDiff * 0.05);
 
                 return (
                   <div
@@ -1086,14 +1088,14 @@ export default function MemoriesGallery() {
                       transform: `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotateDeg}deg) scale(${scale})`,
                       zIndex,
                     }}
-                    className={`group absolute cursor-pointer rounded-2xl bg-white p-2.5 sm:p-3 pb-8 sm:pb-9 shadow-2xl transition-all duration-300 ease-out hover:-translate-y-6 hover:rotate-0 hover:scale-110 hover:z-50 ${
+                    className={`group absolute cursor-pointer rounded-3xl bg-white p-2.5 sm:p-3 pb-3 sm:pb-3.5 shadow-2xl transition-all duration-300 ease-out hover:-translate-y-6 hover:rotate-0 hover:scale-105 hover:z-50 ${
                       isCurrent
                         ? "ring-4 ring-ueh/80 shadow-ueh/30"
                         : "opacity-90 hover:opacity-100"
                     }`}
                   >
-                    {/* Thẻ ảnh dạng Polaroid / Card Game cao cấp */}
-                    <div className="relative h-48 w-36 sm:h-64 sm:w-48 md:h-76 md:w-56 overflow-hidden rounded-xl bg-slate-900 border border-slate-100">
+                    {/* Thẻ ảnh dạng Polaroid / Card Game cao cấp: Kích thước mở rộng tối đa trên cả Mobile và Desktop */}
+                    <div className="relative h-[330px] w-[76vw] max-w-[310px] min-w-[250px] xs:h-[360px] sm:h-[410px] sm:w-[280px] md:h-[460px] md:w-[330px] lg:h-[490px] lg:w-[360px] overflow-hidden rounded-2xl bg-slate-900 border border-slate-100 shadow-inner">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={item.imgSrc}
@@ -1103,52 +1105,58 @@ export default function MemoriesGallery() {
 
                       {/* Huy hiệu Ghim Nổi Bật (Vàng Kim) */}
                       {item.isPinned && (
-                        <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2 py-0.5 text-[9px] sm:text-[10px] font-black text-slate-950 shadow-md">
-                          <Pin size={11} className="fill-slate-950" /> GHIM ĐẦU
+                        <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2.5 py-0.5 text-[10px] sm:text-xs font-black text-slate-950 shadow-md z-10">
+                          <Pin size={12} className="fill-slate-950" /> GHIM ĐẦU
                         </div>
                       )}
 
                       {/* Nút Xem chi tiết nhanh khi hover */}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-ueh shadow-lg">
-                          <Eye size={13} /> Xem Lớn
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3.5 py-2 text-xs font-bold text-ueh shadow-lg">
+                          <Eye size={14} /> Chạm để phóng to ảnh
                         </span>
                       </div>
 
                       {/* Lớp gradient nhẹ bảo vệ chữ */}
-                      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 to-transparent" />
+                      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
                       
-                      <div className="absolute bottom-1.5 left-2 right-2 text-white text-[10px] sm:text-xs font-bold truncate">
+                      <div className="absolute bottom-2.5 left-3 right-3 text-white text-xs sm:text-sm font-bold truncate drop-shadow-sm z-10">
                         {item.title}
                       </div>
                     </div>
 
                     {/* Phần lề dưới của ảnh Polaroid */}
-                    <div className="mt-2 flex items-center justify-between px-1 text-[10px] sm:text-[11px] text-slate-600 font-semibold">
-                      <span className="flex items-center gap-1 truncate text-ueh max-w-[100px] sm:max-w-[130px]">
-                        <User size={11} className="shrink-0 text-slate-400" /> {item.uploader}
+                    <div className="mt-2.5 flex items-center justify-between px-1 text-xs text-slate-700 font-semibold">
+                      <span className="flex items-center gap-1.5 truncate text-ueh font-bold max-w-[140px] sm:max-w-[180px]">
+                        <User size={13} className="shrink-0 text-slate-400" />
+                        <span className="truncate">{item.uploader}</span>
+                        {item.uploaderClass && (
+                          <span className="rounded bg-blue-100 px-1.5 py-0.2 text-[10px] text-ueh font-black">
+                            {item.uploaderClass}
+                          </span>
+                        )}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => handleToggleLike(item.id, e)}
-                          className={`flex items-center gap-0.5 transition-colors ${
-                            isLiked ? "text-rose-500 font-bold" : "text-slate-400 hover:text-rose-500"
+                          className={`flex items-center gap-1 transition-colors px-2 py-0.5 rounded-full ${
+                            isLiked ? "bg-rose-50 text-rose-500 font-bold" : "text-slate-500 hover:text-rose-500 hover:bg-slate-100"
                           }`}
                           title="Thả tim"
                         >
-                          <Heart size={12} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
+                          <Heart size={13} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
                           <span>{item.likes}</span>
                         </button>
 
                         <button
                           onClick={(e) => handleTogglePin(item.id, e)}
-                          className={`transition-colors p-0.5 rounded ${
-                            item.isPinned ? "text-amber-500" : "text-slate-300 hover:text-amber-500"
+                          className={`transition-colors p-1 rounded-full ${
+                            item.isPinned ? "text-amber-500 bg-amber-50" : "text-slate-300 hover:text-amber-500 hover:bg-slate-100"
                           }`}
                           title={item.isPinned ? "Bỏ ghim" : "Ghim lên đầu"}
                         >
-                          <Pin size={12} className={item.isPinned ? "fill-amber-500" : ""} />
+                          <Pin size={13} className={item.isPinned ? "fill-amber-500" : ""} />
                         </button>
                       </div>
                     </div>
@@ -1287,15 +1295,15 @@ export default function MemoriesGallery() {
       </div>
 
       {/* =========================================================================
-          MODAL XEM CHI TIẾT ẢNH & BÌNH LUẬN (LIGHTBOX)
+          MODAL XEM CHI TIẾT ẢNH & BÌNH LUẬN (LIGHTBOX TOÀN DIỆN TẬN DỤNG HẾT KHÔNG GIAN)
           ========================================================================= */}
       {activePhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-md animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-1 sm:p-3 md:p-6 backdrop-blur-md animate-in fade-in duration-150"
           onClick={() => setActivePhoto(null)}
         >
           <div
-            className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl md:flex-row"
+            className="relative flex h-[96vh] md:h-[90vh] w-full max-w-[98vw] xl:max-w-[1450px] 2xl:max-w-[1600px] flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-900 text-white shadow-2xl md:flex-row"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1306,10 +1314,10 @@ export default function MemoriesGallery() {
               <X size={18} />
             </button>
 
-            {/* Khung ảnh to: Hỗ trợ Click ảnh chuyển tiếp, nút Mũi tên Trái/Phải và Phím điều hướng */}
+            {/* Khung ảnh to: Tối đa hóa diện tích, Click ảnh chuyển tiếp, nút Mũi tên Trái/Phải và Phím điều hướng */}
             <div
               onClick={handleNextPhoto}
-              className="relative flex flex-1 items-center justify-center bg-black p-2 sm:p-4 min-h-[280px] md:min-h-[480px] cursor-pointer select-none group"
+              className="relative flex flex-1 h-[58vh] xs:h-[62vh] md:h-full items-center justify-center bg-black p-1 sm:p-3 md:p-6 cursor-pointer select-none group overflow-hidden"
               title="Click vào ảnh để chuyển ảnh kế tiếp (hoặc dùng phím mũi tên ◀ ▶)"
             >
               {/* Nút lùi ảnh trước đó */}
@@ -1320,10 +1328,10 @@ export default function MemoriesGallery() {
                     e.stopPropagation();
                     handlePrevPhoto();
                   }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
+                  className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
                   title="Ảnh trước đó (Phím ◀)"
                 >
-                  <ChevronLeft size={24} />
+                  <ChevronLeft size={22} />
                 </button>
               )}
 
@@ -1335,10 +1343,10 @@ export default function MemoriesGallery() {
                     e.stopPropagation();
                     handleNextPhoto();
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
+                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20"
                   title="Ảnh kế tiếp (Phím ▶ hoặc Click vào ảnh)"
                 >
-                  <ChevronRight size={24} />
+                  <ChevronRight size={22} />
                 </button>
               )}
 
@@ -1346,11 +1354,11 @@ export default function MemoriesGallery() {
               <img
                 src={activePhoto.imgSrc}
                 alt={activePhoto.title}
-                className="max-h-[55vh] md:max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl transition-all duration-200"
+                className="h-full w-full max-h-[56vh] xs:max-h-[60vh] md:max-h-[85vh] object-contain rounded-xl shadow-2xl transition-all duration-200"
               />
 
               {/* Badge số thứ tự ảnh & hướng dẫn */}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-black/75 px-3.5 py-1 text-[11px] font-bold text-white backdrop-blur-md border border-white/20 shadow-md pointer-events-none">
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-black/75 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-md border border-white/20 shadow-md pointer-events-none">
                 <span>
                   Ảnh {sortedPhotos.findIndex((p) => p.id === activePhoto.id) + 1} / {sortedPhotos.length}
                 </span>
@@ -1359,7 +1367,7 @@ export default function MemoriesGallery() {
             </div>
 
             {/* Cột bình luận và thông tin */}
-            <div className="flex w-full md:w-80 lg:w-96 flex-col justify-between border-t md:border-t-0 md:border-l border-white/10 bg-slate-900/95 p-4 sm:p-5">
+            <div className="flex flex-1 md:flex-initial w-full md:w-80 lg:w-96 flex-col justify-between border-t md:border-t-0 md:border-l border-white/10 bg-slate-900/95 p-3.5 sm:p-5 overflow-y-auto">
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
