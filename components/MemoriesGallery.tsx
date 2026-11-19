@@ -52,11 +52,12 @@ export interface AlbumPhoto {
 }
 
 export const DEFAULT_TOPICS = [
-  "Thời sinh viên & Giảng đường",
-  "Lễ tốt nghiệp UEH",
-  "Dã ngoại & Du lịch",
-  "Họp lớp qua các năm",
+  "Thời sinh viên",
+  "Cuộc sống hiện tại",
+  "Dã ngoại & du lịch",
+  "Họp lớp, hẹn hò",
   "Hội ngộ 15 năm (2026)",
+  "Chưa phân loại",
 ];
 
 interface StagedUploadFile {
@@ -153,7 +154,10 @@ export default function MemoriesGallery() {
         dbGallery.forEach((g: any) => {
           const img = g.image_url || g.url;
           if (img && !seenIds.has(g.id)) {
-            const photoTopic = g.topic || g.category || DEFAULT_TOPICS[0];
+            let photoTopic = g.topic || g.category || "Chưa phân loại";
+            if (photoTopic === "Kỷ niệm" || !photoTopic) {
+              photoTopic = "Chưa phân loại";
+            }
             list.push({
               id: g.id,
               title: g.title || "Ảnh kỷ niệm",
@@ -218,8 +222,9 @@ export default function MemoriesGallery() {
   const allTopics = useMemo(() => {
     const set = new Set<string>(DEFAULT_TOPICS);
     photos.forEach((p) => {
-      const t = p.topic || p.category;
-      if (t && t !== "Kỷ niệm" && t !== "all") {
+      let t = p.topic || p.category;
+      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      if (t && t !== "all") {
         set.add(t);
       }
     });
@@ -229,7 +234,11 @@ export default function MemoriesGallery() {
   // Lọc theo Topic được chọn
   const filteredPhotos = useMemo(() => {
     if (!selectedTopic || selectedTopic === "all") return photos;
-    return photos.filter((p) => (p.topic || p.category) === selectedTopic);
+    return photos.filter((p) => {
+      let t = p.topic || p.category;
+      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      return t === selectedTopic;
+    });
   }, [photos, selectedTopic]);
 
   // Sắp xếp: Ảnh Ghim (isPinned) luôn nằm lên đầu, tiếp theo là ảnh mới nhất (createdAt giảm dần)
@@ -613,7 +622,11 @@ export default function MemoriesGallery() {
           </button>
 
           {allTopics.map((topic) => {
-            const count = photos.filter((p) => (p.topic || p.category) === topic).length;
+            const count = photos.filter((p) => {
+              let t = p.topic || p.category;
+              if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+              return t === topic;
+            }).length;
             const isSelected = selectedTopic === topic;
             return (
               <button
