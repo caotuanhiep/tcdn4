@@ -11,8 +11,12 @@ import {
   GraduationCap
 } from "lucide-react";
 import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers } from "@/lib/committee";
+import { useAuth } from "@/components/AuthProvider";
+import { useToast } from "@/components/ToastProvider";
 
 export default function CommitteeSection() {
+  const { user, openLogin } = useAuth();
+  const toast = useToast();
   const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
 
   useEffect(() => {
@@ -89,22 +93,35 @@ export default function CommitteeSection() {
               {/* 3. Nút Gọi điện & Nhắn Zalo ở chân thẻ */}
               <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5">
                 {member.phone ? (
-                  <>
-                    <a
-                      href={`tel:${member.phone.replace(/\s+/g, "")}`}
-                      className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-slate-50 border border-slate-200 py-2 px-1 text-[11px] sm:text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh transition-colors shadow-2xs whitespace-nowrap"
+                  user ? (
+                    <>
+                      <a
+                        href={`tel:${member.phone.replace(/\s+/g, "")}`}
+                        className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-slate-50 border border-slate-200 py-2 px-1 text-[11px] sm:text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh transition-colors shadow-2xs whitespace-nowrap"
+                      >
+                        <Phone size={12} className="text-ueh" /> Gọi điện
+                      </a>
+                      <a
+                        href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-[#0068FF] py-2 px-1 text-[11px] sm:text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs whitespace-nowrap"
+                      >
+                        <MessageCircle size={12} /> Nhắn Zalo
+                      </a>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.error("Vui lòng đăng nhập tài khoản cựu sinh viên để xem liên hệ Ban liên lạc!");
+                        openLogin();
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-1 rounded-xl bg-slate-50 border border-slate-200 py-1.5 px-1 text-[10px] font-bold text-slate-500 hover:text-ueh hover:bg-blue-50 transition-colors"
                     >
-                      <Phone size={12} className="text-ueh" /> Gọi điện
-                    </a>
-                    <a
-                      href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-[#0068FF] py-2 px-1 text-[11px] sm:text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs whitespace-nowrap"
-                    >
-                      <MessageCircle size={12} /> Nhắn Zalo
-                    </a>
-                  </>
+                      <span>🔒 Đăng nhập xem liên hệ</span>
+                    </button>
+                  )
                 ) : (
                   <span className="w-full text-center py-2 text-[11px] font-semibold text-slate-400 bg-slate-50 rounded-xl border border-slate-200/60">
                     SĐT đang cập nhật

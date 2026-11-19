@@ -81,18 +81,17 @@ export default function MobileBottomNav() {
             <span className="text-[10px] mt-0.5">Kỷ niệm</span>
           </button>
 
-          {/* 3. NÚT NỔI BẬT: GẶP MẶT 15 NĂM (Dẫn hướng trực tiếp vào chương trình hội khóa) */}
+          {/* 3. Gặp mặt 15 năm (Gọn gàng trong thanh menu, màu cam ấm nhẹ hài hòa) */}
           <button
             onClick={() => scrollTo("event")}
-            className="relative -top-3 flex flex-col items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-ueh-orange px-3.5 py-1.5 text-white shadow-lg shadow-orange-500/40 border-2 border-white transition-all active:scale-95 animate-pulse"
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+              activeTab === "event"
+                ? "text-ueh-orange font-black bg-orange-100/70 scale-105"
+                : "text-ueh-orange font-bold hover:bg-orange-100/50"
+            }`}
           >
-            <div className="flex items-center gap-1">
-              <Calendar size={16} className="text-white drop-shadow-xs" />
-              <Sparkles size={11} className="text-amber-200 animate-spin" />
-            </div>
-            <span className="text-[10px] font-black tracking-tight mt-0.5 text-white whitespace-nowrap drop-shadow-xs">
-              Gặp mặt 15 năm
-            </span>
+            <Calendar size={18} className="stroke-[2.2] text-ueh-orange" />
+            <span className="text-[10px] mt-0.5 whitespace-nowrap">Gặp mặt 15N</span>
           </button>
 
           {/* 4. Vào Zalo (Thiết kế thanh lịch, không quá nổi bật) */}

@@ -546,7 +546,7 @@ export default function EventSection() {
                       <span className="text-xs font-bold text-ueh uppercase tracking-wide">9:00 - 11:00</span>
                       <span className="text-[11px] rounded-md bg-blue-50 px-2 py-0.5 font-medium text-ueh">UEH Cơ sở B - 279 Nguyễn Tri Phương</span>
                     </div>
-                    <h4 className="text-sm font-bold text-slate-900 mt-1">Tập trung ở UEH Cơ sở B - 279 Nguyễn Tri Phương, Thăm trường cũ, chụp hình lưu niệm...</h4>
+                    <h4 className="text-sm font-bold text-slate-900 mt-1">Thăm trường cũ</h4>
                     <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
                       Tập trung tại UEH Cơ sở B (279 Nguyễn Tri Phương, Q.10), dạo thăm lại giảng đường thanh xuân, check-in chụp hình lưu niệm tập thể và nhận áo kỷ niệm TC4.
                     </p>

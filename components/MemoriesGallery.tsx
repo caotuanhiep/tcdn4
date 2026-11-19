@@ -41,6 +41,7 @@ export interface AlbumPhoto {
   imgSrc: string;
   type: "image" | "video";
   category?: string;
+  topic?: string;
   caption?: string;
   likes: number;
   comments: CommentItem[];
@@ -49,6 +50,14 @@ export interface AlbumPhoto {
   createdAt: number;
   isPinned?: boolean;
 }
+
+export const DEFAULT_TOPICS = [
+  "Thời sinh viên & Giảng đường",
+  "Lễ tốt nghiệp UEH",
+  "Dã ngoại & Du lịch",
+  "Họp lớp qua các năm",
+  "Hội ngộ 15 năm (2026)",
+];
 
 interface StagedUploadFile {
   id: string;
@@ -120,6 +129,12 @@ export default function MemoriesGallery() {
   const [batchClass, setBatchClass] = useState<"TC10" | "TC11" | "TC12">("TC10");
   const [batchCommonCaption, setBatchCommonCaption] = useState("");
 
+  // Topic / Bộ ảnh state
+  const [selectedTopic, setSelectedTopic] = useState<string>("all");
+  const [activeUploadTopic, setActiveUploadTopic] = useState<string>(DEFAULT_TOPICS[0]);
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
+  const [customTopicName, setCustomTopicName] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Tải danh sách ảnh từ Supabase (cả khách chưa đăng nhập cũng xem được) và kết hợp localStorage
@@ -138,12 +153,14 @@ export default function MemoriesGallery() {
         dbGallery.forEach((g: any) => {
           const img = g.image_url || g.url;
           if (img && !seenIds.has(g.id)) {
+            const photoTopic = g.topic || g.category || DEFAULT_TOPICS[0];
             list.push({
               id: g.id,
               title: g.title || "Ảnh kỷ niệm",
               imgSrc: img,
               type: "image",
-              category: "Kỷ niệm",
+              category: photoTopic,
+              topic: photoTopic,
               caption: g.caption || undefined,
               likes: g.likes || 1,
               comments: [],
@@ -197,14 +214,32 @@ export default function MemoriesGallery() {
     } catch {}
   };
 
+  // Trích xuất danh sách các chủ đề từ ảnh thực tế và gợi ý mặc định
+  const allTopics = useMemo(() => {
+    const set = new Set<string>(DEFAULT_TOPICS);
+    photos.forEach((p) => {
+      const t = p.topic || p.category;
+      if (t && t !== "Kỷ niệm" && t !== "all") {
+        set.add(t);
+      }
+    });
+    return Array.from(set);
+  }, [photos]);
+
+  // Lọc theo Topic được chọn
+  const filteredPhotos = useMemo(() => {
+    if (!selectedTopic || selectedTopic === "all") return photos;
+    return photos.filter((p) => (p.topic || p.category) === selectedTopic);
+  }, [photos, selectedTopic]);
+
   // Sắp xếp: Ảnh Ghim (isPinned) luôn nằm lên đầu, tiếp theo là ảnh mới nhất (createdAt giảm dần)
   const sortedPhotos = useMemo(() => {
-    return [...photos].sort((a, b) => {
+    return [...filteredPhotos].sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
-  }, [photos]);
+  }, [filteredPhotos]);
 
   // Đảm bảo activeCardIndex hợp lệ
   useEffect(() => {
@@ -389,6 +424,10 @@ export default function MemoriesGallery() {
 
     setIsSubmittingCloud(true);
 
+    const finalTopic = isCustomTopic
+      ? (customTopicName.trim() || DEFAULT_TOPICS[0])
+      : activeUploadTopic;
+
     const defaultUploader =
       batchUploaderName.trim() ||
       profile?.full_name ||
@@ -436,7 +475,8 @@ export default function MemoriesGallery() {
         title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
         imgSrc: finalImgUrl,
         type: "image",
-        category: "Kỷ niệm",
+        category: finalTopic,
+        topic: finalTopic,
         caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
         likes: 1,
         comments: [],
@@ -455,6 +495,8 @@ export default function MemoriesGallery() {
           image_url: finalImgUrl,
           title: newPhotoItem.title,
           caption: newPhotoItem.caption || null,
+          category: finalTopic,
+          topic: finalTopic,
           uploader: defaultUploader,
           uploader_class: batchClass,
           user_id: user.id,
@@ -474,7 +516,14 @@ export default function MemoriesGallery() {
     setActiveCardIndex(0);
     setIsSubmittingCloud(false);
     setUploadProgressText("");
-    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh kỷ niệm lên Cloud!`);
+    if (isCustomTopic && customTopicName.trim()) {
+      setSelectedTopic(customTopicName.trim());
+      setIsCustomTopic(false);
+      setCustomTopicName("");
+    } else {
+      setSelectedTopic(finalTopic);
+    }
+    toast.success(`Đã đăng tải ${newPhotos.length} ảnh vào bộ "${finalTopic}" thành công!`);
   };
 
   return (
@@ -532,13 +581,78 @@ export default function MemoriesGallery() {
                   openLogin();
                   return;
                 }
+                if (selectedTopic !== "all") {
+                  setActiveUploadTopic(selectedTopic);
+                  setIsCustomTopic(false);
+                }
                 setIsUploadOpen(true);
               }}
               className="flex items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-ueh-light transition-all active:scale-95"
             >
-              <Upload size={16} /> Đóng Góp Nhiều Ảnh
+              <Upload size={16} /> Đóng Góp Ảnh
             </button>
           </div>
+        </div>
+
+        {/* THANH CHỌN BỘ ẢNH / CHỦ ĐỀ (TOPIC FILTER) */}
+        <div className="mb-6 flex flex-wrap items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <button
+            onClick={() => setSelectedTopic("all")}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
+              selectedTopic === "all"
+                ? "bg-ueh text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
+            }`}
+          >
+            <span>Tất cả</span>
+            <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+              selectedTopic === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+            }`}>
+              {photos.length}
+            </span>
+          </button>
+
+          {allTopics.map((topic) => {
+            const count = photos.filter((p) => (p.topic || p.category) === topic).length;
+            const isSelected = selectedTopic === topic;
+            return (
+              <button
+                key={topic}
+                onClick={() => setSelectedTopic(topic)}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
+                  isSelected
+                    ? "bg-ueh text-white shadow-xs"
+                    : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
+                }`}
+              >
+                <span>{topic}</span>
+                {count > 0 && (
+                  <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                    isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          <button
+            onClick={() => {
+              if (!user) {
+                toast.error("Vui lòng đăng nhập để tạo bộ ảnh mới!");
+                openLogin();
+                return;
+              }
+              setIsCustomTopic(true);
+              setIsUploadOpen(true);
+            }}
+            className="flex items-center gap-1 rounded-full border border-dashed border-ueh/50 bg-blue-50/60 px-3 py-1.5 text-xs font-bold text-ueh hover:bg-blue-100/70 transition-colors shrink-0"
+            title="Tạo chủ đề / bộ ảnh mới"
+          >
+            <Plus size={13} />
+            <span>+ Tạo chủ đề mới</span>
+          </button>
         </div>
 
         {/* TRƯỜNG HỢP CHƯA CÓ ẢNH NÀO TRONG KHO (EMPTY STATE CỰC ĐẸP) */}
@@ -548,10 +662,14 @@ export default function MemoriesGallery() {
               <Camera size={36} className="text-ueh" />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-ueh">
-              Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên
+              {selectedTopic !== "all"
+                ? `Chủ đề "${selectedTopic}" chưa có bức ảnh nào`
+                : "Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên"}
             </h3>
             <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-slate-500">
-              Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm (giảng đường, dã ngoại, lễ tốt nghiệp...) để cùng xòe bộ bài thanh xuân!
+              {selectedTopic !== "all"
+                ? `Hãy là người đầu tiên đóng góp ảnh cho bộ "${selectedTopic}". Bạn có thể chọn và tải lên cùng lúc nhiều ảnh!`
+                : "Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm để cùng xòe bộ bài thanh xuân!"}
             </p>
             <div className="mt-6 flex justify-center">
               <button
@@ -561,11 +679,15 @@ export default function MemoriesGallery() {
                     openLogin();
                     return;
                   }
+                  if (selectedTopic !== "all") {
+                    setActiveUploadTopic(selectedTopic);
+                    setIsCustomTopic(false);
+                  }
                   setIsUploadOpen(true);
                 }}
                 className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
               >
-                <Upload size={17} /> Đóng Góp Ảnh Mới Ngay
+                <Upload size={17} /> {selectedTopic !== "all" ? `Đóng Góp Ảnh Vào "${selectedTopic}"` : "Đóng Góp Ảnh Mới Ngay"}
               </button>
             </div>
           </div>
@@ -972,9 +1094,9 @@ export default function MemoriesGallery() {
                 <Upload size={20} />
               </div>
               <div>
-                <h3 className="text-lg font-black text-ueh">Đóng Góp Nhiều Ảnh Kỷ Niệm</h3>
+                <h3 className="text-lg font-black text-ueh">Đóng Góp Ảnh Kỷ Niệm</h3>
                 <p className="text-xs text-slate-500">
-                  Chọn một hoặc nhiều ảnh cùng lúc. Ảnh mới đăng sẽ hiển thị lên trước trong bộ bài!
+                  Chọn một hoặc nhiều ảnh cùng lúc theo chủ đề. Mọi thành viên đều có thể đóng góp vào chung một album!
                 </p>
               </div>
             </div>
@@ -1001,6 +1123,50 @@ export default function MemoriesGallery() {
             ) : (
               <form onSubmit={handleBatchSubmit} className="mt-5 space-y-4">
               
+              {/* Chọn bộ ảnh / chủ đề */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  1. Chọn bộ ảnh / chủ đề muốn đóng góp:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    value={isCustomTopic ? "__custom__" : activeUploadTopic}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setIsCustomTopic(true);
+                      } else {
+                        setIsCustomTopic(false);
+                        setActiveUploadTopic(e.target.value);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-ueh focus:border-ueh focus:outline-none"
+                  >
+                    {allTopics.map((top) => (
+                      <option key={top} value={top}>
+                        Bộ ảnh: {top}
+                      </option>
+                    ))}
+                    <option value="__custom__">+ Tạo chủ đề / bộ ảnh mới...</option>
+                  </select>
+
+                  {isCustomTopic && (
+                    <input
+                      type="text"
+                      placeholder="Tên chủ đề mới (VD: Dã ngoại Vũng Tàu)..."
+                      value={customTopicName}
+                      onChange={(e) => setCustomTopicName(e.target.value)}
+                      className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 placeholder:font-normal focus:border-ueh focus:ring-1 focus:ring-ueh focus:outline-none"
+                      autoFocus
+                    />
+                  )}
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {isCustomTopic
+                    ? "✨ Chủ đề mới sẽ được gắn thẻ cho các ảnh này và hiển thị để mọi người cùng đóng góp tiếp."
+                    : `📌 Ảnh sẽ được lưu chung vào bộ "${activeUploadTopic}". Ai cũng có thể vào đóng góp thêm ảnh cùng chủ đề.`}
+                </p>
+              </div>
+
               {/* Vùng kéo thả / chọn nhiều ảnh */}
               <div className="rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/40 p-4 sm:p-6 text-center hover:bg-blue-50/70 transition-colors">
                 <input
@@ -1018,7 +1184,7 @@ export default function MemoriesGallery() {
                 >
                   <Camera size={32} className="text-ueh mb-2" />
                   <span className="text-xs sm:text-sm font-bold text-ueh">
-                    Bấm để chọn nhiều ảnh từ thiết bị
+                    2. Bấm để chọn nhiều ảnh từ thiết bị
                   </span>
                   <span className="text-[11px] text-slate-500 mt-0.5">
                     Hỗ trợ JPG, PNG, WEBP (Tự động nén dung lượng nhẹ & sắc nét)
@@ -1173,7 +1339,7 @@ export default function MemoriesGallery() {
                     </>
                   ) : (
                     <>
-                      <Upload size={15} /> Đăng Tải {stagedFiles.length > 0 ? `(${stagedFiles.length})` : ""} Ảnh Vào Bộ Bài
+                      <Upload size={15} /> Đăng Tải {stagedFiles.length > 0 ? `(${stagedFiles.length})` : ""} Ảnh Vào Bộ Sưu Tập
                     </>
                   )}
                 </button>
