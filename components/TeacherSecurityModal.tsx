@@ -147,19 +147,19 @@ export default function TeacherSecurityModal() {
                 onClick={() => toggleSelect(teacher.id)}
                 className={`group relative flex flex-col items-center rounded-2xl p-2 sm:p-2.5 text-center transition-all ${
                   isSelected
-                    ? "bg-blue-50/90 border-2 border-ueh shadow-md scale-[1.03] ring-2 ring-ueh/20"
-                    : "bg-slate-50 border-2 border-slate-200/80 hover:border-blue-300 hover:bg-white"
+                    ? "bg-emerald-50/60 border-2 border-emerald-500 shadow-md scale-[1.03] ring-2 ring-emerald-500/20"
+                    : "bg-slate-50 border-2 border-slate-200/80 hover:border-emerald-300 hover:bg-white"
                 }`}
               >
-                {/* Checkmark Badge */}
+                {/* Checkmark Badge: Luôn nổi lên trên ảnh (z-20) và hiển thị màu xanh lá theo yêu cầu */}
                 <div
-                  className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
+                  className={`absolute right-2 top-2 z-20 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full transition-all shadow-md ${
                     isSelected
-                      ? "bg-ueh text-white shadow-xs scale-100"
-                      : "border border-slate-300 bg-white/80 text-transparent opacity-50 group-hover:opacity-100"
+                      ? "bg-emerald-500 text-white scale-110 ring-2 ring-white"
+                      : "border-2 border-slate-300 bg-white/95 text-transparent opacity-60 group-hover:opacity-100"
                   }`}
                 >
-                  <Check size={12} strokeWidth={3} />
+                  <Check size={14} strokeWidth={3} className={isSelected ? "text-white" : "text-transparent"} />
                 </div>
 
                 {/* Avatar Image */}
