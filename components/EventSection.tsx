@@ -502,7 +502,41 @@ export default function EventSection() {
                 <span className="text-xs font-semibold text-slate-500">3 Chặng cảm xúc</span>
               </div>
 
-              <div className="space-y-4 relative before:absolute before:inset-0 before:left-4 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-ueh via-ueh-light before:to-transparent">
+              {/* Nhúng animation trực tiếp cho nút tròn di chuyển dọc */}
+              <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes timelineTravel {
+                  0% {
+                    top: 10px;
+                    opacity: 0;
+                    transform: translate(-50%, 0) scale(0.7);
+                  }
+                  10% {
+                    opacity: 1;
+                    transform: translate(-50%, 0) scale(1);
+                  }
+                  90% {
+                    opacity: 1;
+                    transform: translate(-50%, 0) scale(1);
+                  }
+                  100% {
+                    top: calc(100% - 20px);
+                    opacity: 0;
+                    transform: translate(-50%, 0) scale(0.7);
+                  }
+                }
+                .timeline-live-dot {
+                  animation: timelineTravel 4s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+                }
+              `}} />
+
+              <div className="space-y-4 relative before:absolute before:inset-0 before:left-[19px] before:h-full before:w-[2px] before:bg-gradient-to-b before:from-ueh via-ueh-light before:to-transparent">
+                {/* Nút tròn di chuyển dọc từ số 1 tới số 3 - z-0 ngầm dưới các số z-10 */}
+                <div className="absolute left-[19px] top-0 bottom-0 pointer-events-none z-0">
+                  <div className="timeline-live-dot absolute h-3.5 w-3.5 rounded-full bg-gradient-to-b from-ueh-orange to-amber-400 shadow-md shadow-orange-500/80 ring-2 ring-orange-200">
+                    <span className="absolute inset-0 rounded-full bg-orange-400 animate-ping opacity-75" />
+                  </div>
+                </div>
+
                 <div className="relative flex items-start gap-3.5 pl-1">
                   <div className="z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-ueh text-white text-xs font-bold shadow-xs ring-4 ring-white">
                     1

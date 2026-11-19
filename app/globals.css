@@ -39,3 +39,28 @@ body {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+@keyframes timeline-runner {
+  0% {
+    top: 14px;
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.8);
+  }
+  8% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  92% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    top: calc(100% - 24px);
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.8);
+  }
+}
+
+.timeline-runner-dot {
+  animation: timeline-runner 4.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}

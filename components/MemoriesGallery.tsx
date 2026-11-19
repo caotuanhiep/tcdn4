@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { 
   Camera, 
   Upload, 
@@ -20,10 +20,12 @@ import {
   CheckCircle2, 
   Star,
   Eye,
-  Plus
+  Plus,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getSupabase } from "@/lib/supabase/client";
 
 export interface CommentItem {
   id: string;
@@ -96,7 +98,7 @@ async function compressImageFile(file: File, maxWidth = 1600, quality = 0.8): Pr
 }
 
 export default function MemoriesGallery() {
-  const { user, profile, openLogin } = useAuth();
+  const { user, profile, openLogin, isAdmin } = useAuth();
   const toast = useToast();
 
   const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
@@ -112,29 +114,86 @@ export default function MemoriesGallery() {
   const [stagedFiles, setStagedFiles] = useState<StagedUploadFile[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressProgress, setCompressProgress] = useState("");
+  const [isSubmittingCloud, setIsSubmittingCloud] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState("");
   const [batchUploaderName, setBatchUploaderName] = useState("");
   const [batchClass, setBatchClass] = useState<"TC10" | "TC11" | "TC12">("TC10");
   const [batchCommonCaption, setBatchCommonCaption] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load photos from localStorage on mount
-  useEffect(() => {
+  // Tải danh sách ảnh từ Supabase (cả khách chưa đăng nhập cũng xem được) và kết hợp localStorage
+  const loadStoredPhotos = useCallback(async () => {
+    const list: AlbumPhoto[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Tải ảnh từ Supabase Cloud Database (bảng gallery)
+    try {
+      const { data: dbGallery } = await getSupabase()
+        .from("gallery")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (dbGallery && dbGallery.length > 0) {
+        dbGallery.forEach((g: any) => {
+          const img = g.image_url || g.url;
+          if (img && !seenIds.has(g.id)) {
+            list.push({
+              id: g.id,
+              title: g.title || "Ảnh kỷ niệm",
+              imgSrc: img,
+              type: "image",
+              category: "Kỷ niệm",
+              caption: g.caption || undefined,
+              likes: g.likes || 1,
+              comments: [],
+              uploader: g.uploader || "Thành viên K33",
+              uploaderClass: g.uploader_class || "TC10",
+              createdAt: g.created_at ? new Date(g.created_at).getTime() : Date.now(),
+              isPinned: Boolean(g.is_pinned),
+            });
+            seenIds.add(g.id);
+          }
+        });
+      }
+    } catch {}
+
+    // 2. Kết hợp với ảnh trong localStorage
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setPhotos(parsed);
+          parsed.forEach((p: AlbumPhoto) => {
+            if (!seenIds.has(p.id)) {
+              list.push(p);
+              seenIds.add(p.id);
+            }
+          });
         }
       }
     } catch {}
+
+    setPhotos(list);
   }, []);
+
+  useEffect(() => {
+    loadStoredPhotos();
+    window.addEventListener("storage", loadStoredPhotos);
+    window.addEventListener("tcdn4_memories_updated", loadStoredPhotos);
+    return () => {
+      window.removeEventListener("storage", loadStoredPhotos);
+      window.removeEventListener("tcdn4_memories_updated", loadStoredPhotos);
+    };
+  }, [loadStoredPhotos]);
 
   const savePhotos = (newPhotos: AlbumPhoto[]) => {
     setPhotos(newPhotos);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newPhotos));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_memories_updated"));
+      }
     } catch {}
   };
 
@@ -188,6 +247,11 @@ export default function MemoriesGallery() {
 
   const handleTogglePin = (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để ghim ảnh!");
+      openLogin();
+      return;
+    }
     const updated = photos.map((p) => {
       if (p.id === photoId) {
         const nextState = !p.isPinned;
@@ -204,6 +268,15 @@ export default function MemoriesGallery() {
 
   const handleDeletePhoto = (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để quản lý ảnh!");
+      openLogin();
+      return;
+    }
+    if (!isAdmin && activePhoto?.uploader !== (profile?.full_name || user.email)) {
+      toast.error("Chỉ Admin hoặc người đăng ảnh mới có quyền xóa bức ảnh này!");
+      return;
+    }
     if (!confirm("Bạn có chắc chắn muốn xóa ảnh này khỏi góc kỷ niệm?")) return;
     const updated = photos.filter((p) => p.id !== photoId);
     savePhotos(updated);
@@ -244,6 +317,12 @@ export default function MemoriesGallery() {
 
   // Chọn NHIỀU ẢNH cùng lúc và nén tự động từng ảnh
   const handleMultiFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+      openLogin();
+      return;
+    }
+
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -295,33 +374,94 @@ export default function MemoriesGallery() {
     );
   };
 
-  const handleBatchSubmit = (e: React.FormEvent) => {
+  const handleBatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+      openLogin();
+      return;
+    }
+
     if (stagedFiles.length === 0) {
       toast.error("Vui lòng chọn ít nhất 1 bức ảnh để đăng tải!");
       return;
     }
 
+    setIsSubmittingCloud(true);
+
     const defaultUploader =
       batchUploaderName.trim() ||
       profile?.full_name ||
-      (user ? "Thành viên lớp" : "Cựu sinh viên K33");
+      user.email?.split("@")[0] ||
+      "Thành viên K33";
 
     const now = Date.now();
-    const newPhotos: AlbumPhoto[] = stagedFiles.map((staged, idx) => ({
-      id: `p-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-      title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
-      imgSrc: staged.preview,
-      type: "image",
-      category: "Kỷ niệm",
-      caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
-      likes: 1,
-      comments: [],
-      uploader: defaultUploader,
-      uploaderClass: batchClass,
-      createdAt: now + idx,
-      isPinned: staged.isPinned,
-    }));
+    const newPhotos: AlbumPhoto[] = [];
+
+    for (let idx = 0; idx < stagedFiles.length; idx++) {
+      const staged = stagedFiles[idx];
+      setUploadProgressText(`Đang tải ảnh ${idx + 1}/${stagedFiles.length} lên Cloud Supabase...`);
+
+      let finalImgUrl = staged.preview;
+
+      // Upload file trực tiếp lên Supabase Storage bucket 'alumni-media'
+      try {
+        const fileExt = (staged.file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const filePath = `gallery/${user.id}/${now}-${idx}-${Math.random().toString(36).slice(2, 6)}.${fileExt}`;
+
+        const { data: upRes, error: upErr } = await getSupabase()
+          .storage
+          .from("alumni-media")
+          .upload(filePath, staged.file, {
+            contentType: staged.file.type || "image/jpeg",
+            upsert: true,
+          });
+
+        if (!upErr && upRes) {
+          const { data: pubData } = getSupabase()
+            .storage
+            .from("alumni-media")
+            .getPublicUrl(filePath);
+          if (pubData?.publicUrl) {
+            finalImgUrl = pubData.publicUrl;
+          }
+        }
+      } catch (err) {
+        console.warn("Storage upload:", err);
+      }
+
+      const photoId = `p-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
+      const newPhotoItem: AlbumPhoto = {
+        id: photoId,
+        title: staged.title.trim() || `Ảnh kỷ niệm ${idx + 1}`,
+        imgSrc: finalImgUrl,
+        type: "image",
+        category: "Kỷ niệm",
+        caption: staged.caption.trim() || batchCommonCaption.trim() || undefined,
+        likes: 1,
+        comments: [],
+        uploader: defaultUploader,
+        uploaderClass: batchClass,
+        createdAt: now + idx,
+        isPinned: staged.isPinned,
+      };
+
+      newPhotos.push(newPhotoItem);
+
+      // Lưu bản ghi vào bảng gallery trên Supabase
+      try {
+        await getSupabase().from("gallery").insert({
+          id: photoId,
+          image_url: finalImgUrl,
+          title: newPhotoItem.title,
+          caption: newPhotoItem.caption || null,
+          uploader: defaultUploader,
+          uploader_class: batchClass,
+          user_id: user.id,
+          is_pinned: staged.isPinned,
+        });
+      } catch {}
+    }
 
     // Gộp ảnh: Ảnh mới upload sẽ đứng lên trước (chỉ đứng sau các ảnh được Ghim)
     const updated = [...newPhotos, ...photos];
@@ -332,7 +472,9 @@ export default function MemoriesGallery() {
     setIsUploadOpen(false);
     setBatchCommonCaption("");
     setActiveCardIndex(0);
-    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh kỷ niệm mới!`);
+    setIsSubmittingCloud(false);
+    setUploadProgressText("");
+    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh kỷ niệm lên Cloud!`);
   };
 
   return (
@@ -384,7 +526,14 @@ export default function MemoriesGallery() {
             )}
 
             <button
-              onClick={() => setIsUploadOpen(true)}
+              onClick={() => {
+                if (!user) {
+                  toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                  openLogin();
+                  return;
+                }
+                setIsUploadOpen(true);
+              }}
               className="flex items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-ueh-light transition-all active:scale-95"
             >
               <Upload size={16} /> Đóng Góp Nhiều Ảnh
@@ -406,7 +555,14 @@ export default function MemoriesGallery() {
             </p>
             <div className="mt-6 flex justify-center">
               <button
-                onClick={() => setIsUploadOpen(true)}
+                onClick={() => {
+                  if (!user) {
+                    toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                    openLogin();
+                    return;
+                  }
+                  setIsUploadOpen(true);
+                }}
                 className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
               >
                 <Upload size={17} /> Đóng Góp Ảnh Mới Ngay
@@ -823,7 +979,27 @@ export default function MemoriesGallery() {
               </div>
             </div>
 
-            <form onSubmit={handleBatchSubmit} className="mt-5 space-y-4">
+            {!user ? (
+              <div className="my-6 rounded-2xl bg-amber-50 border border-amber-200 p-6 text-center">
+                <p className="text-sm font-bold text-amber-900 mb-2">
+                  Bạn cần đăng nhập tài khoản cựu sinh viên để đóng góp ảnh
+                </p>
+                <p className="text-xs text-amber-700 mb-4">
+                  Vui lòng đăng nhập để hệ thống xác thực danh tính người đóng góp và lưu lại ký ức khóa.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUploadOpen(false);
+                    openLogin();
+                  }}
+                  className="rounded-xl bg-ueh px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-ueh-light transition-all"
+                >
+                  Đăng nhập ngay
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleBatchSubmit} className="mt-5 space-y-4">
               
               {/* Vùng kéo thả / chọn nhiều ảnh */}
               <div className="rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/40 p-4 sm:p-6 text-center hover:bg-blue-50/70 transition-colors">
@@ -987,14 +1163,24 @@ export default function MemoriesGallery() {
                 </button>
                 <button
                   type="submit"
-                  disabled={stagedFiles.length === 0 || isCompressing}
+                  disabled={stagedFiles.length === 0 || isCompressing || isSubmittingCloud}
                   className="flex items-center gap-2 rounded-xl bg-ueh px-6 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-ueh-light transition-all shadow-md disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  <Upload size={15} /> Đăng Tải {stagedFiles.length > 0 ? `(${stagedFiles.length})` : ""} Ảnh Vào Bộ Bài
+                  {isSubmittingCloud ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>{uploadProgressText || "Đang lưu lên Supabase..."}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={15} /> Đăng Tải {stagedFiles.length > 0 ? `(${stagedFiles.length})` : ""} Ảnh Vào Bộ Bài
+                    </>
+                  )}
                 </button>
               </div>
 
             </form>
+            )}
           </div>
         </div>
       )}

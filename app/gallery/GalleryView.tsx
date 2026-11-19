@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pin, Upload } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import UploadModal from "./UploadModal";
 import type { GalleryItem } from "@/types/database";
 
 export default function GalleryView() {
+  const { user, openLogin } = useAuth();
   const toast = useToast();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +19,6 @@ export default function GalleryView() {
     const { data, error } = await getSupabase()
       .from("gallery")
       .select("*")
-      .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false });
     if (error) toast.error(`Không tải được ảnh: ${error.message}`);
     else setItems((data ?? []) as GalleryItem[]);
@@ -37,7 +38,14 @@ export default function GalleryView() {
           <p className="text-slate-500">Cùng xây dựng thư viện ảnh 15 năm. Mỗi bức ảnh là một mảnh ghép thanh xuân.</p>
         </div>
         <button
-          onClick={() => setUploadOpen(true)}
+          onClick={() => {
+            if (!user) {
+              toast.error("Vui lòng đăng nhập để đóng góp ảnh!");
+              openLogin();
+              return;
+            }
+            setUploadOpen(true);
+          }}
           className="flex items-center justify-center gap-2 rounded-full bg-ueh px-6 py-3 font-semibold text-white shadow-md transition hover:bg-blue-800"
         >
           <Upload size={18} /> Đóng góp ảnh

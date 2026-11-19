@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt } from "lucide-react";
+import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile } from "lucide-react";
 import EmbeddedCommunityChat from "@/components/EmbeddedCommunityChat";
 import { useAuth } from "@/components/AuthProvider";
+import { getSupabase } from "@/lib/supabase/client";
 
 const BANNER_SLIDES = [
   { id: 1, src: "/images/banner-3.png", alt: "TCDN4 K33 - Hội Ngộ 15 Năm (3)", caption: "Hội ngộ 15 Năm TCDN4" },
@@ -26,42 +27,58 @@ export default function Hero() {
   }, [isPaused]);
 
   const [stats, setStats] = useState({
-    registeredCount: 0,
-    confirmedCount: 0,
-    guestsCount: 0,
-    overseasCount: 0,
-    classesCount: 0,
+    checkedInCount: 0,
+    attendingCount: 0,
+    singleCount: 0,
   });
 
   useEffect(() => {
-    function loadStats() {
-      try {
-        const stored = localStorage.getItem("tcdn4_registrations");
-        const regs = stored ? JSON.parse(stored) : [];
-        const confirmed = regs.filter((r: any) => r.status === "confirmed").length;
-        const guests = regs.reduce((sum: number, r: any) => sum + (Number(r.guestsCount) || 0), 0);
-        const overseas = regs.filter((r: any) => 
-          (r.address && /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address)) ||
-          r.region === "overseas"
-        ).length;
-        const uniqueClasses = new Set(regs.map((r: any) => r.className)).size;
+    let active = true;
 
-        setStats({
-          registeredCount: regs.length,
-          confirmedCount: confirmed,
-          guestsCount: guests,
-          overseasCount: overseas,
-          classesCount: uniqueClasses,
-        });
-      } catch {}
+    async function loadStats() {
+      try {
+        // 1. Tải profiles thực tế trực tiếp từ Supabase
+        const { data: dbProfiles } = await getSupabase()
+          .from("profiles")
+          .select("id, full_name, attendance_status, marital_status");
+
+        // 2. Dự phòng thêm registrations lưu trong localStorage
+        const stored = localStorage.getItem("tcdn4_registrations");
+        const localRegs = stored ? JSON.parse(stored) : [];
+
+        const profiles = dbProfiles || [];
+        
+        // Thẻ 1: Số thành viên đã điểm danh (tổng số hồ sơ profiles)
+        const checkedInCount = Math.max(profiles.length, localRegs.length);
+
+        // Thẻ 2: Số người đã đăng ký đi gặp mặt 15 năm (attendance_status === 'attending' trong DB profiles)
+        const dbAttending = profiles.filter((p: any) => p.attendance_status === "attending").length;
+        const attendingCount = Math.max(dbAttending, localRegs.length > 0 ? localRegs.length : 0);
+
+        // Thẻ 3: Số người còn độc thân (marital_status === 'single')
+        const singleCount = profiles.filter((p: any) => p.marital_status === "single").length;
+
+        if (active) {
+          setStats({
+            checkedInCount,
+            attendingCount,
+            singleCount,
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi tải thống kê Hero:", err);
+      }
     }
 
     loadStats();
     window.addEventListener("storage", loadStats);
     window.addEventListener("tcdn4_registration_updated", loadStats);
+    window.addEventListener("tcdn4_profile_updated", loadStats);
     return () => {
+      active = false;
       window.removeEventListener("storage", loadStats);
       window.removeEventListener("tcdn4_registration_updated", loadStats);
+      window.removeEventListener("tcdn4_profile_updated", loadStats);
     };
   }, []);
 
@@ -216,40 +233,48 @@ export default function Hero() {
           </button>
         </div>
 
-        {/* 3. Thẻ thống kê VUI trích từ phiếu đăng ký */}
+        {/* 3. Thẻ thống kê trực tiếp từ danh sách điểm danh & đăng ký */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-4 mb-4">
+          {/* Thẻ 1: Số thành viên đã điểm danh */}
           <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh">{stats.registeredCount}</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Đăng ký Hội ngộ 15 Năm</div>
+            <div className="text-2xl sm:text-4xl font-black text-ueh">
+              {stats.checkedInCount > 0 ? `${stats.checkedInCount} Bạn` : "0 Bạn"}
+            </div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Số thành viên đã điểm danh</div>
             <div className="text-[10px] text-slate-400">
-              {stats.confirmedCount > 0 ? `Đã đối soát: ${stats.confirmedCount} bạn` : "TC10 • TC11 • TC12"}
+              Hồ sơ TC10 • TC11 • TC12
             </div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh" />
           </div>
 
+          {/* Thẻ 2: Số người đã đăng ký đi gặp mặt 15 năm */}
           <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
             <div className="text-2xl sm:text-4xl font-black text-ueh-orange">
-              {stats.overseasCount > 0 ? `${stats.overseasCount} Bạn` : "0 Bạn"}
+              {stats.attendingCount > 0 ? `${stats.attendingCount} Bạn` : "0 Bạn"}
             </div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Xuất ngoại & Định cư</div>
-            <div className="text-[10px] text-slate-400">Úc, Mỹ, Singapore, Canada...</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Đăng ký đi gặp mặt 15 năm</div>
+            <div className="text-[10px] text-slate-400">Sẵn sàng hội ngộ trực tiếp</div>
             <div className="absolute top-0 right-0 h-1 w-full bg-ueh-orange" />
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-emerald-700">{stats.guestsCount}</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">F1 & Người thân đi cùng</div>
-            <div className="text-[10px] text-slate-400">Gia tài lớn nhất sau 15 năm</div>
-            <div className="absolute top-0 right-0 h-1 w-full bg-emerald-600" />
+          {/* Thẻ 3: Số người còn độc thân */}
+          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
+            <div className="text-2xl sm:text-4xl font-black text-rose-600">
+              {stats.singleCount > 0 ? `${stats.singleCount} Bạn` : "0 Bạn"}
+            </div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Số người còn độc thân</div>
+            <div className="text-[10px] text-slate-400">Hội độc thân vui tính tìm bạn</div>
+            <div className="absolute top-0 right-0 h-1 w-full bg-rose-500" />
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-sky-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
-            <div className="text-2xl sm:text-4xl font-black text-ueh-light">{stats.classesCount}/3 Lớp</div>
-            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">TC10 • TC11 • TC12</div>
+          {/* Thẻ 4: Ghi sẵn 100% người háo hức gặp mặt */}
+          <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3.5 sm:p-4 text-center shadow-xs transition-transform hover:-translate-y-0.5">
+            <div className="text-2xl sm:text-4xl font-black text-emerald-600">100%</div>
+            <div className="text-[11px] sm:text-xs font-bold text-slate-700 mt-1">Người háo hức gặp mặt</div>
             <div className="text-[10px] text-slate-400">
-              {stats.classesCount > 0 ? "Đã có đại diện tham gia" : "Thanh xuân không bao giờ tắt"}
+              Tinh thần TCDN4 luôn rực cháy
             </div>
-            <div className="absolute top-0 right-0 h-1 w-full bg-ueh-light" />
+            <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500" />
           </div>
         </div>
 

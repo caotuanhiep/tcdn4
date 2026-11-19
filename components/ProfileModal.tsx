@@ -238,6 +238,11 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         } catch {}
       }
 
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_profile_updated"));
+        window.dispatchEvent(new Event("tcdn4_registration_updated"));
+      }
+
       toast.success("Cập nhật thông tin & điểm danh thành công!");
       onClose();
     } catch (err: any) {

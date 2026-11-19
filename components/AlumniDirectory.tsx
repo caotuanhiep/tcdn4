@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { useToast } from "@/components/ToastProvider";
 
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
@@ -54,6 +55,7 @@ export default function AlumniDirectory({
   onSelectRegion,
 }: AlumniDirectoryProps) {
   const { user, profile, openLogin, openProfile } = useAuth();
+  const toast = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [viewingMember, setViewingMember] = useState<AlumniMember | null>(null);
@@ -89,7 +91,7 @@ export default function AlumniDirectory({
                 p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
               ),
               region: (p.location_region as any) || "hcm",
-              phone: p.phone || "",
+              phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
               avatar_url: p.avatar_url || "",
               bio: p.bio || "",
               marital_status: p.marital_status || "",
@@ -122,7 +124,7 @@ export default function AlumniDirectory({
                 company: "TCDN4 K33",
                 location: r.address || "TP. Hồ Chí Minh",
                 region: regRegion,
-                phone: r.phone || "",
+                phone: user ? (r.phone || "") : (r.phone ? "HIDDEN" : ""),
                 bio: `Đã đăng ký tham gia họp mặt 15 năm (Áo size: ${r.shirtSize || "L"})`,
                 is_verified: r.status === "confirmed",
               });
@@ -142,13 +144,15 @@ export default function AlumniDirectory({
     const handleUpdate = () => loadMembers();
     window.addEventListener("storage", handleUpdate);
     window.addEventListener("tcdn4_registration_updated", handleUpdate);
+    window.addEventListener("tcdn4_profile_updated", handleUpdate);
 
     return () => {
       active = false;
       window.removeEventListener("storage", handleUpdate);
       window.removeEventListener("tcdn4_registration_updated", handleUpdate);
+      window.removeEventListener("tcdn4_profile_updated", handleUpdate);
     };
-  }, [profile]);
+  }, [user, profile]);
 
   const handleRegionClick = (r: string) => {
     if (onSelectRegion) {
@@ -436,15 +440,30 @@ export default function AlumniDirectory({
 
                     <div className="flex items-center gap-1 sm:gap-1.5">
                       {member.phone && (
-                        <a
-                          href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="rounded-lg bg-white px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-[#0068FF] border border-blue-200 hover:bg-blue-50 transition-colors shadow-2xs"
-                        >
-                          Zalo
-                        </a>
+                        user && member.phone !== "HIDDEN" ? (
+                          <a
+                            href={`https://zalo.me/${member.phone.replace(/[^0-9]/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="rounded-lg bg-white px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-[#0068FF] border border-blue-200 hover:bg-blue-50 transition-colors shadow-2xs"
+                          >
+                            Zalo
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toast.error("Vui lòng đăng nhập tài khoản cựu sinh viên để xem Zalo & SĐT thành viên!");
+                              openLogin();
+                            }}
+                            className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-slate-500 hover:text-ueh hover:bg-blue-50 transition-colors border border-slate-200"
+                            title="Đăng nhập để xem Zalo"
+                          >
+                            🔒 Zalo
+                          </button>
+                        )
                       )}
                       <span className="text-[9px] sm:text-[10px] font-bold text-ueh group-hover:underline">
                         Xem →
@@ -547,35 +566,53 @@ export default function AlumniDirectory({
               )}
             </div>
 
-            <div className="flex gap-2">
-              {viewingMember.phone && (
-                <a
-                  href={`tel:${viewingMember.phone.replace(/[^0-9]/g, "")}`}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-300 py-2.5 text-xs font-bold text-slate-800 hover:border-ueh hover:text-ueh transition-colors shadow-2xs"
+            {user ? (
+              <div className="flex gap-2">
+                {viewingMember.phone && viewingMember.phone !== "HIDDEN" && (
+                  <a
+                    href={`tel:${viewingMember.phone.replace(/[^0-9]/g, "")}`}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-300 py-2.5 text-xs font-bold text-slate-800 hover:border-ueh hover:text-ueh transition-colors shadow-2xs"
+                  >
+                    <Phone size={14} className="text-emerald-600" /> Gọi điện
+                  </a>
+                )}
+                {viewingMember.phone && viewingMember.phone !== "HIDDEN" ? (
+                  <a
+                    href={`https://zalo.me/${viewingMember.phone.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+                  >
+                    <MessageCircle size={14} /> Nhắn Zalo
+                  </a>
+                ) : (
+                  <a
+                    href={ZALO_GROUP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+                  >
+                    <MessageCircle size={14} /> Vào Zalo Lớp
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-center">
+                <p className="text-xs font-semibold text-amber-900 mb-2">
+                  🔒 Số điện thoại & Zalo chỉ hiển thị cho thành viên đã đăng nhập
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingMember(null);
+                    openLogin();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-ueh-light"
                 >
-                  <Phone size={14} className="text-emerald-600" /> Gọi điện
-                </a>
-              )}
-              {viewingMember.phone ? (
-                <a
-                  href={`https://zalo.me/${viewingMember.phone.replace(/[^0-9]/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
-                >
-                  <MessageCircle size={14} /> Nhắn Zalo
-                </a>
-              ) : (
-                <a
-                  href={ZALO_GROUP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
-                >
-                  <MessageCircle size={14} /> Nhắn Zalo
-                </a>
-              )}
-            </div>
+                  Đăng nhập để xem số liên hệ
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
