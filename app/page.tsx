@@ -28,20 +28,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. Dấu chân TCDN4 (Bản đồ di cư, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
-      <MigrationMap
-        selectedRegion={selectedRegion}
-        onSelectRegion={setSelectedRegion}
-      />
+      {/* 4. Góc kỷ niệm nổi bật (Layout xòe bài theo chủ đề, nén ảnh tự động, đóng góp nhiều ảnh) */}
+      <MemoriesGallery />
 
-      {/* 4. Danh bạ Cựu sinh viên (Filter khu vực 1 hàng trượt ngang mượt mà, 2 cột Mobile) */}
+      {/* 5. Danh bạ Cựu sinh viên (Filter khu vực 1 hàng trượt ngang mượt mà, 2 cột Mobile) */}
       <AlumniDirectory
         selectedRegion={selectedRegion}
         onSelectRegion={setSelectedRegion}
       />
 
-      {/* 5. Góc kỷ niệm nổi bật (Layout xòe bài độc đáo, nén ảnh tự động, đóng góp nhiều ảnh) */}
-      <MemoriesGallery />
+      {/* 6. Dấu chân TCDN4 (Bản đồ phân bổ cựu sinh viên, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
+      <MigrationMap
+        selectedRegion={selectedRegion}
+        onSelectRegion={setSelectedRegion}
+      />
 
       {/* 6. Lưu bút TCDN4 (Hiệu ứng thẻ thiệp đêm hội ngộ lung linh) */}
       <GuestbookSection />

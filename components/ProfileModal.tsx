@@ -163,10 +163,11 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const transferSyntax = `TCDN4 ${fullName ? fullName.trim().toUpperCase() : "HO TEN"} ${phone ? phone.slice(-4) : "SDT"}`;
-  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(
-    transferSyntax
-  )}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
+  const cleanName = fullName ? fullName.trim().toUpperCase() : "TÊN";
+  const cleanPhone = phone ? phone.trim() : "SĐT";
+  const transferSyntax = `TCDN4 - ${cleanName} - ${cleanPhone}`;
+  // Không cố định nội dung chuyển khoản trong mã QR
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -971,15 +972,20 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                 <X size={16} />
               </button>
               <div className="text-base font-bold text-ueh mb-1">Mã Chuyển Khoản VietQR</div>
-              <div className="text-xs text-slate-500 mb-3">Tự động điền đúng số tiền & cú pháp lớp</div>
+              <div className="text-xs text-slate-500 mb-3">Quét mã bằng ứng dụng ngân hàng</div>
               <div className="mx-auto w-52 overflow-hidden rounded-2xl border-2 border-slate-200 bg-white p-2 shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrUrl} alt="VietQR" className="w-full h-auto" />
               </div>
-              <div className="mt-3 text-xs font-semibold text-slate-700">
+              <div className="mt-3 text-xs font-semibold text-slate-700 space-y-1">
                 <div>{bankInfo.bankName}</div>
                 <div className="font-mono font-bold text-slate-900">{bankInfo.accountNumber} - {bankInfo.accountName}</div>
                 <div className="text-emerald-600 font-black mt-1">Số tiền: {bankInfo.amountText}</div>
+                <div className="rounded-xl bg-blue-50/80 p-2 text-left border border-blue-200 mt-2">
+                  <div className="text-[10px] uppercase font-bold text-ueh">Cú pháp gợi ý:</div>
+                  <div className="font-mono text-xs font-bold text-ueh">{transferSyntax}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Không khóa cứng, gợi ý ghi rõ Tên & SĐT để đối soát</div>
+                </div>
               </div>
               <button
                 type="button"

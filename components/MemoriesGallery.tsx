@@ -231,6 +231,42 @@ export default function MemoriesGallery() {
     return Array.from(set);
   }, [photos]);
 
+  // Nhóm ảnh theo từng bộ sưu tập / chủ đề để hiển thị dạng thẻ chữ nhật tổng quan
+  const topicCollections = useMemo(() => {
+    const map = new Map<string, AlbumPhoto[]>();
+
+    // Đảm bảo các chủ đề mặc định luôn có sẵn
+    DEFAULT_TOPICS.forEach((t) => map.set(t, []));
+
+    // Thêm các chủ đề có ảnh
+    photos.forEach((p) => {
+      let t = p.topic || p.category;
+      if (t === "Kỷ niệm" || !t) t = "Chưa phân loại";
+      if (!map.has(t)) {
+        map.set(t, []);
+      }
+      map.get(t)!.push(p);
+    });
+
+    const collections: { topic: string; photos: AlbumPhoto[]; count: number }[] = [];
+    map.forEach((photoList, top) => {
+      // Sắp xếp ảnh trong từng bộ: Ghim lên đầu, tiếp theo là mới nhất
+      const sortedInTopic = [...photoList].sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+      collections.push({
+        topic: top,
+        photos: sortedInTopic,
+        count: photoList.length,
+      });
+    });
+
+    // Sắp xếp bộ sưu tập: Bộ có nhiều ảnh đứng trước
+    return collections.sort((a, b) => b.count - a.count);
+  }, [photos]);
+
   // Lọc theo Topic được chọn
   const filteredPhotos = useMemo(() => {
     if (!selectedTopic || selectedTopic === "all") return photos;
@@ -668,43 +704,251 @@ export default function MemoriesGallery() {
           </button>
         </div>
 
-        {/* TRƯỜNG HỢP CHƯA CÓ ẢNH NÀO TRONG KHO (EMPTY STATE CỰC ĐẸP) */}
-        {sortedPhotos.length === 0 ? (
-          <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-16 text-center backdrop-blur-sm shadow-sm">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50 text-ueh shadow-inner">
-              <Camera size={36} className="text-ueh" />
+        {/* =========================================================================
+            1. TAB "TẤT CẢ" (selectedTopic === "all"):
+            HIỂN THỊ DẠNG THẺ CHỮ NHẬT THEO CHỦ ĐỀ, MỖI CHỦ ĐỀ LÀ MỘT BỘ XÒE BÀI MINI
+            ĐÚNG YÊU CẦU: Nhìn tổng thể có nhiều bộ xòe cùng lúc, gọn gàng, click vào mỗi chủ đề
+            sẽ mở xòe bài lớn và có thể cho người xem thêm ảnh vào ngay chủ đề đó.
+            ========================================================================= */}
+        {selectedTopic === "all" ? (
+          photos.length === 0 ? (
+            <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-16 text-center backdrop-blur-sm shadow-sm">
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50 text-ueh shadow-inner">
+                <Camera size={36} className="text-ueh" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-ueh">
+                Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-slate-500">
+                Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm để cùng xòe bộ bài thanh xuân!
+              </p>
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                      openLogin();
+                      return;
+                    }
+                    setIsUploadOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+                >
+                  <Upload size={17} /> Đóng Góp Ảnh Mới Ngay
+                </button>
+              </div>
             </div>
-            <h3 className="text-lg sm:text-xl font-black text-ueh">
-              {selectedTopic !== "all"
-                ? `Chủ đề "${selectedTopic}" chưa có bức ảnh nào`
-                : "Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên"}
-            </h3>
-            <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-slate-500">
-              {selectedTopic !== "all"
-                ? `Hãy là người đầu tiên đóng góp ảnh cho bộ "${selectedTopic}". Bạn có thể chọn và tải lên cùng lúc nhiều ảnh!`
-                : "Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm để cùng xòe bộ bài thanh xuân!"}
-            </p>
-            <div className="mt-6 flex justify-center">
-              <button
-                onClick={() => {
-                  if (!user) {
-                    toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
-                    openLogin();
-                    return;
-                  }
-                  if (selectedTopic !== "all") {
+          ) : (
+            <div className="space-y-6">
+              {/* Giới thiệu các bộ bài kỷ niệm */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-blue-50/90 via-sky-50/50 to-white p-4 border border-blue-100 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ueh text-white shadow-2xs shrink-0">
+                    <Layers size={18} className="text-ueh-gold" />
+                  </span>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                      Các Bộ Bài Ký Ức Theo Chủ Đề
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Mỗi chủ đề là một bộ bài xòe độc đáo. Click vào bộ bất kỳ để mở trải nghiệm xòe bài 3D hoặc trực tiếp thêm ảnh vào bộ đó.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-xs font-bold text-ueh bg-white px-3 py-1 rounded-full border border-blue-200/80 shadow-2xs self-start sm:self-auto">
+                  {topicCollections.length} Bộ sưu tập
+                </div>
+              </div>
+
+              {/* Lưới các Thẻ chữ nhật theo chủ đề (Mỗi chủ đề là 1 bộ xòe bài mini) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+                {topicCollections.map((col) => {
+                  const hasPhotos = col.photos.length > 0;
+                  return (
+                    <div
+                      key={col.topic}
+                      className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5"
+                    >
+                      {/* Header Thẻ: Tên chủ đề & Số lượng ảnh */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-ueh border border-blue-100 mb-1">
+                            <Layers size={11} className="text-ueh-orange" /> Bộ bài ký ức
+                          </span>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors">
+                            {col.topic}
+                          </h3>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black text-slate-700 border border-slate-200">
+                          {col.count} ảnh
+                        </span>
+                      </div>
+
+                      {/* KHU VỰC XÒE BÀI MINI (STACK DECK FAN PREVIEW) */}
+                      <div
+                        onClick={() => {
+                          setSelectedTopic(col.topic);
+                          setViewMode("fan");
+                          setActiveCardIndex(0);
+                        }}
+                        className="relative my-2 h-44 sm:h-48 w-full cursor-pointer flex items-center justify-center rounded-2xl bg-gradient-to-b from-slate-100/80 via-blue-50/40 to-slate-50 p-2 overflow-hidden border border-slate-100 group-hover:border-blue-200 transition-colors"
+                        title={`Bấm để mở xòe bài bộ "${col.topic}"`}
+                      >
+                        {!hasPhotos ? (
+                          <div className="flex flex-col items-center justify-center text-center p-3">
+                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-2xs text-slate-300">
+                              <Camera size={20} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400">Chưa có bức ảnh nào</span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">Bấm Thêm ảnh để mở đầu bộ bài!</span>
+                          </div>
+                        ) : (
+                          /* Xòe 2-3 lá bài mini có góc nghiêng và mở rộng khi hover */
+                          <div className="relative h-full w-44 flex items-center justify-center">
+                            {/* Lá bài thứ 3 (lót dưới nghiêng trái) */}
+                            {col.photos[2] && (
+                              <div className="absolute h-32 w-24 sm:h-36 sm:w-28 rounded-xl overflow-hidden shadow-md border-2 border-white -rotate-12 -translate-x-6 translate-y-1 transition-all duration-300 group-hover:-rotate-16 group-hover:-translate-x-9 group-hover:scale-105">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={col.photos[2].imgSrc} alt="deck layer" className="h-full w-full object-cover" />
+                              </div>
+                            )}
+
+                            {/* Lá bài thứ 2 (lót giữa nghiêng phải) */}
+                            {col.photos[1] && (
+                              <div className="absolute h-32 w-24 sm:h-36 sm:w-28 rounded-xl overflow-hidden shadow-md border-2 border-white rotate-10 translate-x-6 translate-y-1 transition-all duration-300 group-hover:rotate-14 group-hover:translate-x-9 group-hover:scale-105">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={col.photos[1].imgSrc} alt="deck layer" className="h-full w-full object-cover" />
+                              </div>
+                            )}
+
+                            {/* Lá bài thứ 1 (trên cùng ở giữa) */}
+                            {col.photos[0] && (
+                              <div className="relative h-36 w-28 sm:h-40 sm:w-32 rounded-xl overflow-hidden shadow-xl border-2 border-white transition-all duration-300 group-hover:scale-110 z-10">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={col.photos[0].imgSrc} alt="deck top" className="h-full w-full object-cover" />
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent p-2 text-white">
+                                  <p className="text-[10px] font-bold truncate leading-tight">{col.photos[0].title}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Thẻ: Nút Xòe bài xem & Nút Thêm ảnh vào chủ đề đó */}
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTopic(col.topic);
+                            setViewMode("fan");
+                            setActiveCardIndex(0);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-ueh py-2 px-3 text-xs font-bold text-white shadow-xs hover:bg-ueh-light transition-all active:scale-95"
+                        >
+                          <Layers size={13} />
+                          <span>Xòe bài xem</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!user) {
+                              toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                              openLogin();
+                              return;
+                            }
+                            setActiveUploadTopic(col.topic);
+                            setIsCustomTopic(false);
+                            setIsUploadOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1 rounded-xl bg-blue-50 py-2 px-3 text-xs font-bold text-ueh border border-blue-200/80 hover:bg-blue-100 transition-all shrink-0 active:scale-95"
+                          title={`Thêm ảnh vào bộ "${col.topic}"`}
+                        >
+                          <Plus size={13} />
+                          <span>Thêm ảnh</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ) : (
+          /* =========================================================================
+             2. KHI CHỌN MỘT CHỦ ĐỀ CỤ THỂ (selectedTopic !== "all"):
+             HIỂN THỊ BỘ BÀI XÒE 3D HOẶC DẠNG LƯỚI CHO CHỦ ĐỀ ĐÓ
+             ========================================================================= */
+          <div>
+            {/* Banner điều hướng của bộ bài đang xem */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-blue-50 via-sky-50/40 to-white p-3.5 border border-blue-200/80 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTopic("all")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-1.5 text-xs font-bold text-ueh border border-blue-200 shadow-2xs hover:bg-blue-50 transition-all active:scale-95"
+                >
+                  <ChevronLeft size={14} /> Tất cả bộ ảnh
+                </button>
+                <div className="h-4 w-px bg-blue-200" />
+                <span className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <Layers size={15} className="text-ueh-orange" /> Bộ bài: <span className="text-ueh">{selectedTopic}</span> ({sortedPhotos.length} ảnh)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!user) {
+                      toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                      openLogin();
+                      return;
+                    }
                     setActiveUploadTopic(selectedTopic);
                     setIsCustomTopic(false);
-                  }
-                  setIsUploadOpen(true);
-                }}
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-              >
-                <Upload size={17} /> {selectedTopic !== "all" ? `Đóng Góp Ảnh Vào "${selectedTopic}"` : "Đóng Góp Ảnh Mới Ngay"}
-              </button>
+                    setIsUploadOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:scale-105 transition-all"
+                >
+                  <Plus size={14} /> + Đóng góp ảnh vào bộ này
+                </button>
+              </div>
             </div>
-          </div>
-        ) : viewMode === "fan" ? (
+
+            {/* Trường hợp bộ bài chưa có ảnh */}
+            {sortedPhotos.length === 0 ? (
+              <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-14 text-center backdrop-blur-sm shadow-sm">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-ueh shadow-inner">
+                  <Camera size={30} className="text-ueh" />
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-ueh">
+                  Chủ đề "{selectedTopic}" chưa có bức ảnh nào
+                </h3>
+                <p className="mx-auto mt-1.5 max-w-md text-xs text-slate-500">
+                  Hãy là người đầu tiên đóng góp ảnh cho bộ "{selectedTopic}". Bạn có thể chọn và tải lên cùng lúc nhiều ảnh!
+                </p>
+                <div className="mt-5 flex justify-center">
+                  <button
+                    onClick={() => {
+                      if (!user) {
+                        toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                        openLogin();
+                        return;
+                      }
+                      setActiveUploadTopic(selectedTopic);
+                      setIsCustomTopic(false);
+                      setIsUploadOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-ueh px-6 py-2.5 text-xs font-bold text-white shadow-md hover:scale-105 transition-all"
+                  >
+                    <Upload size={15} /> Đóng Góp Ảnh Vào "{selectedTopic}"
+                  </button>
+                </div>
+              </div>
+            ) : viewMode === "fan" ? (
           /* =========================================================================
              CHẾ ĐỘ XÒE BÀI ĐỘC ĐÁO (FANNED-OUT CARD DECK 3D)
              ========================================================================= */
@@ -943,6 +1187,8 @@ export default function MemoriesGallery() {
             )}
           </div>
         )}
+      </div>
+    )}
 
       </div>
 

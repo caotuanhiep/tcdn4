@@ -123,11 +123,12 @@ export default function EventSection() {
     } catch {}
   };
 
-  const transferSyntax = `TCDN4 ${fullName ? fullName.trim().toUpperCase() : "HO TEN"} ${phone ? phone.slice(-4) : "SDT"}`;
+  const cleanName = fullName ? fullName.trim().toUpperCase() : "TÊN";
+  const cleanPhone = phone ? phone.trim() : "SĐT";
+  const transferSyntax = `TCDN4 - ${cleanName} - ${cleanPhone}`;
 
-  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(
-    transferSyntax
-  )}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
+  // Không cố định nội dung chuyển khoản trong QR để app ngân hàng không khóa cứng nội dung
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const handleSubmitRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -966,16 +967,17 @@ export default function EventSection() {
                       </button>
                     </div>
 
-                    <div className="rounded-xl bg-blue-50/70 p-2 border border-blue-200 flex items-center justify-between">
+                    <div className="rounded-xl bg-blue-50/70 p-2.5 border border-blue-200 flex items-center justify-between gap-2">
                       <div>
-                        <div className="text-ueh text-[10px] font-bold">Nội dung:</div>
-                        <div className="font-bold text-ueh text-xs">{transferSyntax}</div>
+                        <div className="text-ueh text-[10px] font-bold uppercase tracking-wider">Cú pháp gợi ý:</div>
+                        <div className="font-mono font-bold text-ueh text-xs sm:text-sm">{transferSyntax}</div>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">Không khóa cứng, gợi ý ghi rõ Tên & SĐT để đối soát</span>
                       </div>
                       <button
                         onClick={() => copyToClipboard(transferSyntax, "syntax")}
-                        className="rounded-lg bg-white px-2 py-0.5 text-ueh border border-blue-200 text-[11px] font-semibold flex items-center gap-1"
+                        className="rounded-lg bg-white px-2.5 py-1 text-ueh border border-blue-200 text-xs font-bold shrink-0 flex items-center gap-1 shadow-2xs hover:bg-blue-50"
                       >
-                        {copiedSyntax ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                        {copiedSyntax ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                         {copiedSyntax ? "Đã copy" : "Copy"}
                       </button>
                     </div>

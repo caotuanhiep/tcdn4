@@ -145,7 +145,13 @@ export default function ZaloBotSettings() {
   const [zaloGroup, setZaloGroup] = useState(DEFAULT_ZALO_GROUP);
   const [botEnabled, setBotEnabled] = useState(true);
   const [claudeApiKey, setClaudeApiKey] = useState("");
-  const [botToken, setBotToken] = useState("1234567890:AbCd...");
+  const [botToken, setBotToken] = useState("");
+
+  const isBotConnected = Boolean(
+    webhookUrl &&
+      webhookUrl.trim().length > 10 &&
+      (webhookUrl.startsWith("http://") || webhookUrl.startsWith("https://"))
+  );
 
   // Broadcasts / Đăng tin
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>(INITIAL_BROADCASTS);
@@ -1222,15 +1228,25 @@ export default function ZaloBotSettings() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-slate-400 uppercase">Zalo Bot</span>
               <div className="text-sm font-black text-slate-900 mt-0.5">TCDN4 Bot</div>
-              <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Đang chạy
-              </span>
+              {isBotConnected ? (
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Đang hoạt động
+                </span>
+              ) : (
+                <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1 mt-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" /> Chưa kết nối
+                </span>
+              )}
             </div>
 
             <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-slate-400 uppercase">Nhận tin</span>
-              <div className="text-sm font-black text-slate-900 mt-0.5">Đã nối webhook</div>
-              <span className="text-[10px] text-slate-500 mt-1 block">Tin về: realtime</span>
+              <div className="text-sm font-black text-slate-900 mt-0.5">
+                {isBotConnected ? "Đã nối webhook" : "Chưa đấu nối"}
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                {isBotConnected ? "Tin về: realtime" : "Chờ nhập Webhook URL"}
+              </span>
             </div>
 
             <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
@@ -1259,9 +1275,15 @@ export default function ZaloBotSettings() {
                   <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                     <Bot size={16} className="text-ueh-orange" /> Cấu hình Zalo Bot
                   </h3>
-                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                    Đã nối webhook
-                  </span>
+                  {isBotConnected ? (
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Đã nối webhook
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Chưa kết nối Webhook
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -1292,7 +1314,13 @@ export default function ZaloBotSettings() {
                 <div className="flex items-center gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => toast.success("Kết nối Zalo Bot ổn định!")}
+                    onClick={() => {
+                      if (!isBotConnected) {
+                        toast.error("Vui lòng nhập Webhook URL / Token Bot Zalo trước khi kiểm tra!");
+                        return;
+                      }
+                      toast.success("Kết nối Zalo Bot ổn định!");
+                    }}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >
                     Kiểm tra kết nối
@@ -1351,15 +1379,27 @@ export default function ZaloBotSettings() {
               <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
                 <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center justify-between">
                   <span>🛡️ Sức khỏe hệ thống</span>
-                  <span className="text-[10px] text-emerald-600 font-bold">100% Hoạt động</span>
+                  {isBotConnected ? (
+                    <span className="text-[10px] text-emerald-600 font-bold">100% Hoạt động</span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      1 cần cấu hình
+                    </span>
+                  )}
                 </h4>
 
                 <div className="space-y-2 text-xs">
                   <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">Bảo mật Token Bot:</span>
-                    <span className="font-bold text-emerald-600 flex items-center gap-1">
-                      <Check size={12} /> Đã mã hóa
-                    </span>
+                    <span className="text-slate-600">Đấu nối Webhook Bot:</span>
+                    {isBotConnected ? (
+                      <span className="font-bold text-emerald-600 flex items-center gap-1">
+                        <Check size={12} /> Đã kết nối
+                      </span>
+                    ) : (
+                      <span className="font-bold text-amber-600 flex items-center gap-1">
+                        <AlertCircle size={12} /> Chưa đấu nối
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-slate-100">
                     <span className="text-slate-600">Database Supabase:</span>

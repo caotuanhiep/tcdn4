@@ -60,9 +60,10 @@ export default function PaymentSettingsPanel() {
     if (found) setBankName(found.name);
   };
 
-  const qrUrl = `https://img.vietqr.io/image/${bankCode}-${accountNumber.trim()}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
-    `${syntaxPrefix} NGUYEN VAN A 1234`
-  )}&accountName=${encodeURIComponent(accountName.trim())}`;
+  // Không cố định nội dung chuyển khoản trong mã VietQR để người dùng và app ngân hàng tự do ghi chú đúng tên
+  const qrUrl = `https://img.vietqr.io/image/${bankCode}-${accountNumber.trim()}-compact2.png?amount=${amount}&accountName=${encodeURIComponent(
+    accountName.trim()
+  )}`;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +76,7 @@ export default function PaymentSettingsPanel() {
       accountName: accountName.trim().toUpperCase(),
       phoneReceive: phoneReceive.trim(),
       amount: Number(amount),
-      syntaxPrefix: syntaxPrefix.trim(),
+      syntaxPrefix: "TCDN4",
     };
 
     try {
@@ -190,20 +191,16 @@ export default function PaymentSettingsPanel() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-              Tiền tố cú pháp chuyển khoản
-            </label>
-            <input
-              type="text"
-              value={syntaxPrefix}
-              onChange={(e) => setSyntaxPrefix(e.target.value)}
-              placeholder="VD: TCDN4"
-              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-mono font-bold focus:border-ueh focus:outline-none"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 block">
-              Ví dụ cú pháp: {syntaxPrefix} [HO TEN] [4 SO CUOI SDT]
-            </span>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-ueh uppercase">
+              <Sparkles size={14} className="text-ueh-orange" /> Cú pháp chuyển khoản gợi ý cho thành viên
+            </div>
+            <div className="inline-block rounded-xl bg-white px-3 py-1.5 font-mono text-xs font-black text-slate-800 border border-blue-200 shadow-2xs">
+              TCDN4 - [TÊN] - [SĐT]
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              <strong>Lưu ý:</strong> Mã VietQR sẽ <u>không cố định nội dung</u> chuyển khoản để tránh tình trạng ai quét cũng bị gán 1 nội dung cố định không đối soát được. Thay vào đó, hệ thống sẽ gợi ý cú pháp <em>TCDN4 - TÊN - SDT</em> kèm nút sao chép nhanh khi thành viên đóng góp.
+            </p>
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex justify-end">

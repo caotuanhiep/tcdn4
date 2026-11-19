@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
-import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon, Link2, CheckCircle2 } from "lucide-react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon, Link2, CheckCircle2, FolderHeart, Tag } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 
 const MEMORIES_STORAGE_KEY = "tcdn4_memories_gallery";
+
+export const DEFAULT_TOPICS = [
+  "Thời sinh viên",
+  "Cuộc sống hiện tại",
+  "Dã ngoại & du lịch",
+  "Họp lớp, hẹn hò",
+  "Hội ngộ 15 năm (2026)",
+  "Chưa phân loại",
+];
 
 const INITIAL_ADMIN_PHOTOS = [
   {
@@ -15,6 +24,8 @@ const INITIAL_ADMIN_PHOTOS = [
     is_pinned: true,
     created_at: new Date().toISOString(),
     title: "Tập thể TCDN4 K33 trước Cơ sở B - UEH",
+    topic: "Thời sinh viên",
+    category: "Thời sinh viên",
   },
 ];
 
@@ -23,6 +34,12 @@ export default function ImagesPanel() {
   const [items, setItems] = useState<any[]>(INITIAL_ADMIN_PHOTOS);
   const [loading, setLoading] = useState(false);
   
+  // Topic Filter & Upload Topic
+  const [selectedFilterTopic, setSelectedFilterTopic] = useState("all");
+  const [uploadTopic, setUploadTopic] = useState("Thời sinh viên");
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
+  const [customTopicName, setCustomTopicName] = useState("");
+
   // Upload State
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
@@ -44,6 +61,8 @@ export default function ImagesPanel() {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           parsed.forEach((p: any) => {
+            let topic = p.topic || p.category || "Chưa phân loại";
+            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
             list.push({
               id: p.id,
               image_url: p.imgSrc || p.image_url,
@@ -51,6 +70,8 @@ export default function ImagesPanel() {
               is_pinned: !!p.isPinned,
               created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
               title: p.title || "Ảnh kỷ niệm",
+              topic: topic,
+              category: topic,
               source: "memories",
             });
             seenIds.add(p.id);
@@ -68,7 +89,14 @@ export default function ImagesPanel() {
       if (!error && data && data.length > 0) {
         data.forEach((d: any) => {
           if (!seenIds.has(d.id)) {
-            list.push({ ...d, source: "supabase" });
+            let topic = d.topic || d.category || "Chưa phân loại";
+            if (topic === "Kỷ niệm" || !topic) topic = "Chưa phân loại";
+            list.push({
+              ...d,
+              topic,
+              category: topic,
+              source: "supabase",
+            });
             seenIds.add(d.id);
           }
         });
@@ -97,6 +125,19 @@ export default function ImagesPanel() {
     };
   }, [load]);
 
+  const allAvailableTopics = useMemo(() => {
+    const set = new Set<string>(DEFAULT_TOPICS);
+    items.forEach((it) => {
+      if (it.topic && it.topic !== "all") set.add(it.topic);
+    });
+    return Array.from(set);
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (selectedFilterTopic === "all") return items;
+    return items.filter((it) => it.topic === selectedFilterTopic);
+  }, [items, selectedFilterTopic]);
+
   const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length === 0) return;
@@ -112,6 +153,8 @@ export default function ImagesPanel() {
 
   const handleUploadNew = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const finalTopic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
 
     if (uploadMode === "file") {
       if (selectedFiles.length === 0) {
@@ -163,9 +206,12 @@ export default function ImagesPanel() {
               image_url: publicUrl,
               user_id: "admin",
               uploader_name: "Ban liên lạc (Admin)",
+              uploader_class: "TC10",
               is_pinned: false,
               created_at: new Date().toISOString(),
               title: itemTitle,
+              topic: finalTopic,
+              category: finalTopic,
             });
           } catch {}
 
@@ -176,6 +222,8 @@ export default function ImagesPanel() {
             is_pinned: false,
             created_at: new Date().toISOString(),
             title: itemTitle,
+            topic: finalTopic,
+            category: finalTopic,
             source: "supabase",
           };
 
@@ -186,7 +234,8 @@ export default function ImagesPanel() {
             title: itemTitle,
             imgSrc: publicUrl,
             type: "image",
-            category: "Kỷ niệm",
+            category: finalTopic,
+            topic: finalTopic,
             likes: 1,
             comments: [],
             uploader: "Ban liên lạc (Admin)",
@@ -208,8 +257,10 @@ export default function ImagesPanel() {
         setSelectedFiles([]);
         setPreviewUrls([]);
         setPhotoTitle("");
+        setIsCustomTopic(false);
+        setCustomTopicName("");
         setIsUploading(false);
-        toast.success(`Đã upload ${addedItems.length} ảnh lên Supabase thành công!`);
+        toast.success(`Đã upload ${addedItems.length} ảnh vào bộ "${finalTopic}" thành công!`);
       } catch (err: any) {
         toast.error(`Lỗi khi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
       } finally {
@@ -231,12 +282,16 @@ export default function ImagesPanel() {
         is_pinned: false,
         created_at: new Date().toISOString(),
         title,
+        topic: finalTopic,
+        category: finalTopic,
         source: "memories",
       };
 
       setItems([newItem, ...items]);
       setUploadUrl("");
       setPhotoTitle("");
+      setIsCustomTopic(false);
+      setCustomTopicName("");
       setIsUploading(false);
 
       // Thêm vào memories gallery trong localStorage
@@ -248,7 +303,8 @@ export default function ImagesPanel() {
           title,
           imgSrc: uploadUrl.trim(),
           type: "image",
-          category: "Kỷ niệm",
+          category: finalTopic,
+          topic: finalTopic,
           likes: 1,
           comments: [],
           uploader: "Ban liên lạc (Admin)",
@@ -267,13 +323,16 @@ export default function ImagesPanel() {
           image_url: uploadUrl.trim(),
           user_id: "admin",
           uploader_name: "Ban liên lạc (Admin)",
+          uploader_class: "TC10",
           is_pinned: false,
           created_at: new Date().toISOString(),
           title,
+          topic: finalTopic,
+          category: finalTopic,
         });
       } catch {}
 
-      toast.success("Đã thêm ảnh vào kho lưu trữ thành công!");
+      toast.success(`Đã thêm ảnh vào bộ "${finalTopic}" thành công!`);
     }
   };
 
@@ -430,6 +489,50 @@ export default function ImagesPanel() {
             </div>
           )}
 
+          {/* Lựa chọn Chủ đề bộ ảnh (Đồng bộ với Góc Kỷ Niệm bên ngoài) */}
+          <div className="rounded-xl border border-blue-100 bg-white/90 p-3 space-y-2">
+            <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <FolderHeart size={14} className="text-ueh-orange" />
+              <span>Chủ đề bộ ảnh kỷ niệm:</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select
+                value={isCustomTopic ? "__custom__" : uploadTopic}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") {
+                    setIsCustomTopic(true);
+                  } else {
+                    setIsCustomTopic(false);
+                    setUploadTopic(e.target.value);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-ueh focus:border-ueh focus:outline-none"
+              >
+                {allAvailableTopics.map((top) => (
+                  <option key={top} value={top}>
+                    Bộ ảnh: {top}
+                  </option>
+                ))}
+                <option value="__custom__">➕ Tạo chủ đề / bộ ảnh mới...</option>
+              </select>
+
+              {isCustomTopic && (
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Nhập tên chủ đề mới (VD: Khoảnh khắc bế giảng)..."
+                  value={customTopicName}
+                  onChange={(e) => setCustomTopicName(e.target.value)}
+                  className="w-full rounded-xl border-2 border-ueh bg-blue-50/50 px-3 py-2 text-xs font-bold text-ueh focus:outline-none"
+                />
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Ảnh tải lên từ admin sẽ tự động đồng bộ vào đúng bộ bài xòe của chủ đề này ngoài trang chủ.
+            </p>
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Tiêu đề ảnh / Ghi chú kỷ niệm:</label>
             <input
@@ -475,49 +578,105 @@ export default function ImagesPanel() {
         </form>
       )}
 
-      {/* Grid Ảnh */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-        {items.map((it) => (
-          <div key={it.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs flex flex-col justify-between transition-all hover:shadow-md">
-            <div>
-              <div className="relative aspect-video bg-slate-900 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={it.image_url} alt="Ảnh gallery" className="h-full w-full object-cover" />
-                {it.is_pinned && (
-                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-ueh px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                    <Pin size={10} /> Ghim nổi bật
-                  </span>
-                )}
-                {it.source === "supabase" && (
-                  <span className="absolute right-2 top-2 rounded-md bg-emerald-600/90 backdrop-blur-2xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
-                    Supabase
-                  </span>
-                )}
-              </div>
-              <div className="p-2.5 pb-1">
-                <p className="text-xs font-bold text-slate-800 truncate" title={it.title}>{it.title || "Ảnh kỷ niệm"}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Đăng bởi: {it.user_id || "Thành viên"}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-1.5 p-2.5 pt-1 border-t border-slate-100">
-              <button
-                onClick={() => togglePin(it)}
-                className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 py-1.5 px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                {it.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
-                <span>{it.is_pinned ? "Bỏ ghim" : "Ghim đầu"}</span>
-              </button>
-              <button
-                onClick={() => remove(it)}
-                className="inline-flex items-center justify-center rounded-lg bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors"
-                title="Xóa ảnh"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
+      {/* Thanh lọc Bộ ảnh theo Chủ đề */}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        <button
+          onClick={() => setSelectedFilterTopic("all")}
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all shrink-0 ${
+            selectedFilterTopic === "all"
+              ? "bg-ueh text-white shadow-xs"
+              : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
+          }`}
+        >
+          <span>Tất cả</span>
+          <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+            selectedFilterTopic === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+          }`}>
+            {items.length}
+          </span>
+        </button>
+
+        {allAvailableTopics.map((top) => {
+          const count = items.filter((it) => it.topic === top).length;
+          const isSelected = selectedFilterTopic === top;
+          return (
+            <button
+              key={top}
+              onClick={() => setSelectedFilterTopic(top)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all shrink-0 ${
+                isSelected
+                  ? "bg-ueh text-white shadow-xs"
+                  : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
+              }`}
+            >
+              <span>{top}</span>
+              {count > 0 && (
+                <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                  isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Grid Ảnh */}
+      {filteredItems.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-xs text-slate-400">
+          Chưa có bức ảnh nào trong chủ đề này.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredItems.map((it) => (
+            <div key={it.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs flex flex-col justify-between transition-all hover:shadow-md">
+              <div>
+                <div className="relative aspect-video bg-slate-900 overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={it.image_url} alt="Ảnh gallery" className="h-full w-full object-cover" />
+                  {it.is_pinned && (
+                    <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-ueh px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                      <Pin size={10} /> Ghim nổi bật
+                    </span>
+                  )}
+                  {it.source === "supabase" && (
+                    <span className="absolute right-2 top-2 rounded-md bg-emerald-600/90 backdrop-blur-2xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                      Supabase
+                    </span>
+                  )}
+                </div>
+                <div className="p-2.5 pb-1">
+                  <div className="mb-1">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-ueh border border-blue-100">
+                      <Tag size={10} className="text-ueh-orange" />
+                      {it.topic || "Chưa phân loại"}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 truncate" title={it.title}>{it.title || "Ảnh kỷ niệm"}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Đăng bởi: {it.user_id || "Thành viên"}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-1.5 p-2.5 pt-1 border-t border-slate-100">
+                <button
+                  onClick={() => togglePin(it)}
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 py-1.5 px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  {it.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
+                  <span>{it.is_pinned ? "Bỏ ghim" : "Ghim đầu"}</span>
+                </button>
+                <button
+                  onClick={() => remove(it)}
+                  className="inline-flex items-center justify-center rounded-lg bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors"
+                  title="Xóa ảnh"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
