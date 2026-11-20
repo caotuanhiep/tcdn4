@@ -19,7 +19,9 @@ import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers, saveCo
 
 export default function CommitteePanel() {
   const toast = useToast();
-  const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
+  const [members, setMembers] = useState<CommitteeMember[]>(() =>
+    typeof window !== "undefined" ? getCommitteeMembers() : DEFAULT_COMMITTEE_MEMBERS
+  );
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentMember, setCurrentMember] = useState<Partial<CommitteeMember>>({});
 

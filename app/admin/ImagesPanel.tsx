@@ -66,20 +66,6 @@ export function resolveTopic(t?: string, validTopics?: string[]): string {
   return clean;
 }
 
-const INITIAL_ADMIN_PHOTOS = [
-  {
-    id: "g-1",
-    image_url: "/images/ueh-group.jpg",
-    user_id: "admin",
-    is_pinned: true,
-    created_at: new Date().toISOString(),
-    title: "Tập thể TCDN4 K33 trước Cơ sở B - UEH",
-    topic: "Thời sinh viên",
-    category: "Thời sinh viên",
-    album: "Lễ tốt nghiệp",
-  },
-];
-
 // Helper nén ảnh thông minh phía Client
 async function compressImage(file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<File> {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
@@ -140,8 +126,30 @@ async function compressImage(file: File, maxWidth = 1920, maxHeight = 1920, qual
 
 export default function ImagesPanel() {
   const toast = useToast();
-  const [items, setItems] = useState<any[]>(INITIAL_ADMIN_PHOTOS);
-  const [taxonomy, setTaxonomy] = useState<GalleryTaxonomy>(DEFAULT_TAXONOMY);
+  const [items, setItems] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [taxonomy, setTaxonomy] = useState<GalleryTaxonomy>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(TAXONOMY_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_TAXONOMY;
+  });
   
   // Topic Filter & Album Filter
   const [selectedFilterTopic, setSelectedFilterTopic] = useState("all");
@@ -267,9 +275,7 @@ export default function ImagesPanel() {
       }
     } catch {}
 
-    if (list.length === 0) {
-      setItems(INITIAL_ADMIN_PHOTOS);
-    } else {
+    if (list.length > 0) {
       list.sort((a, b) => {
         if (a.is_pinned && !b.is_pinned) return -1;
         if (!a.is_pinned && b.is_pinned) return 1;

@@ -22,74 +22,31 @@ import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 import type { Profile } from "@/types/database";
 
-const INITIAL_USERS: Profile[] = [
-  {
-    id: "usr-1",
-    full_name: "Nguyễn Văn An",
-    class_name: "TC10",
-    job_title: "Giám đốc Tài chính",
-    company: "Tập đoàn Hòa Bình",
-    location_region: "hcm",
-    phone: "0903123456",
-    role: "committee",
-  },
-  {
-    id: "usr-2",
-    full_name: "Trần Thị Bích",
-    class_name: "TC11",
-    job_title: "Trưởng phòng Kế toán",
-    company: "Deloitte Vietnam",
-    location_region: "hcm",
-    phone: "0918654321",
-    role: "committee",
-  },
-  {
-    id: "usr-3",
-    full_name: "Lê Hoàng Cường",
-    class_name: "TC12",
-    job_title: "Quản lý Quỹ Đầu tư",
-    company: "VinaCapital",
-    location_region: "hn",
-    phone: "0982112233",
-    role: "committee",
-  },
-  {
-    id: "usr-4",
-    full_name: "Phạm Hải Đăng",
-    class_name: "TC10",
-    job_title: "CEO & Founder",
-    company: "FinTech Alpha",
-    location_region: "dn",
-    phone: "0934998877",
-    role: "committee",
-  },
-  {
-    id: "usr-5",
-    full_name: "Cao Tuấn Hiệp",
-    class_name: "TC12",
-    job_title: "Nội thất",
-    company: "SMLIFE",
-    location_region: "hcm",
-    phone: "0972555211",
-    role: "admin",
-  },
-  {
-    id: "usr-6",
-    full_name: "Hoàng Minh Em",
-    class_name: "TC11",
-    job_title: "Cố vấn Tài chính",
-    company: "KPMG Australia",
-    location_region: "overseas",
-    specific_location: "Sydney, Úc",
-    phone: "+61412345678",
-    role: "member",
-  },
-];
+const USERS_CACHE_KEY = "tcdn4_admin_users_cache";
 
 export default function UsersPanel() {
   const toast = useToast();
-  const [users, setUsers] = useState<Profile[]>(INITIAL_USERS);
-  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<Profile[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(USERS_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(USERS_CACHE_KEY);
+        if (cached && JSON.parse(cached).length > 0) return false;
+      } catch {}
+    }
+    return true;
+  });
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
@@ -104,14 +61,17 @@ export default function UsersPanel() {
 
   const fetchUsers = async () => {
     try {
-      setLoading(true);
+      if (users.length === 0) setLoading(true);
       const { data, error } = await getSupabase()
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         setUsers(data as Profile[]);
+        try {
+          localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(data));
+        } catch {}
       }
     } catch {
       // Dùng fallback
@@ -280,7 +240,14 @@ export default function UsersPanel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.length === 0 ? (
+              {loading && users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-ueh mb-2" />
+                    <span className="text-xs font-semibold">Đang tải danh bạ thành viên...</span>
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
                     Không tìm thấy thành viên phù hợp.

@@ -27,6 +27,16 @@ export default function AdminShell() {
   const { user, loading, isAdmin, profile } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("registrations");
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set<Tab>([tab]));
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, [tab]);
 
   // Client-side guard
   useEffect(() => {
@@ -83,12 +93,36 @@ export default function AdminShell() {
 
       {/* Main Content */}
       <section className="min-w-0 flex-1">
-        {tab === "registrations" && <RegistrationsPanel />}
-        {tab === "zalobot" && <ZaloBotSettings />}
-        {tab === "payment" && <PaymentSettingsPanel />}
-        {tab === "committee" && <CommitteePanel />}
-        {tab === "users" && <UsersPanel />}
-        {tab === "images" && <ImagesPanel />}
+        {visitedTabs.has("registrations") && (
+          <div className={tab === "registrations" ? "block" : "hidden"}>
+            <RegistrationsPanel />
+          </div>
+        )}
+        {visitedTabs.has("zalobot") && (
+          <div className={tab === "zalobot" ? "block" : "hidden"}>
+            <ZaloBotSettings />
+          </div>
+        )}
+        {visitedTabs.has("payment") && (
+          <div className={tab === "payment" ? "block" : "hidden"}>
+            <PaymentSettingsPanel />
+          </div>
+        )}
+        {visitedTabs.has("committee") && (
+          <div className={tab === "committee" ? "block" : "hidden"}>
+            <CommitteePanel />
+          </div>
+        )}
+        {visitedTabs.has("users") && (
+          <div className={tab === "users" ? "block" : "hidden"}>
+            <UsersPanel />
+          </div>
+        )}
+        {visitedTabs.has("images") && (
+          <div className={tab === "images" ? "block" : "hidden"}>
+            <ImagesPanel />
+          </div>
+        )}
       </section>
     </div>
   );
