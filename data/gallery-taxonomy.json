@@ -1,0 +1,34 @@
+{
+  "topics": [
+    "Thời sinh viên",
+    "Dã ngoại",
+    "Hiện tại",
+    "Du lịch, gặp gỡ",
+    "Kỷ niệm 15 năm"
+  ],
+  "albumsMap": {
+    "Thời sinh viên": [
+      "Lễ tốt nghiệp",
+      "Ảnh giảng đường",
+      "Đời sinh viên"
+    ],
+    "Dã ngoại": [
+      "Hoạt động Team",
+      "Night Gala"
+    ],
+    "Hiện tại": [
+      "Cuộc sống & sự nghiệp"
+    ],
+    "Du lịch, gặp gỡ": [
+      "Họp lớp & Hội ngộ",
+      "Đám cưới, hiếu hỷ",
+      "Tour Bà nà, Hội An",
+      "Tour Huế, Đà Nẵng",
+      "Tour Bình Dương, Bình Phước"
+    ],
+    "Kỷ niệm 15 năm": [
+      "Họp trù bị"
+    ]
+  },
+  "updatedAt": 1795194000000
+}

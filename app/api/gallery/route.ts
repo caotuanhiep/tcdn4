@@ -2,10 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import fs from "fs";
+import path from "path";
 
 const MANIFEST_PATH = "gallery/gallery-manifest.json";
 const TAXONOMY_PATH = "gallery/gallery-taxonomy.json";
 const BUCKET_NAME = "alumni-media";
+
+const LOCAL_DATA_DIR = path.join(process.cwd(), "data");
+const LOCAL_TAXONOMY_PATH = path.join(LOCAL_DATA_DIR, "gallery-taxonomy.json");
+const LOCAL_MANIFEST_PATH = path.join(LOCAL_DATA_DIR, "gallery-manifest.json");
+
+function ensureDataDir() {
+  try {
+    if (!fs.existsSync(LOCAL_DATA_DIR)) {
+      fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
+    }
+  } catch {}
+}
 
 export interface GalleryTaxonomy {
   topics: string[];
@@ -49,15 +63,19 @@ export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
     "Hiện tại",
     "Du lịch, gặp gỡ",
     "Kỷ niệm 15 năm",
-    "Khác",
   ],
   albumsMap: {
     "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
-    "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
-    "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
-    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
-    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
-    "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+    "Dã ngoại": ["Hoạt động Team", "Night Gala"],
+    "Hiện tại": ["Cuộc sống & sự nghiệp"],
+    "Du lịch, gặp gỡ": [
+      "Họp lớp & Hội ngộ",
+      "Đám cưới, hiếu hỷ",
+      "Tour Bà nà, Hội An",
+      "Tour Huế, Đà Nẵng",
+      "Tour Bình Dương, Bình Phước",
+    ],
+    "Kỷ niệm 15 năm": ["Họp trù bị"],
   },
 };
 
@@ -98,20 +116,37 @@ const DEFAULT_INITIAL_PHOTOS: AlbumPhoto[] = [
   },
 ];
 
-export function normalizeTopic(t?: string): string {
-  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
-    return "Khác";
+export function normalizeTopic(t?: string, validTopics?: string[]): string {
+  const fallback = validTopics && validTopics.length > 0 ? validTopics[0] : "Thời sinh viên";
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all" || t === "Khác") {
+    return fallback;
   }
   const clean = t.trim();
-  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
-  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
-  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
-  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  if (validTopics && validTopics.length > 0) {
+    if (validTopics.includes(clean)) return clean;
+    if (clean === "Cuộc sống hiện tại" && validTopics.includes("Hiện tại")) return "Hiện tại";
+    if (clean === "Dã ngoại & du lịch" && validTopics.includes("Dã ngoại")) return "Dã ngoại";
+    if (clean === "Họp lớp, hẹn hò" && validTopics.includes("Du lịch, gặp gỡ")) return "Du lịch, gặp gỡ";
+    if (clean === "Hội ngộ 15 năm (2026)" && validTopics.includes("Kỷ niệm 15 năm")) return "Kỷ niệm 15 năm";
+    return fallback;
+  }
   return clean;
 }
 
-// Helper: Tải manifest ảnh từ Supabase Storage
+// Helper: Tải manifest ảnh từ Storage và local disk
 async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
+  let localPhotos: AlbumPhoto[] | null = null;
+  try {
+    if (fs.existsSync(LOCAL_MANIFEST_PATH)) {
+      const text = fs.readFileSync(LOCAL_MANIFEST_PATH, "utf-8");
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        localPhotos = parsed;
+      }
+    }
+  } catch {}
+
+  let cloudPhotos: AlbumPhoto[] | null = null;
   try {
     const supabase = client || getSupabaseAdmin();
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(MANIFEST_PATH);
@@ -119,7 +154,7 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
       const text = await data.text();
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((p: any) => {
+        cloudPhotos = parsed.map((p: any) => {
           const top = normalizeTopic(p.topic || p.category);
           const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? (p.title?.toLowerCase().includes("tốt nghiệp") ? "Lễ tốt nghiệp" : "Lễ tốt nghiệp") : "Ảnh chung")).trim();
           return {
@@ -138,15 +173,27 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
   } catch (err) {
     console.warn("loadManifest error:", err);
   }
+
+  if (cloudPhotos && cloudPhotos.length > 0) {
+    return cloudPhotos;
+  }
+  if (localPhotos && localPhotos.length > 0) {
+    return localPhotos;
+  }
   return DEFAULT_INITIAL_PHOTOS;
 }
 
-// Helper: Lưu manifest ảnh lên Supabase Storage
+// Helper: Lưu manifest ảnh lên Storage và local disk
 async function saveManifest(photos: AlbumPhoto[], client?: SupabaseClient): Promise<boolean> {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(LOCAL_MANIFEST_PATH, JSON.stringify(photos, null, 2), "utf-8");
+  } catch {}
+
   try {
     const supabase = client || getSupabaseAdmin();
     const buffer = Buffer.from(JSON.stringify(photos, null, 2), "utf-8");
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(
+    await supabase.storage.from(BUCKET_NAME).upload(
       MANIFEST_PATH,
       buffer,
       {
@@ -154,19 +201,25 @@ async function saveManifest(photos: AlbumPhoto[], client?: SupabaseClient): Prom
         upsert: true,
       }
     );
-    if (error) {
-      console.error("saveManifest storage error:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("saveManifest exception:", err);
-    return false;
-  }
+  } catch {}
+
+  return true;
 }
 
-// Helper: Tải taxonomy (Chủ đề & Bộ ảnh) từ Supabase Storage
+// Helper: Tải taxonomy (Chủ đề & Bộ ảnh) từ local disk & Supabase Storage
 async function loadTaxonomy(client?: SupabaseClient): Promise<GalleryTaxonomy> {
+  let localTax: (GalleryTaxonomy & { updatedAt?: number }) | null = null;
+  try {
+    if (fs.existsSync(LOCAL_TAXONOMY_PATH)) {
+      const text = fs.readFileSync(LOCAL_TAXONOMY_PATH, "utf-8");
+      const parsed = JSON.parse(text);
+      if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0) {
+        localTax = parsed;
+      }
+    }
+  } catch {}
+
+  let cloudTax: (GalleryTaxonomy & { updatedAt?: number }) | null = null;
   try {
     const supabase = client || getSupabaseAdmin();
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(TAXONOMY_PATH);
@@ -174,25 +227,54 @@ async function loadTaxonomy(client?: SupabaseClient): Promise<GalleryTaxonomy> {
       const text = await data.text();
       const parsed = JSON.parse(text);
       if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0 && parsed.albumsMap) {
-        return parsed;
+        cloudTax = parsed;
       }
     }
   } catch (err) {
     console.warn("loadTaxonomy error:", err);
   }
-  return DEFAULT_TAXONOMY;
+
+  let chosen = DEFAULT_TAXONOMY;
+  if (localTax && cloudTax) {
+    const localTime = localTax.updatedAt || 0;
+    const cloudTime = cloudTax.updatedAt || 0;
+    chosen = localTime >= cloudTime ? localTax : cloudTax;
+  } else if (localTax) {
+    chosen = localTax;
+  } else if (cloudTax) {
+    chosen = cloudTax;
+  }
+
+  // Khử chủ đề "Khác" nếu không có trong topics hợp lệ của localTax
+  if (localTax && !localTax.topics.includes("Khác") && chosen.topics.includes("Khác")) {
+    chosen = {
+      ...chosen,
+      topics: chosen.topics.filter((t) => t !== "Khác"),
+      albumsMap: Object.fromEntries(Object.entries(chosen.albumsMap).filter(([k]) => k !== "Khác")),
+    };
+  }
+
+  return chosen;
 }
 
-// Helper: Lưu taxonomy lên Supabase Storage (dùng Buffer UTF-8 chuẩn xác)
+// Helper: Lưu taxonomy lên local disk và Supabase Storage
 async function saveTaxonomy(taxonomy: GalleryTaxonomy, client?: SupabaseClient): Promise<boolean> {
+  const taxWithTimestamp: GalleryTaxonomy = {
+    ...taxonomy,
+    updatedAt: taxonomy.updatedAt || Date.now(),
+  };
+
+  try {
+    ensureDataDir();
+    fs.writeFileSync(LOCAL_TAXONOMY_PATH, JSON.stringify(taxWithTimestamp, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("saveTaxonomy local disk warning:", err);
+  }
+
   try {
     const supabase = client || getSupabaseAdmin();
-    const taxWithTimestamp = {
-      ...taxonomy,
-      updatedAt: taxonomy.updatedAt || Date.now(),
-    };
     const buffer = Buffer.from(JSON.stringify(taxWithTimestamp, null, 2), "utf-8");
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(
+    await supabase.storage.from(BUCKET_NAME).upload(
       TAXONOMY_PATH,
       buffer,
       {
@@ -200,15 +282,11 @@ async function saveTaxonomy(taxonomy: GalleryTaxonomy, client?: SupabaseClient):
         upsert: true,
       }
     );
-    if (error) {
-      console.error("saveTaxonomy error:", error);
-      return false;
-    }
-    return true;
   } catch (err) {
-    console.error("saveTaxonomy error:", err);
-    return false;
+    console.warn("saveTaxonomy storage exception:", err);
   }
+
+  return true;
 }
 
 // Helper: Lưu dự phòng vào DB table gallery (nếu các cột tồn tại)
@@ -364,8 +442,10 @@ export async function POST(req: NextRequest) {
         await saveManifest(body.photos, supabase);
       } else if (body.migrateTopic || body.migrateAlbum) {
         const currentList = await loadManifest(supabase);
+        const validTopics = body.taxonomy?.topics || [];
+        const fallbackTopic = validTopics[0] || "Thời sinh viên";
         const migrated = currentList.map((p) => {
-          let topic = p.topic || p.category || "Khác";
+          let topic = normalizeTopic(p.topic || p.category, validTopics);
           let album = p.album || p.subTopic || "Ảnh chung";
 
           if (body.migrateTopic && (topic === body.migrateTopic.from || p.category === body.migrateTopic.from)) {

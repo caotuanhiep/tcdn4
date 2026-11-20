@@ -35,7 +35,6 @@ export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
     "Hiện tại",
     "Du lịch, gặp gỡ",
     "Kỷ niệm 15 năm",
-    "Khác",
   ],
   albumsMap: {
     "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
@@ -43,7 +42,6 @@ export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
     "Hiện tại": ["Cuộc sống & sự nghiệp"],
     "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè", "Đám cưới, hiếu hỷ", "Gặp gỡ", "Tour Bà nà, Hội An"],
     "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Họp trù bị"],
-    "Khác": ["Khoảnh khắc khác"],
   },
 };
 
@@ -52,8 +50,9 @@ export const DEFAULT_ALBUMS_MAP = DEFAULT_TAXONOMY.albumsMap;
 
 // Hàm chuẩn hóa chủ đề dựa trên danh sách chủ đề hợp lệ hiện tại
 export function resolveTopic(t?: string, validTopics?: string[]): string {
-  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
-    return validTopics && validTopics.length > 0 ? validTopics[0] : "Khác";
+  const fallback = validTopics && validTopics.length > 0 ? validTopics[0] : "Thời sinh viên";
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all" || t === "Khác") {
+    return fallback;
   }
   const clean = t.trim();
   if (validTopics && validTopics.length > 0) {
@@ -62,7 +61,7 @@ export function resolveTopic(t?: string, validTopics?: string[]): string {
     if (clean === "Dã ngoại & du lịch" && validTopics.includes("Dã ngoại")) return "Dã ngoại";
     if (clean === "Họp lớp, hẹn hò" && validTopics.includes("Du lịch, gặp gỡ")) return "Du lịch, gặp gỡ";
     if (clean === "Hội ngộ 15 năm (2026)" && validTopics.includes("Kỷ niệm 15 năm")) return "Kỷ niệm 15 năm";
-    return validTopics[0];
+    return fallback;
   }
   return clean;
 }
@@ -351,7 +350,6 @@ export default function ImagesPanel() {
       if (options?.updatedItems) {
         localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(options.updatedItems));
       }
-      window.dispatchEvent(new Event("tcdn4_memories_updated"));
     } catch {}
 
     try {
@@ -408,6 +406,10 @@ export default function ImagesPanel() {
       }
     } catch (err) {
       console.warn("Lỗi lưu taxonomy lên server:", err);
+    } finally {
+      try {
+        window.dispatchEvent(new Event("tcdn4_memories_updated"));
+      } catch {}
     }
   };
 
@@ -431,7 +433,7 @@ export default function ImagesPanel() {
     toast.success(`Đã thêm chủ đề "${val}" thành công!`);
   };
 
-  // Xóa chủ đề (Di dời các bức ảnh thuộc chủ đề này sang chủ đề còn lại)
+  // Xóa chủ đề (Di dời các bức ảnh thuộc chủ đề này sang chủ đề còn lại nếu có ảnh)
   const handleDeleteTopic = async (topicName: string) => {
     if (taxonomy.topics.length <= 1) {
       toast.error("Phải giữ lại ít nhất 1 chủ đề!");
@@ -443,7 +445,12 @@ export default function ImagesPanel() {
       return;
     }
 
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa chủ đề "${topicName}"? Tất cả ảnh thuộc chủ đề này sẽ được chuyển sang "${targetTopic}".`)) {
+    const photosInThisTopic = items.filter((it) => resolveTopic(it.topic, taxonomy.topics) === topicName).length;
+    const confirmMsg = photosInThisTopic > 0
+      ? `Bạn có chắc chắn muốn xóa chủ đề "${topicName}"? ${photosInThisTopic} bức ảnh thuộc chủ đề này sẽ được chuyển sang "${targetTopic}".`
+      : `Bạn có chắc chắn muốn xóa chủ đề "${topicName}"?`;
+
+    if (!window.confirm(confirmMsg)) {
       return;
     }
 

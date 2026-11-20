@@ -59,15 +59,19 @@ export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
     "Hiện tại",
     "Du lịch, gặp gỡ",
     "Kỷ niệm 15 năm",
-    "Khác",
   ],
   albumsMap: {
     "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
-    "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
-    "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
-    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
-    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
-    "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+    "Dã ngoại": ["Hoạt động Team", "Night Gala"],
+    "Hiện tại": ["Cuộc sống & sự nghiệp"],
+    "Du lịch, gặp gỡ": [
+      "Họp lớp & Hội ngộ",
+      "Đám cưới, hiếu hỷ",
+      "Tour Bà nà, Hội An",
+      "Tour Huế, Đà Nẵng",
+      "Tour Bình Dương, Bình Phước",
+    ],
+    "Kỷ niệm 15 năm": ["Họp trù bị"],
   },
 };
 
@@ -76,8 +80,9 @@ export const DEFAULT_ALBUMS_MAP = DEFAULT_TAXONOMY.albumsMap;
 
 // Hàm chuẩn hóa chủ đề
 export function resolveTopic(t?: string, validTopics?: string[]): string {
-  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
-    return validTopics && validTopics.length > 0 ? validTopics[0] : "Khác";
+  const fallback = validTopics && validTopics.length > 0 ? validTopics[0] : "Thời sinh viên";
+  if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all" || t === "Khác") {
+    return fallback;
   }
   const clean = t.trim();
   if (validTopics && validTopics.length > 0) {
@@ -86,7 +91,7 @@ export function resolveTopic(t?: string, validTopics?: string[]): string {
     if (clean === "Dã ngoại & du lịch" && validTopics.includes("Dã ngoại")) return "Dã ngoại";
     if (clean === "Họp lớp, hẹn hò" && validTopics.includes("Du lịch, gặp gỡ")) return "Du lịch, gặp gỡ";
     if (clean === "Hội ngộ 15 năm (2026)" && validTopics.includes("Kỷ niệm 15 năm")) return "Kỷ niệm 15 năm";
-    return validTopics[0];
+    return fallback;
   }
   return clean;
 }
@@ -411,7 +416,7 @@ export default function MemoriesGallery() {
   const currentDisplayPhotos = useMemo(() => {
     if (selectedAlbum) {
       if (selectedTopic === "all") {
-        return photos.filter((p) => resolveAlbum(p, p.topic || "Khác", taxonomy.albumsMap) === selectedAlbum);
+        return photos.filter((p) => resolveAlbum(p, p.topic || taxonomy.topics[0] || "Thời sinh viên", taxonomy.albumsMap) === selectedAlbum);
       }
       return photos.filter(
         (p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic, taxonomy.albumsMap) === selectedAlbum
@@ -659,10 +664,11 @@ export default function MemoriesGallery() {
 
     setIsSubmittingCloud(true);
 
+    const defaultTopic = taxonomy.topics[0] || "Thời sinh viên";
     const rawTopic = isCustomTopic
-      ? (customTopicName.trim() || "Khác")
-      : (activeUploadTopic || "Khác");
-    const finalTopic = resolveTopic(rawTopic);
+      ? (customTopicName.trim() || defaultTopic)
+      : (activeUploadTopic || defaultTopic);
+    const finalTopic = resolveTopic(rawTopic, taxonomy.topics);
 
     // Xác định tên Bộ ảnh
     const rawAlbum = isCustomAlbum
