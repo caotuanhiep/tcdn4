@@ -2,7 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 const MANIFEST_PATH = "gallery/gallery-manifest.json";
+const TAXONOMY_PATH = "gallery/gallery-taxonomy.json";
 const BUCKET_NAME = "alumni-media";
+
+export interface GalleryTaxonomy {
+  topics: string[];
+  albumsMap: Record<string, string[]>;
+}
+
+export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
+  topics: [
+    "Thời sinh viên",
+    "Dã ngoại",
+    "Hiện tại",
+    "Du lịch, gặp gỡ",
+    "Kỷ niệm 15 năm",
+    "Khác",
+  ],
+  albumsMap: {
+    "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
+    "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
+    "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
+    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
+    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
+    "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+  },
+};
 
 interface AlbumPhoto {
   id: string;
@@ -107,6 +132,43 @@ async function saveManifest(photos: AlbumPhoto[]): Promise<boolean> {
   }
 }
 
+// Helper: Tải taxonomy (Chủ đề & Bộ ảnh) từ Supabase Storage
+async function loadTaxonomy(): Promise<GalleryTaxonomy> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(TAXONOMY_PATH);
+    if (!error && data) {
+      const text = await data.text();
+      const parsed = JSON.parse(text);
+      if (parsed && Array.isArray(parsed.topics) && parsed.albumsMap) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn("loadTaxonomy error:", err);
+  }
+  return DEFAULT_TAXONOMY;
+}
+
+// Helper: Lưu taxonomy lên Supabase Storage
+async function saveTaxonomy(taxonomy: GalleryTaxonomy): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.storage.from(BUCKET_NAME).upload(
+      TAXONOMY_PATH,
+      JSON.stringify(taxonomy, null, 2),
+      {
+        contentType: "application/json",
+        upsert: true,
+      }
+    );
+    return !error;
+  } catch (err) {
+    console.error("saveTaxonomy error:", err);
+    return false;
+  }
+}
+
 // Helper: Lưu dự phòng vào DB table gallery (nếu các cột tồn tại)
 async function trySaveToDbTable(photo: AlbumPhoto) {
   try {
@@ -128,9 +190,12 @@ async function trySaveToDbTable(photo: AlbumPhoto) {
   }
 }
 
-// GET /api/gallery - Lấy toàn bộ ảnh từ Cloud (công khai, không cần đăng nhập)
+// GET /api/gallery - Lấy toàn bộ ảnh và taxonomy từ Cloud (công khai, không cần đăng nhập)
 export async function GET() {
-  const photos = await loadManifest();
+  const [photos, taxonomy] = await Promise.all([
+    loadManifest(),
+    loadTaxonomy(),
+  ]);
 
   // Sắp xếp: Ghim lên đầu, tiếp theo là mới nhất
   const sorted = [...photos].sort((a, b) => {
@@ -140,7 +205,7 @@ export async function GET() {
   });
 
   return NextResponse.json(
-    { success: true, photos: sorted },
+    { success: true, photos: sorted, taxonomy },
     {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -244,6 +309,11 @@ export async function POST(req: NextRequest) {
 
     // 2. Trường hợp gửi JSON (Link ảnh hoặc đồng bộ)
     const body = await req.json();
+
+    if (body.action === "save_taxonomy" && body.taxonomy) {
+      await saveTaxonomy(body.taxonomy);
+      return NextResponse.json({ success: true, taxonomy: body.taxonomy });
+    }
 
     if (body.action === "add" && body.photo) {
       const currentList = await loadManifest();

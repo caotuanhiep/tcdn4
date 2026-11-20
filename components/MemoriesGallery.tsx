@@ -13,14 +13,10 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Pin, 
-  Layers, 
-  LayoutGrid, 
   Trash2, 
-  Eye, 
-  Plus, 
+  ArrowLeft, 
   Loader2,
-  ArrowLeft,
-  FolderPlus
+  FolderHeart
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
@@ -51,24 +47,32 @@ export interface AlbumPhoto {
   isPinned?: boolean;
 }
 
-export const DEFAULT_TOPICS = [
-  "Thời sinh viên",
-  "Dã ngoại",
-  "Hiện tại",
-  "Du lịch, gặp gỡ",
-  "Kỷ niệm 15 năm",
-  "Khác",
-];
+export interface GalleryTaxonomy {
+  topics: string[];
+  albumsMap: Record<string, string[]>;
+}
 
-// Bản đồ các bộ thẻ bài (sub-albums) mặc định trong từng chủ đề
-export const DEFAULT_ALBUMS_MAP: Record<string, string[]> = {
-  "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
-  "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
-  "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
-  "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
-  "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
-  "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
+  topics: [
+    "Thời sinh viên",
+    "Dã ngoại",
+    "Hiện tại",
+    "Du lịch, gặp gỡ",
+    "Kỷ niệm 15 năm",
+    "Khác",
+  ],
+  albumsMap: {
+    "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
+    "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
+    "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
+    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
+    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
+    "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+  },
 };
+
+export const DEFAULT_TOPICS = DEFAULT_TAXONOMY.topics;
+export const DEFAULT_ALBUMS_MAP = DEFAULT_TAXONOMY.albumsMap;
 
 // Hàm chuẩn hóa chủ đề
 export function resolveTopic(t?: string): string {
@@ -83,8 +87,12 @@ export function resolveTopic(t?: string): string {
   return clean;
 }
 
-// Hàm chuẩn hóa bộ thẻ bài (Album) trong từng chủ đề
-export function resolveAlbum(photo: Partial<AlbumPhoto>, topic: string): string {
+// Hàm chuẩn hóa bộ ảnh trong từng chủ đề
+export function resolveAlbum(
+  photo: Partial<AlbumPhoto>,
+  topic: string,
+  albumsMap: Record<string, string[]> = DEFAULT_ALBUMS_MAP
+): string {
   const alb = (photo.album || photo.subTopic || "").trim();
   if (alb) return alb;
   
@@ -95,14 +103,14 @@ export function resolveAlbum(photo: Partial<AlbumPhoto>, topic: string): string 
     if (title.includes("sinh viên") || title.includes("ktx") || title.includes("kí túc")) return "Đời sinh viên";
     return "Lễ tốt nghiệp";
   }
-  const defaults = DEFAULT_ALBUMS_MAP[topic];
+  const defaults = albumsMap[topic] || DEFAULT_ALBUMS_MAP[topic];
   return defaults && defaults.length > 0 ? defaults[0] : "Ảnh chung";
 }
 
-// Hàm chuẩn hóa một đối tượng ảnh, bảo đảm không bao giờ văng lỗi runtime khi đọc trường dữ liệu
-export function normalizePhoto(p: any): AlbumPhoto {
+// Hàm chuẩn hóa một đối tượng ảnh
+export function normalizePhoto(p: any, albumsMap: Record<string, string[]> = DEFAULT_ALBUMS_MAP): AlbumPhoto {
   const topic = resolveTopic(p.topic || p.category);
-  const album = resolveAlbum(p, topic);
+  const album = resolveAlbum(p, topic, albumsMap);
   return {
     id: p.id || `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     title: p.title || "Ảnh kỷ niệm",
@@ -132,8 +140,9 @@ interface StagedUploadFile {
 }
 
 const STORAGE_KEY = "tcdn4_memories_gallery";
+const TAXONOMY_STORAGE_KEY = "tcdn4_gallery_taxonomy";
 
-// Hàm nén ảnh Client-side bằng Canvas (chuẩn dung lượng nhẹ 100-250KB nhưng sắc nét)
+// Hàm nén ảnh Client-side bằng Canvas
 async function compressImageFile(file: File, maxWidth = 1920, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -174,18 +183,17 @@ export default function MemoriesGallery() {
   const toast = useToast();
 
   const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
+  const [taxonomy, setTaxonomy] = useState<GalleryTaxonomy>(DEFAULT_TAXONOMY);
   const [activePhoto, setActivePhoto] = useState<AlbumPhoto | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [likedPhotoIds, setLikedPhotoIds] = useState<string[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"fan" | "grid">("fan");
-  const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
-  const [visibleCount, setVisibleCount] = useState<number>(16);
+  const [visibleCount, setVisibleCount] = useState<number>(24);
 
-  // Điều hướng phân cấp:
-  // selectedTopic: "all" (Xem tất cả chủ đề) hoặc tên chủ đề cụ thể (VD: "Thời sinh viên")
-  const [selectedTopic, setSelectedTopic] = useState<string>("all");
-  // selectedAlbum: null (Hiển thị danh sách các bộ thẻ bài của chủ đề đó) hoặc tên bộ thẻ cụ thể (VD: "Lễ tốt nghiệp")
+  // Điều hướng:
+  // selectedTopic: "all" (Xem tất cả các bộ ảnh) hoặc tên chủ đề cụ thể (VD: "Thời sinh viên")
+  const [selectedTopic, setSelectedTopic] = useState<string>("Thời sinh viên");
+  // selectedAlbum: null (Hiển thị danh sách các bộ ảnh của chủ đề đó) hoặc tên bộ ảnh cụ thể (VD: "Lễ tốt nghiệp")
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
 
   // Multi-upload state
@@ -208,19 +216,28 @@ export default function MemoriesGallery() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tải danh sách ảnh từ Supabase Cloud và cache localStorage
+  // Tải danh sách ảnh và cấu trúc taxonomy từ Supabase Cloud và cache localStorage
   const loadStoredPhotos = useCallback(async () => {
     const list: AlbumPhoto[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Tải ảnh từ Supabase Cloud qua API /api/gallery
+    let currentTaxonomy = DEFAULT_TAXONOMY;
+
+    // 1. Tải ảnh & taxonomy từ Supabase Cloud qua API /api/gallery
     try {
       const res = await fetch("/api/gallery");
       if (res.ok) {
         const data = await res.json();
+        if (data.taxonomy && Array.isArray(data.taxonomy.topics)) {
+          currentTaxonomy = data.taxonomy;
+          setTaxonomy(data.taxonomy);
+          try {
+            localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(data.taxonomy));
+          } catch {}
+        }
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((rawP: any) => {
-            const p = normalizePhoto(rawP);
+            const p = normalizePhoto(rawP, currentTaxonomy.albumsMap);
             if (!seenIds.has(p.id)) {
               list.push(p);
               seenIds.add(p.id);
@@ -234,12 +251,21 @@ export default function MemoriesGallery() {
 
     // 2. Kết hợp với ảnh trong localStorage nếu có
     try {
+      const storedTax = localStorage.getItem(TAXONOMY_STORAGE_KEY);
+      if (storedTax) {
+        const parsedTax = JSON.parse(storedTax);
+        if (parsedTax && Array.isArray(parsedTax.topics)) {
+          currentTaxonomy = parsedTax;
+          setTaxonomy(parsedTax);
+        }
+      }
+
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           parsed.forEach((rawP: any) => {
-            const p = normalizePhoto(rawP);
+            const p = normalizePhoto(rawP, currentTaxonomy.albumsMap);
             if (!seenIds.has(p.id)) {
               list.push(p);
               seenIds.add(p.id);
@@ -263,7 +289,7 @@ export default function MemoriesGallery() {
   }, [loadStoredPhotos]);
 
   const savePhotos = (newPhotos: AlbumPhoto[]) => {
-    const normalized = newPhotos.map(normalizePhoto);
+    const normalized = newPhotos.map((p) => normalizePhoto(p, taxonomy.albumsMap));
     setPhotos(normalized);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -275,27 +301,29 @@ export default function MemoriesGallery() {
 
   // Danh sách toàn bộ chủ đề
   const allTopics = useMemo(() => {
-    const set = new Set<string>(DEFAULT_TOPICS);
+    const list = [...taxonomy.topics];
     photos.forEach((p) => {
-      if (p.topic && p.topic !== "all") {
-        set.add(p.topic);
+      if (p.topic && p.topic !== "all" && !list.includes(p.topic)) {
+        list.push(p.topic);
       }
     });
-    return Array.from(set);
-  }, [photos]);
+    return list;
+  }, [taxonomy.topics, photos]);
 
-  // Lấy danh sách các bộ thẻ bài (Albums) theo chủ đề đã chọn
+  // Lấy danh sách các bộ ảnh (Albums) theo chủ đề đã chọn
   const getAlbumsForTopic = useCallback((topicName: string): string[] => {
-    const defaults = DEFAULT_ALBUMS_MAP[topicName] || ["Ảnh chung"];
-    const set = new Set<string>(defaults);
+    const fromTax = taxonomy.albumsMap[topicName] || DEFAULT_ALBUMS_MAP[topicName] || ["Ảnh chung"];
+    const list = [...fromTax];
     photos.forEach((p) => {
       if (p.topic === topicName) {
-        const alb = resolveAlbum(p, topicName);
-        if (alb) set.add(alb);
+        const alb = resolveAlbum(p, topicName, taxonomy.albumsMap);
+        if (alb && !list.includes(alb)) {
+          list.push(alb);
+        }
       }
     });
-    return Array.from(set);
-  }, [photos]);
+    return list;
+  }, [taxonomy.albumsMap, photos]);
 
   // Cập nhật album mặc định khi thay đổi upload topic
   useEffect(() => {
@@ -305,57 +333,47 @@ export default function MemoriesGallery() {
     }
   }, [activeUploadTopic, activeUploadAlbum, getAlbumsForTopic]);
 
-  // Nhóm toàn bộ ảnh theo Chủ đề (dành cho Tab "Tất cả")
-  const topicCollections = useMemo(() => {
-    const map = new Map<string, AlbumPhoto[]>();
-    DEFAULT_TOPICS.forEach((t) => map.set(t, []));
-
-    photos.forEach((p) => {
-      const t = p.topic || "Khác";
-      if (!map.has(t)) map.set(t, []);
-      map.get(t)!.push(p);
-    });
-
-    const collections: { 
-      topic: string; 
-      photos: AlbumPhoto[]; 
-      count: number;
-      albumsCount: number;
-    }[] = [];
-
-    map.forEach((photoList, top) => {
-      const sortedInTopic = [...photoList].sort((a, b) => {
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-      const albumsInTopic = getAlbumsForTopic(top);
-      collections.push({
-        topic: top,
-        photos: sortedInTopic,
-        count: photoList.length,
-        albumsCount: albumsInTopic.length,
-      });
-    });
-
-    return collections.sort((a, b) => {
-      const idxA = DEFAULT_TOPICS.indexOf(a.topic);
-      const idxB = DEFAULT_TOPICS.indexOf(b.topic);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return b.count - a.count;
-    });
-  }, [photos, getAlbumsForTopic]);
-
-  // Danh sách các bộ thẻ bài (Albums) trong Chủ đề đang chọn
+  // Danh sách các bộ ảnh trong Chủ đề đang chọn (hoặc tất cả các bộ ảnh nếu chọn "Tất cả")
   const currentTopicAlbums = useMemo(() => {
-    if (selectedTopic === "all") return [];
+    if (selectedTopic === "all") {
+      const result: {
+        name: string;
+        topic: string;
+        photos: AlbumPhoto[];
+        count: number;
+        coverPhoto: AlbumPhoto | null;
+      }[] = [];
+
+      allTopics.forEach((top) => {
+        const albumNames = getAlbumsForTopic(top);
+        albumNames.forEach((albName) => {
+          const albPhotos = photos
+            .filter((p) => p.topic === top && resolveAlbum(p, top, taxonomy.albumsMap) === albName)
+            .sort((a, b) => {
+              if (a.isPinned && !b.isPinned) return -1;
+              if (!a.isPinned && b.isPinned) return 1;
+              return (b.createdAt || 0) - (a.createdAt || 0);
+            });
+
+          // Chỉ hiện nếu có ảnh hoặc là album mặc định trong taxonomy
+          if (albPhotos.length > 0 || (taxonomy.albumsMap[top] && taxonomy.albumsMap[top].includes(albName))) {
+            result.push({
+              name: albName,
+              topic: top,
+              photos: albPhotos,
+              count: albPhotos.length,
+              coverPhoto: albPhotos[0] || null,
+            });
+          }
+        });
+      });
+      return result;
+    }
+
     const albumNames = getAlbumsForTopic(selectedTopic);
-    
     return albumNames.map((albName) => {
       const albPhotos = photos
-        .filter((p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic) === albName)
+        .filter((p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic, taxonomy.albumsMap) === albName)
         .sort((a, b) => {
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
@@ -370,18 +388,21 @@ export default function MemoriesGallery() {
         coverPhoto: albPhotos[0] || null,
       };
     });
-  }, [photos, selectedTopic, getAlbumsForTopic]);
+  }, [photos, selectedTopic, allTopics, getAlbumsForTopic, taxonomy.albumsMap]);
 
-  // Danh sách ảnh đang hiển thị trong bộ thẻ bài được chọn (hoặc toàn bộ chủ đề nếu chưa chọn)
+  // Danh sách ảnh đang hiển thị trong bộ ảnh được chọn
   const currentDisplayPhotos = useMemo(() => {
-    if (selectedTopic === "all") return photos;
     if (selectedAlbum) {
+      if (selectedTopic === "all") {
+        return photos.filter((p) => resolveAlbum(p, p.topic || "Khác", taxonomy.albumsMap) === selectedAlbum);
+      }
       return photos.filter(
-        (p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic) === selectedAlbum
+        (p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic, taxonomy.albumsMap) === selectedAlbum
       );
     }
+    if (selectedTopic === "all") return photos;
     return photos.filter((p) => p.topic === selectedTopic);
-  }, [photos, selectedTopic, selectedAlbum]);
+  }, [photos, selectedTopic, selectedAlbum, taxonomy.albumsMap]);
 
   // Sắp xếp ảnh: Ghim lên đầu, tiếp đến là mới nhất
   const sortedPhotos = useMemo(() => {
@@ -392,14 +413,7 @@ export default function MemoriesGallery() {
     });
   }, [currentDisplayPhotos]);
 
-  // Đảm bảo activeCardIndex hợp lệ
-  useEffect(() => {
-    if (sortedPhotos.length > 0 && activeCardIndex >= sortedPhotos.length) {
-      setActiveCardIndex(Math.max(0, sortedPhotos.length - 1));
-    }
-  }, [sortedPhotos.length, activeCardIndex]);
-
-  // Chuyển ảnh kế tiếp / trước đó trong modal xem ảnh (Lightbox an toàn tuyệt đối)
+  // Lightbox navigation
   const handleNextPhoto = useCallback(() => {
     if (!activePhoto || sortedPhotos.length <= 1) return;
     const currentIndex = sortedPhotos.findIndex((p) => p.id === activePhoto.id);
@@ -418,7 +432,7 @@ export default function MemoriesGallery() {
     }
   }, [activePhoto, sortedPhotos]);
 
-  // Hỗ trợ phím mũi tên Left / Right và Esc khi đang xem ảnh
+  // Phím mũi tên & Esc khi xem ảnh
   useEffect(() => {
     if (!activePhoto) return;
 
@@ -476,16 +490,15 @@ export default function MemoriesGallery() {
 
   const handleTogglePin = (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (!user) {
-      toast.error("Vui lòng đăng nhập để ghim ảnh!");
-      openLogin();
+    if (!isAdmin) {
+      toast.error("Chỉ Ban Liên Lạc (Admin) mới có quyền ghim ảnh!");
       return;
     }
     let nextState = false;
     const updated = photos.map((p) => {
       if (p.id === photoId) {
         nextState = !p.isPinned;
-        toast.success(nextState ? "Đã ghim ảnh lên đầu bộ bài!" : "Đã bỏ ghim ảnh");
+        toast.success(nextState ? "Đã ghim ảnh lên đầu bộ ảnh!" : "Đã bỏ ghim ảnh");
         return { ...p, isPinned: nextState };
       }
       return p;
@@ -555,7 +568,7 @@ export default function MemoriesGallery() {
     toast.success("Đã đăng bình luận!");
   };
 
-  // Chọn NHIỀU ẢNH cùng lúc và nén tự động từng ảnh
+  // Chọn nhiều ảnh và nén tự động
   const handleMultiFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user) {
       toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
@@ -634,7 +647,7 @@ export default function MemoriesGallery() {
       : (activeUploadTopic || "Khác");
     const finalTopic = resolveTopic(rawTopic);
 
-    // Xác định tên Bộ thẻ bài (Album)
+    // Xác định tên Bộ ảnh
     const rawAlbum = isCustomAlbum
       ? (customAlbumName.trim() || "Ảnh kỷ niệm mới")
       : (activeUploadAlbum.trim() || "Ảnh chung");
@@ -654,11 +667,11 @@ export default function MemoriesGallery() {
     const now = Date.now();
     const newPhotos: AlbumPhoto[] = [];
 
-    // Gửi lần lượt từng ảnh để không bao giờ chạm ngưỡng 4.5MB payload
+    // Gửi lần lượt từng ảnh
     const total = stagedFiles.length;
     for (let i = 0; i < total; i++) {
       const staged = stagedFiles[i];
-      setUploadProgressText(`Đang tải ảnh ${i + 1}/${total} vào bộ "${finalAlbum}"...`);
+      setUploadProgressText(`Đang tải ảnh ${i + 1}/${total} vào bộ ảnh "${finalAlbum}"...`);
 
       try {
         const formData = new FormData();
@@ -672,7 +685,7 @@ export default function MemoriesGallery() {
         if (staged.caption.trim() || batchCommonCaption.trim()) {
           formData.append("caption", staged.caption.trim() || batchCommonCaption.trim());
         }
-        if (staged.isPinned) {
+        if (staged.isPinned && isAdmin) {
           formData.append("isPinned", "true");
         }
 
@@ -685,7 +698,7 @@ export default function MemoriesGallery() {
           const result = await res.json();
           if (result.success && Array.isArray(result.addedPhotos)) {
             result.addedPhotos.forEach((ap: any) => {
-              newPhotos.push(normalizePhoto(ap));
+              newPhotos.push(normalizePhoto(ap, taxonomy.albumsMap));
             });
           }
         }
@@ -694,7 +707,7 @@ export default function MemoriesGallery() {
       }
     }
 
-    // Fallback nếu có ảnh chưa được server ghi nhận: dùng bản nén base64 cục bộ
+    // Fallback nếu có ảnh chưa được server ghi nhận
     if (newPhotos.length === 0) {
       for (let idx = 0; idx < stagedFiles.length; idx++) {
         const staged = stagedFiles[idx];
@@ -714,8 +727,8 @@ export default function MemoriesGallery() {
           uploader: defaultUploader,
           uploaderClass: resolvedClass,
           createdAt: now + idx,
-          isPinned: staged.isPinned,
-        }));
+          isPinned: staged.isPinned && isAdmin,
+        }, taxonomy.albumsMap));
       }
     }
 
@@ -723,11 +736,10 @@ export default function MemoriesGallery() {
     const updated = [...newPhotos, ...photos];
     savePhotos(updated);
 
-    // Reset form & tự động mở đúng bộ bài vừa upload
+    // Reset form & chuyển thẳng đến bộ ảnh vừa upload
     setStagedFiles([]);
     setIsUploadOpen(false);
     setBatchCommonCaption("");
-    setActiveCardIndex(0);
     setIsSubmittingCloud(false);
     setUploadProgressText("");
     setSelectedTopic(finalTopic);
@@ -737,57 +749,29 @@ export default function MemoriesGallery() {
     setIsCustomAlbum(false);
     setCustomAlbumName("");
 
-    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh vào bộ "${finalAlbum}"!`);
+    toast.success(`Đã đăng tải thành công ${newPhotos.length} ảnh vào bộ ảnh "${finalAlbum}"!`);
   };
 
   return (
-    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-slate-50 via-blue-50/30 to-slate-100 py-14 sm:py-20 relative border-t border-slate-200/60 overflow-hidden">
+    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-slate-50 via-blue-50/30 to-slate-100 py-12 sm:py-16 relative border-t border-slate-200/60 overflow-hidden">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
-        {/* Header với Tiêu đề & Nút Hành động */}
+        {/* Header với Tiêu đề & Nút Đóng góp ảnh */}
         <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3.5 py-1 text-xs font-bold text-ueh uppercase tracking-wide mb-2.5">
               <Sparkles size={14} className="text-ueh-orange" /> Thư viện ảnh 15 năm
             </div>
-            <h2 className="text-3xl font-black text-ueh sm:text-5xl lg:text-6xl tracking-tight leading-tight">
+            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-ueh tracking-tight leading-tight">
               Góc Kỷ Niệm TCDN4
             </h2>
-            <div className="mt-2.5 h-1 w-20 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
-            <p className="mt-3 max-w-xl text-xs sm:text-sm text-slate-600">
-              Chiêm ngưỡng các bộ thẻ bài ký ức thanh xuân. Mỗi bức ảnh là một mảnh ghép kỷ niệm do anh chị em toàn khóa cùng đóng góp.
+            <div className="mt-2 h-1 w-20 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
+            <p className="mt-2.5 max-w-xl text-xs sm:text-sm text-slate-600">
+              Khám phá các bộ ảnh ký ức thanh xuân của lớp. Bấm vào từng bộ ảnh để mở xem toàn bộ ảnh dạng lưới album.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-end">
-            {/* Chuyển đổi chế độ xem Xòe bài / Lưới khi đang mở một bộ thẻ bài cụ thể */}
-            {selectedTopic !== "all" && selectedAlbum && sortedPhotos.length > 0 && (
-              <div className="flex rounded-xl bg-slate-200/80 p-1 border border-slate-300">
-                <button
-                  onClick={() => setViewMode("fan")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                    viewMode === "fan"
-                      ? "bg-white text-ueh shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                  title="Chế độ xòe bài ký ức 3D"
-                >
-                  <Layers size={14} /> Xòe Bài
-                </button>
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                    viewMode === "grid"
-                      ? "bg-white text-ueh shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                  title="Chế độ lưới đầy đủ"
-                >
-                  <LayoutGrid size={14} /> Lưới Album
-                </button>
-              </div>
-            )}
-
+          <div className="flex items-center gap-2.5 self-start md:self-end">
             <button
               onClick={() => {
                 if (!user) {
@@ -810,74 +794,14 @@ export default function MemoriesGallery() {
           </div>
         </div>
 
-        {/* BREADCRUMB ĐIỀU HƯỚNG CHUYÊN NGHIỆP */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-500 font-semibold overflow-x-auto no-scrollbar py-1">
-            <button
-              onClick={() => {
-                setSelectedTopic("all");
-                setSelectedAlbum(null);
-              }}
-              className={`hover:text-ueh transition-colors ${
-                selectedTopic === "all" ? "font-black text-ueh" : ""
-              }`}
-            >
-              Góc kỷ niệm
-            </button>
-
-            {selectedTopic !== "all" && (
-              <>
-                <span className="text-slate-300">/</span>
-                <button
-                  onClick={() => setSelectedAlbum(null)}
-                  className={`hover:text-ueh transition-colors ${
-                    !selectedAlbum ? "font-black text-ueh" : ""
-                  }`}
-                >
-                  {selectedTopic}
-                </button>
-              </>
-            )}
-
-            {selectedAlbum && (
-              <>
-                <span className="text-slate-300">/</span>
-                <span className="font-black text-slate-900 bg-blue-100/70 text-ueh px-2.5 py-0.5 rounded-full border border-blue-200">
-                  {selectedAlbum}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Nút Quay Lại Cấp Trước */}
-          {selectedAlbum ? (
-            <button
-              onClick={() => setSelectedAlbum(null)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-2xs transition-all"
-            >
-              <ArrowLeft size={13} /> Quay lại danh sách bộ ảnh
-            </button>
-          ) : selectedTopic !== "all" ? (
-            <button
-              onClick={() => {
-                setSelectedTopic("all");
-                setSelectedAlbum(null);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-2xs transition-all"
-            >
-              <ArrowLeft size={13} /> Quay lại tất cả chủ đề
-            </button>
-          ) : null}
-        </div>
-
-        {/* THANH CHỌN CHỦ ĐỀ CHÍNH (TOPIC FILTER PILLS) */}
-        <div className="mb-6 flex flex-wrap items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {/* THANH CHỌN CHỦ ĐỀ CHÍNH - 1 HÀNG DUY NHẤT TRÊN CẢ MOBILE & DESKTOP (KHÔNG NGẮT DÒNG) */}
+        <div className="mb-6 flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
           <button
             onClick={() => {
               setSelectedTopic("all");
               setSelectedAlbum(null);
             }}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
               selectedTopic === "all"
                 ? "bg-ueh text-white shadow-xs"
                 : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
@@ -901,7 +825,7 @@ export default function MemoriesGallery() {
                   setSelectedTopic(topic);
                   setSelectedAlbum(null);
                 }}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
                   isSelected
                     ? "bg-ueh text-white shadow-xs"
                     : "bg-white text-slate-600 border border-slate-200 hover:border-ueh hover:text-ueh"
@@ -918,377 +842,105 @@ export default function MemoriesGallery() {
               </button>
             );
           })}
-
-          <button
-            onClick={() => {
-              if (!user) {
-                toast.error("Vui lòng đăng nhập để tạo chủ đề mới!");
-                openLogin();
-                return;
-              }
-              setIsCustomTopic(true);
-              setIsCustomAlbum(true);
-              setIsUploadOpen(true);
-            }}
-            className="flex items-center gap-1 rounded-full border border-dashed border-ueh/50 bg-blue-50/60 px-3 py-1.5 text-xs font-bold text-ueh hover:bg-blue-100/70 transition-colors shrink-0"
-            title="Tạo chủ đề / bộ thẻ bài mới"
-          >
-            <Plus size={13} />
-            <span>Tạo chủ đề mới</span>
-          </button>
         </div>
 
         {/* =========================================================================
-            TRƯỜNG HỢP 1: TAB "TẤT CẢ" (selectedTopic === "all")
-            HIỂN THỊ DANH SÁCH CÁC CHỦ ĐỀ DẠNG THẺ GỌN GÀNG, SANG TRỌNG.
-            ĐÃ BỎ 2 NÚT "XÒE BÀI XEM" VÀ "+ THÊM ẢNH" THEO YÊU CẦU.
-            CLICK VÀO BẤT KỲ THẺ CHỦ ĐỀ SẼ MỞ RA DANH SÁCH BỘ THẺ BÀI CỦA CHỦ ĐỀ ĐÓ!
+            TRƯỜNG HỢP 1: HIỂN THỊ DANH SÁCH CÁC BỘ ẢNH (KHI CHƯA CHỌN BỘ ẢNH CỤ THỂ)
+            - Trình bày dạng card xếp tầng theo hình ảnh mẫu
+            - Trên mobile: hiển thị 2 cột (grid-cols-2)
+            - Có chữ tên của bộ ảnh ở góc dưới
+            - KHÔNG hiển thị số ảnh, KHÔNG có chữ "Xòe bài"
             ========================================================================= */}
-        {selectedTopic === "all" ? (
-          photos.length === 0 ? (
-            <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-16 text-center backdrop-blur-sm shadow-sm">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50 text-ueh shadow-inner">
-                <Camera size={36} className="text-ueh" />
+        {!selectedAlbum ? (
+          currentTopicAlbums.length === 0 ? (
+            <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-8 sm:p-14 text-center backdrop-blur-sm shadow-sm">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-ueh shadow-inner">
+                <Camera size={32} className="text-ueh" />
               </div>
-              <h3 className="text-lg sm:text-xl font-black text-ueh">
-                Góc Kỷ Niệm TCDN4 Đang Chờ Bức Ảnh Đầu Tiên
+              <h3 className="text-base sm:text-lg font-black text-ueh">
+                Chưa có bộ ảnh nào trong chủ đề "{selectedTopic}"
               </h3>
-              <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-slate-500">
-                Chưa có ảnh nào trong kho lưu trữ. Bạn có thể chọn và tải lên cùng lúc nhiều bức ảnh kỷ niệm để cùng xòe bộ bài thanh xuân!
+              <p className="mx-auto mt-1.5 max-w-md text-xs text-slate-500">
+                Hãy là người đầu tiên đóng góp bức ảnh kỷ niệm cho chủ đề này!
               </p>
-              <div className="mt-6 flex justify-center">
+              <div className="mt-5 flex justify-center">
                 <button
                   onClick={() => {
                     if (!user) {
-                      toast.error("Vui lòng đăng nhập để đóng góp ảnh kỷ niệm!");
+                      toast.error("Vui lòng đăng nhập để đóng góp ảnh!");
                       openLogin();
                       return;
                     }
+                    setActiveUploadTopic(selectedTopic !== "all" ? selectedTopic : DEFAULT_TOPICS[0]);
                     setIsUploadOpen(true);
                   }}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-ueh to-ueh-light px-7 py-3 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+                  className="inline-flex items-center gap-2 rounded-xl bg-ueh px-5 py-2.5 text-xs font-bold text-white shadow-md hover:scale-105 transition-all"
                 >
-                  <Upload size={17} /> Đóng Góp Ảnh Mới Ngay
+                  <Upload size={15} /> Đóng Góp Ảnh Đầu Tiên
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-                <div>
-                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
-                    Các Chủ Đề Kỷ Ức Lớn
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Bấm vào chủ đề bất kỳ để xem danh sách các bộ thẻ bài chi tiết (Lễ tốt nghiệp, Giảng đường, Đời sinh viên...).
-                  </p>
-                </div>
-                <div className="text-xs font-bold text-ueh bg-white px-3 py-1 rounded-full border border-blue-200/80 shadow-2xs self-start sm:self-auto">
-                  {topicCollections.length} Chủ đề chính
-                </div>
-              </div>
-
-              {/* Lưới các Thẻ chủ đề: Gọn gàng, loại bỏ các nút thừa, click cả thẻ để mở bộ ảnh */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-                {topicCollections.map((col) => {
-                  const hasPhotos = col.photos.length > 0;
-                  return (
-                    <div
-                      key={col.topic}
-                      onClick={() => {
-                        setSelectedTopic(col.topic);
-                        setSelectedAlbum(null);
-                      }}
-                      className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5 cursor-pointer select-none"
-                      title={`Bấm để mở danh sách các bộ thẻ bài của "${col.topic}"`}
-                    >
-                      {/* Header Thẻ: Tên chủ đề & Số lượng bộ bài + ảnh */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-ueh border border-blue-100 mb-1">
-                            <Layers size={11} className="text-ueh-orange" /> {col.albumsCount} bộ thẻ bài
-                          </span>
-                          <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors">
-                            {col.topic}
-                          </h3>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black text-slate-700 border border-slate-200">
-                          {col.count} ảnh
-                        </span>
-                      </div>
-
-                      {/* KHU VỰC THẺ ẢNH BỘ SƯU TẬP FULL TRÀN VIỀN (STACKED PHOTO DECK PREVIEW) */}
-                      <div className="relative my-2 pt-1.5 pr-2 h-48 sm:h-52 w-full">
-                        {!hasPhotos ? (
-                          <div className="h-full w-full flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-gradient-to-br from-slate-100/90 via-blue-50/40 to-slate-100 border-2 border-dashed border-slate-200 group-hover:border-blue-300 transition-colors">
-                            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-xs text-slate-300 group-hover:text-ueh group-hover:scale-105 transition-all">
-                              <Camera size={22} />
-                            </div>
-                            <span className="text-xs font-bold text-slate-500">Chưa có bức ảnh nào</span>
-                            <span className="text-[10px] text-slate-400 mt-0.5">Bấm vào để mở và đóng góp ảnh đầu tiên!</span>
-                          </div>
-                        ) : (
-                          <div className="relative h-full w-full">
-                            {/* Lớp ảnh thứ 3 phía sau */}
-                            {col.photos.length >= 3 && col.photos[2] && (
-                              <div className="absolute inset-0 rounded-2xl bg-slate-300 shadow-md border-2 border-white translate-x-3 -translate-y-2.5 rotate-3 transition-transform duration-300 group-hover:translate-x-4.5 group-hover:-translate-y-3.5 group-hover:rotate-6 overflow-hidden opacity-75">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={col.photos[2].imgSrc}
-                                  alt=""
-                                  className="h-full w-full object-cover filter brightness-95"
-                                />
-                              </div>
-                            )}
-
-                            {/* Lớp ảnh thứ 2 phía sau */}
-                            {col.photos.length >= 2 && col.photos[1] && (
-                              <div className="absolute inset-0 rounded-2xl bg-slate-200 shadow-md border-2 border-white translate-x-1.5 -translate-y-1.5 rotate-1 transition-transform duration-300 group-hover:translate-x-2.5 group-hover:-translate-y-2 group-hover:rotate-2.5 overflow-hidden opacity-90">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={col.photos[1].imgSrc}
-                                  alt=""
-                                  className="h-full w-full object-cover filter brightness-95"
-                                />
-                              </div>
-                            )}
-
-                            {/* Lớp ảnh chính tràn viền (Full-bleed cover) */}
-                            <div className="relative h-full w-full rounded-2xl overflow-hidden shadow-md border-2 border-white transition-all duration-300 group-hover:shadow-xl group-hover:scale-[1.01] bg-slate-900">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={col.photos[0].imgSrc}
-                                alt={col.photos[0].title}
-                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                              />
-
-                              {/* Badge đếm số lượng ảnh */}
-                              <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 rounded-full bg-slate-950/75 backdrop-blur-md px-2.5 py-1 text-[11px] font-bold text-white border border-white/20 shadow-md">
-                                <Layers size={12} className="text-ueh-gold" />
-                                <span>{col.count} ảnh</span>
-                              </div>
-
-                              {/* Lớp phủ chân ảnh */}
-                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/45 to-transparent p-3 pt-8 text-white flex items-end justify-between z-10">
-                                <div className="min-w-0 pr-2">
-                                  <p className="text-xs font-bold truncate drop-shadow-sm">
-                                    {col.photos[0].title}
-                                  </p>
-                                  <span className="text-[10px] text-blue-200 flex items-center gap-1 mt-0.5">
-                                    <Eye size={10} /> Chạm để khám phá {col.albumsCount} bộ thẻ →
-                                  </span>
-                                </div>
-                                <div className="shrink-0 flex items-center justify-center h-7 w-7 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 group-hover:bg-ueh group-hover:border-ueh group-hover:scale-110 transition-all shadow-xs">
-                                  <ChevronRight size={14} />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Footer thẻ gọn gàng: Chỉ hiển thị gợi ý mở danh sách bộ thẻ */}
-                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
-                        <span className="flex items-center gap-1 text-[11px] text-ueh font-bold">
-                          <Layers size={12} /> {col.albumsCount} bộ thẻ bài
-                        </span>
-                        <span className="text-[11px] text-slate-400 group-hover:text-ueh transition-colors flex items-center gap-0.5">
-                          Xem chi tiết <ChevronRight size={12} />
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )
-        ) : !selectedAlbum ? (
-          /* =========================================================================
-             TRƯỜNG HỢP 2: ĐÃ CHỌN CHỦ ĐỀ CỤ THỂ (VD: "Thời sinh viên")
-             HIỂN THỊ DANH SÁCH CÁC BỘ THẺ BÀI DẠNG THẺ (Card Decks)
-             Ví dụ: Lễ tốt nghiệp; Ảnh giảng đường; Đời sinh viên...
-             ========================================================================= */
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-3xl border border-blue-200/80 shadow-xs">
-              <div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-ueh mb-1">
-                  Chủ đề: {selectedTopic}
-                </span>
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
-                  Các Bộ Thẻ Bài Ký Ức Trong "{selectedTopic}"
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Mỗi bộ thẻ bài đại diện cho một khoảnh khắc riêng biệt. Bấm vào bộ bất kỳ để mở trải nghiệm xòe bài 3D hoặc lưới ảnh.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!user) {
-                      toast.error("Vui lòng đăng nhập để tạo bộ ảnh mới!");
-                      openLogin();
-                      return;
-                    }
-                    setActiveUploadTopic(selectedTopic);
-                    setIsCustomAlbum(true);
-                    setIsUploadOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-xl border border-ueh bg-blue-50 px-3.5 py-2 text-xs font-bold text-ueh hover:bg-blue-100 transition-colors shadow-2xs"
+            <div className="grid grid-cols-2 gap-3.5 sm:gap-5 sm:grid-cols-3 lg:grid-cols-4">
+              {currentTopicAlbums.map((alb) => (
+                <div
+                  key={`${alb.topic}-${alb.name}`}
+                  onClick={() => setSelectedAlbum(alb.name)}
+                  className="group relative cursor-pointer select-none transition-all duration-300 hover:-translate-y-1"
+                  title={`Bấm để mở xem bộ ảnh "${alb.name}"`}
                 >
-                  <FolderPlus size={14} /> + Tạo bộ thẻ mới
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!user) {
-                      toast.error("Vui lòng đăng nhập để đóng góp ảnh!");
-                      openLogin();
-                      return;
-                    }
-                    setActiveUploadTopic(selectedTopic);
-                    setIsCustomAlbum(false);
-                    setIsUploadOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-colors shadow-xs"
-                >
-                  <Upload size={14} /> Đóng góp ảnh
-                </button>
-              </div>
-            </div>
+                  {/* Hiệu ứng thẻ xếp tầng phía sau (Stacked photo deck effect) */}
+                  <div className="absolute inset-0 rounded-2xl bg-white border border-slate-200/80 shadow-md translate-x-2 -translate-y-1.5 opacity-60 transition-transform duration-300 group-hover:translate-x-2.5 group-hover:-translate-y-2" />
+                  <div className="absolute inset-0 rounded-2xl bg-white border border-slate-200/90 shadow-md translate-x-1 -translate-y-0.5 opacity-80 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:-translate-y-1" />
 
-            {/* Lưới các bộ thẻ bài dạng thẻ chữ nhật sang trọng */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-              {currentTopicAlbums.map((alb) => {
-                const hasPhotos = alb.count > 0;
-                return (
-                  <div
-                    key={alb.name}
-                    onClick={() => {
-                      setSelectedAlbum(alb.name);
-                      setActiveCardIndex(0);
-                      setViewMode("fan");
-                    }}
-                    className="group relative flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5 cursor-pointer select-none"
-                    title={`Mở xem bộ bài xòe "${alb.name}"`}
-                  >
-                    {/* Header Thẻ bộ bài */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 border border-amber-200 mb-1">
-                          Bộ thẻ bài
-                        </span>
-                        <h4 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-ueh transition-colors">
-                          {alb.name}
-                        </h4>
+                  {/* Thẻ chính hiển thị ảnh bìa tràn viền */}
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md border-2 border-white transition-all duration-300 group-hover:shadow-xl">
+                    {alb.coverPhoto ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={alb.coverPhoto.imgSrc}
+                        alt={alb.name}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50 text-slate-400">
+                        <Camera size={28} className="text-slate-300" />
                       </div>
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black text-slate-700 border border-slate-200">
-                        {alb.count} lá bài
-                      </span>
-                    </div>
+                    )}
 
-                    {/* Preview hình ảnh thẻ bài xếp tầng */}
-                    <div className="relative my-2 pt-1.5 pr-2 h-44 sm:h-48 w-full">
-                      {!hasPhotos ? (
-                        <div className="h-full w-full flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-gradient-to-br from-slate-100/90 via-blue-50/40 to-slate-100 border-2 border-dashed border-slate-200 group-hover:border-blue-300 transition-colors">
-                          <Camera size={22} className="text-slate-300 group-hover:text-ueh mb-1.5" />
-                          <span className="text-xs font-bold text-slate-600">Bộ bài chưa có ảnh</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">Bấm để tải lá bài đầu tiên</span>
-                        </div>
-                      ) : (
-                        <div className="relative h-full w-full">
-                          {alb.photos.length >= 3 && alb.photos[2] && (
-                            <div className="absolute inset-0 rounded-2xl bg-slate-300 shadow-md border-2 border-white translate-x-3 -translate-y-2 rotate-3 overflow-hidden opacity-75">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={alb.photos[2].imgSrc} alt="" className="h-full w-full object-cover" />
-                            </div>
-                          )}
-                          {alb.photos.length >= 2 && alb.photos[1] && (
-                            <div className="absolute inset-0 rounded-2xl bg-slate-200 shadow-md border-2 border-white translate-x-1.5 -translate-y-1 rotate-1 overflow-hidden opacity-90">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={alb.photos[1].imgSrc} alt="" className="h-full w-full object-cover" />
-                            </div>
-                          )}
-                          <div className="relative h-full w-full rounded-2xl overflow-hidden shadow-md border-2 border-white transition-all duration-300 group-hover:shadow-xl bg-slate-900">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={alb.photos[0].imgSrc}
-                              alt={alb.photos[0].title}
-                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent p-3 pt-6 text-white flex items-end justify-between">
-                              <span className="text-xs font-bold truncate">{alb.photos[0].title}</span>
-                              <span className="text-[10px] text-sky-200 font-bold shrink-0">Xòe bài →</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer Thẻ */}
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                      <span className="text-[11px] font-semibold text-slate-600">
-                        {alb.count > 0 ? `${alb.count} bức ảnh kỷ niệm` : "Chưa có ảnh"}
-                      </span>
-                      <span className="text-[11px] font-bold text-ueh group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                        Mở bộ thẻ <ChevronRight size={13} />
+                    {/* Lớp phủ chuyển màu đen mượt ở chân ảnh */}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-2.5 sm:p-3 pt-8 flex items-end">
+                      <span className="text-xs sm:text-sm font-bold text-white drop-shadow-md truncate">
+                        {alb.name}
                       </span>
                     </div>
                   </div>
-                );
-              })}
-
-              {/* Thẻ tạo bộ bài mới nhanh */}
-              <div
-                onClick={() => {
-                  if (!user) {
-                    toast.error("Vui lòng đăng nhập để tạo bộ ảnh mới!");
-                    openLogin();
-                    return;
-                  }
-                  setActiveUploadTopic(selectedTopic);
-                  setIsCustomAlbum(true);
-                  setIsUploadOpen(true);
-                }}
-                className="group relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/70 p-6 shadow-2xs hover:border-ueh hover:bg-blue-50/40 transition-all duration-200 cursor-pointer text-center min-h-[260px]"
-              >
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100/70 text-ueh group-hover:scale-110 group-hover:bg-ueh group-hover:text-white transition-all shadow-xs">
-                  <FolderPlus size={26} />
                 </div>
-                <h4 className="text-sm font-black text-slate-800 group-hover:text-ueh transition-colors">
-                  + Tạo Bộ Thẻ Bài Mới
-                </h4>
-                <p className="mt-1 text-[11px] text-slate-500 max-w-[200px]">
-                  Tạo một bộ thẻ riêng trong chủ đề "{selectedTopic}" và tải lên các bức ảnh đầu tiên.
-                </p>
-              </div>
+              ))}
             </div>
-          </div>
+          )
         ) : (
           /* =========================================================================
-             TRƯỜNG HỢP 3: ĐANG XEM 1 BỘ THẺ BÀI CỤ THỂ (VD: "Lễ tốt nghiệp")
-             HIỂN THỊ CHẾ ĐỘ XÒE BÀI 3D (FANNED-OUT DECK) HOẶC LƯỚI ALBUM
-             ========================================================================= */
-          <div className="space-y-6">
-            
-            {/* Header thông tin bộ bài đang xem */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-xs">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-ueh border border-blue-200">
-                    {selectedTopic}
-                  </span>
-                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-black text-amber-800 border border-amber-200">
-                    Bộ thẻ bài: {selectedAlbum}
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-xl font-black text-slate-900">
-                  {selectedAlbum} ({sortedPhotos.length} lá bài)
-                </h3>
-              </div>
+              TRƯỜNG HỢP 2: ĐANG MỞ BỘ ẢNH (selectedAlbum !== null)
+              - Xổ ra trực tiếp dạng LƯỚI ALBUM (bỏ hẳn kiểu thẻ bài xòe)
+              - Có nút quay lại danh sách bộ ảnh gọn gàng
+              - Chỉ Admin mới có quyền ghim ảnh
+              ========================================================================= */
+          <div className="space-y-5">
+            {/* Thanh tiêu đề & nút quay lại tối giản */}
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => setSelectedAlbum(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh shadow-2xs transition-all"
+              >
+                <ArrowLeft size={14} /> Quay lại danh sách bộ ảnh
+              </button>
 
               <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-black text-ueh bg-white px-3.5 py-1.5 rounded-full border border-blue-200/80 shadow-2xs truncate">
+                  Bộ ảnh: {selectedAlbum}
+                </span>
+                
                 <button
                   type="button"
                   onClick={() => {
@@ -1297,203 +949,40 @@ export default function MemoriesGallery() {
                       openLogin();
                       return;
                     }
-                    setActiveUploadTopic(selectedTopic);
+                    setActiveUploadTopic(selectedTopic !== "all" ? selectedTopic : DEFAULT_TOPICS[0]);
                     setActiveUploadAlbum(selectedAlbum);
                     setIsCustomAlbum(false);
                     setIsUploadOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-xs"
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-ueh px-3.5 py-1.5 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-2xs"
                 >
-                  <Plus size={14} /> Thêm ảnh vào bộ này
+                  <Upload size={13} /> Thêm ảnh vào bộ này
                 </button>
               </div>
             </div>
 
-            {/* Nội dung ảnh trong bộ bài */}
+            {/* Lưới ảnh trong bộ ảnh */}
             {sortedPhotos.length === 0 ? (
-              <div className="relative rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-10 sm:p-14 text-center backdrop-blur-sm shadow-sm">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-ueh shadow-inner">
-                  <Camera size={30} className="text-ueh" />
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-ueh">
-                  Bộ bài "{selectedAlbum}" chưa có bức ảnh nào
-                </h3>
-                <p className="mx-auto mt-1.5 max-w-md text-xs text-slate-500">
-                  Hãy là người đầu tiên đóng góp ảnh cho bộ bài này. Bạn có thể chọn và tải lên cùng lúc nhiều ảnh từ máy!
-                </p>
-                <div className="mt-5 flex justify-center">
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        toast.error("Vui lòng đăng nhập để đóng góp ảnh!");
-                        openLogin();
-                        return;
-                      }
-                      setActiveUploadTopic(selectedTopic);
-                      setActiveUploadAlbum(selectedAlbum);
-                      setIsCustomAlbum(false);
-                      setIsUploadOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-ueh px-6 py-2.5 text-xs font-bold text-white shadow-md hover:scale-105 transition-all"
-                  >
-                    <Upload size={15} /> Đóng Góp Ảnh Vào "{selectedAlbum}"
-                  </button>
-                </div>
-              </div>
-            ) : viewMode === "fan" ? (
-              /* CHẾ ĐỘ XÒE BÀI 3D ĐỘC ĐÁO */
-              <div className="relative py-6 sm:py-10">
-                <div className="relative mx-auto flex h-[440px] xs:h-[480px] sm:h-[530px] md:h-[590px] lg:h-[630px] w-full max-w-6xl items-center justify-center select-none overflow-hidden sm:overflow-visible">
-                  <div className="absolute h-96 w-96 rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
-
-                  {sortedPhotos.map((item, idx) => {
-                    const diff = idx - activeCardIndex;
-                    const absDiff = Math.abs(diff);
-
-                    if (absDiff > 3) return null;
-
-                    const isCurrent = diff === 0;
-                    const isLiked = likedPhotoIds.includes(item.id);
-
-                    const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
-                    const rotateDeg = diff * (isMobile ? 3.5 : 5);
-                    const translateX = diff * (isMobile ? 38 : 88);
-                    const translateY = Math.min(absDiff * (isMobile ? 8 : 14), isMobile ? 30 : 55);
-                    const zIndex = 30 - absDiff;
-                    const scale = isCurrent ? 1 : Math.max(0.88, 1 - absDiff * 0.05);
-
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (isCurrent) {
-                            setActivePhoto(item);
-                          } else {
-                            setActiveCardIndex(idx);
-                          }
-                        }}
-                        style={{
-                          transform: `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotateDeg}deg) scale(${scale})`,
-                          zIndex,
-                        }}
-                        className={`group absolute cursor-pointer rounded-3xl bg-white p-2.5 sm:p-3 pb-3 sm:pb-3.5 shadow-2xl transition-all duration-300 ease-out hover:-translate-y-6 hover:rotate-0 hover:scale-105 hover:z-50 ${
-                          isCurrent
-                            ? "ring-4 ring-ueh/80 shadow-ueh/30"
-                            : "opacity-90 hover:opacity-100"
-                        }`}
-                      >
-                        <div className="relative h-[330px] w-[76vw] max-w-[310px] min-w-[250px] xs:h-[360px] sm:h-[410px] sm:w-[280px] md:h-[460px] md:w-[330px] lg:h-[490px] lg:w-[360px] overflow-hidden rounded-2xl bg-slate-900 border border-slate-100 shadow-inner">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={item.imgSrc}
-                            alt={item.title}
-                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-
-                          {item.isPinned && (
-                            <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2.5 py-0.5 text-[10px] sm:text-xs font-black text-slate-950 shadow-md z-10">
-                              <Pin size={12} className="fill-slate-950" /> GHIM ĐẦU
-                            </div>
-                          )}
-
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3.5 py-2 text-xs font-bold text-ueh shadow-lg">
-                              <Eye size={14} /> Chạm để phóng to ảnh
-                            </span>
-                          </div>
-
-                          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
-                          
-                          <div className="absolute bottom-2.5 left-3 right-3 text-white text-xs sm:text-sm font-bold truncate drop-shadow-sm z-10">
-                            {item.title}
-                          </div>
-                        </div>
-
-                        <div className="mt-2.5 flex items-center justify-between px-1 text-xs text-slate-700 font-semibold">
-                          <span className="flex items-center gap-1.5 truncate text-ueh font-bold max-w-[140px] sm:max-w-[180px]">
-                            <User size={13} className="shrink-0 text-slate-400" />
-                            <span className="truncate">{item.uploader}</span>
-                            {item.uploaderClass && (
-                              <span className="rounded bg-blue-100 px-1.5 py-0.2 text-[10px] text-ueh font-black">
-                                {item.uploaderClass}
-                              </span>
-                            )}
-                          </span>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => handleToggleLike(item.id, e)}
-                              className={`flex items-center gap-1 transition-colors px-2 py-0.5 rounded-full ${
-                                isLiked ? "bg-rose-50 text-rose-500 font-bold" : "text-slate-500 hover:text-rose-500 hover:bg-slate-100"
-                              }`}
-                              title="Thả tim"
-                            >
-                              <Heart size={13} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
-                              <span>{item.likes}</span>
-                            </button>
-
-                            <button
-                              onClick={(e) => handleTogglePin(item.id, e)}
-                              className={`transition-colors p-1 rounded-full ${
-                                item.isPinned ? "text-amber-500 bg-amber-50" : "text-slate-300 hover:text-amber-500 hover:bg-slate-100"
-                              }`}
-                              title={item.isPinned ? "Bỏ ghim" : "Ghim lên đầu"}
-                            >
-                              <Pin size={13} className={item.isPinned ? "fill-amber-500" : ""} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Thanh điều khiển lá bài */}
-                <div className="mt-4 flex flex-col items-center justify-center gap-3">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => setActiveCardIndex((prev) => Math.max(0, prev - 1))}
-                      disabled={activeCardIndex === 0}
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-ueh hover:text-ueh disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
-                      aria-label="Thẻ bài trước"
-                    >
-                      <ChevronLeft size={20} />
-                    </button>
-
-                    <div className="text-xs font-bold text-slate-600">
-                      Lá bài <strong className="text-ueh text-sm font-black">{activeCardIndex + 1}</strong> / {sortedPhotos.length}
-                    </div>
-
-                    <button
-                      onClick={() => setActiveCardIndex((prev) => Math.min(sortedPhotos.length - 1, prev + 1))}
-                      disabled={activeCardIndex >= sortedPhotos.length - 1}
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-ueh hover:text-ueh disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
-                      aria-label="Thẻ bài tiếp theo"
-                    >
-                      <ChevronRight size={20} />
-                    </button>
-                  </div>
-
-                  <div className="flex max-w-md items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-                    {sortedPhotos.map((p, idx) => (
-                      <button
-                        key={p.id}
-                        onClick={() => setActiveCardIndex(idx)}
-                        className={`h-2 rounded-full transition-all ${
-                          idx === activeCardIndex
-                            ? "w-6 bg-ueh-orange"
-                            : p.isPinned
-                            ? "w-2.5 bg-amber-400"
-                            : "w-2 bg-slate-300 hover:bg-slate-400"
-                        }`}
-                        title={p.title}
-                      />
-                    ))}
-                  </div>
-                </div>
+              <div className="rounded-3xl border-2 border-dashed border-blue-200/90 bg-white/80 p-8 sm:p-12 text-center">
+                <Camera size={32} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-xs font-bold text-slate-600">Bộ ảnh "{selectedAlbum}" chưa có ảnh nào</p>
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      toast.error("Vui lòng đăng nhập để đóng góp ảnh!");
+                      openLogin();
+                      return;
+                    }
+                    setActiveUploadTopic(selectedTopic !== "all" ? selectedTopic : DEFAULT_TOPICS[0]);
+                    setActiveUploadAlbum(selectedAlbum);
+                    setIsUploadOpen(true);
+                  }}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white shadow-xs"
+                >
+                  <Upload size={14} /> Tải ảnh vào bộ này
+                </button>
               </div>
             ) : (
-              /* CHẾ ĐỘ LƯỚI ALBUM ĐẦY ĐỦ */
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {sortedPhotos.slice(0, visibleCount).map((item) => {
@@ -1502,7 +991,7 @@ export default function MemoriesGallery() {
                       <div
                         key={item.id}
                         onClick={() => setActivePhoto(item)}
-                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-2.5 pb-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md flex flex-col justify-between"
+                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-2 sm:p-2.5 pb-3 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md flex flex-col justify-between"
                       >
                         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-900">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1512,13 +1001,14 @@ export default function MemoriesGallery() {
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
 
+                          {/* Badge ghim nổi bật */}
                           {item.isPinned && (
                             <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow-md">
                               <Pin size={10} className="fill-slate-950" /> Ghim đầu
                             </div>
                           )}
 
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
 
                         <div className="mt-2 px-1">
@@ -1526,15 +1016,31 @@ export default function MemoriesGallery() {
                             <h4 className="text-xs font-bold text-slate-900 group-hover:text-ueh transition-colors truncate">
                               {item.title}
                             </h4>
-                            <button
-                              onClick={(e) => handleToggleLike(item.id, e)}
-                              className={`flex items-center gap-0.5 text-[11px] font-bold shrink-0 ${
-                                isLiked ? "text-rose-500" : "text-slate-400 hover:text-rose-500"
-                              }`}
-                            >
-                              <Heart size={12} className={isLiked ? "fill-rose-500" : ""} />
-                              <span>{item.likes}</span>
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={(e) => handleToggleLike(item.id, e)}
+                                className={`flex items-center gap-0.5 text-[11px] font-bold ${
+                                  isLiked ? "text-rose-500" : "text-slate-400 hover:text-rose-500"
+                                }`}
+                                title="Thả tim"
+                              >
+                                <Heart size={12} className={isLiked ? "fill-rose-500" : ""} />
+                                <span>{item.likes}</span>
+                              </button>
+
+                              {/* CHỈ ADMIN MỚI THẤY VÀ THAO TÁC NÚT GHIM ẢNH */}
+                              {isAdmin && (
+                                <button
+                                  onClick={(e) => handleTogglePin(item.id, e)}
+                                  className={`p-1 rounded-full transition-colors ${
+                                    item.isPinned ? "text-amber-500 bg-amber-50" : "text-slate-300 hover:text-amber-500 hover:bg-slate-100"
+                                  }`}
+                                  title={item.isPinned ? "Bỏ ghim" : "Ghim lên đầu"}
+                                >
+                                  <Pin size={12} className={item.isPinned ? "fill-amber-500" : ""} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <p className="text-[10px] text-slate-500 truncate mt-0.5">
                             Bởi: {item.uploader}
@@ -1548,7 +1054,7 @@ export default function MemoriesGallery() {
                 {visibleCount < sortedPhotos.length && (
                   <div className="text-center pt-2">
                     <button
-                      onClick={() => setVisibleCount((prev) => prev + 12)}
+                      onClick={() => setVisibleCount((prev) => prev + 16)}
                       className="rounded-full bg-white px-6 py-2.5 text-xs font-bold text-ueh border border-slate-300 hover:border-ueh shadow-2xs transition-all"
                     >
                       Xem thêm {sortedPhotos.length - visibleCount} ảnh khác...
@@ -1563,8 +1069,7 @@ export default function MemoriesGallery() {
       </div>
 
       {/* =========================================================================
-          MODAL XEM CHI TIẾT ẢNH & BÌNH LUẬN (LIGHTBOX AN TOÀN TUYỆT ĐỐI)
-          ĐÃ FIX TRIỆT ĐỂ LỖI RUNTIME TYPEERROR KHI ĐỌC COMMENTS / LIKES
+          MODAL XEM CHI TIẾT ẢNH & BÌNH LUẬN (LIGHTBOX)
           ========================================================================= */}
       {activePhoto && (
         <div
@@ -1650,21 +1155,24 @@ export default function MemoriesGallery() {
                       )}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      {activePhoto.album ? `Bộ thẻ: ${activePhoto.album}` : ""}
+                      {activePhoto.album ? `Bộ ảnh: ${activePhoto.album}` : ""}
                     </p>
                   </div>
 
-                  <button
-                    onClick={(e) => handleTogglePin(activePhoto.id, e)}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                      activePhoto.isPinned
-                        ? "bg-amber-400 text-slate-950 shadow-xs"
-                        : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
-                    }`}
-                  >
-                    <Pin size={12} className={activePhoto.isPinned ? "fill-slate-950" : ""} />
-                    <span>{activePhoto.isPinned ? "Đã ghim" : "Ghim đầu"}</span>
-                  </button>
+                  {/* CHỈ ADMIN MỚI THẤY VÀ THAO TÁC NÚT GHIM ĐẦU TRONG LIGHTBOX */}
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => handleTogglePin(activePhoto.id, e)}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                        activePhoto.isPinned
+                          ? "bg-amber-400 text-slate-950 shadow-xs"
+                          : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                      }`}
+                    >
+                      <Pin size={12} className={activePhoto.isPinned ? "fill-slate-950" : ""} />
+                      <span>{activePhoto.isPinned ? "Đã ghim" : "Ghim đầu"}</span>
+                    </button>
+                  )}
                 </div>
 
                 {activePhoto.caption && (
@@ -1696,7 +1204,7 @@ export default function MemoriesGallery() {
                   </button>
                 </div>
 
-                {/* Danh sách bình luận an toàn */}
+                {/* Danh sách bình luận */}
                 <div className="mt-3">
                   <div className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1">
                     <MessageSquare size={13} /> Bình luận ({(activePhoto.comments || []).length})
@@ -1744,7 +1252,7 @@ export default function MemoriesGallery() {
       )}
 
       {/* =========================================================================
-          MODAL UPLOAD NHIỀU ẢNH (HỖ TRỢ CHỌN BỘ THẺ HOẶC TẠO BỘ MỚI BẰNG GHI CHÚ)
+          MODAL UPLOAD NHIỀU ẢNH
           ========================================================================= */}
       {isUploadOpen && (
         <div
@@ -1769,7 +1277,7 @@ export default function MemoriesGallery() {
               <div>
                 <h3 className="text-lg font-black text-ueh">Đóng Góp Ảnh Kỷ Niệm</h3>
                 <p className="text-xs text-slate-500">
-                  Chọn chủ đề và bộ thẻ bài muốn đăng tải, hoặc tự tạo bộ ảnh mới bằng cách gõ tên!
+                  Chọn chủ đề và bộ ảnh muốn đăng tải vào góc ký ức TCDN4.
                 </p>
               </div>
             </div>
@@ -1819,13 +1327,13 @@ export default function MemoriesGallery() {
                         Chủ đề: {top}
                       </option>
                     ))}
-                    <option value="__custom__">+ Tạo chủ đề mới...</option>
+                    {isAdmin && <option value="__custom__">+ Tạo chủ đề mới (Admin)...</option>}
                   </select>
 
                   {isCustomTopic && (
                     <input
                       type="text"
-                      placeholder="Tên chủ đề mới (VD: Hội thao UEH)..."
+                      placeholder="Tên chủ đề mới..."
                       value={customTopicName}
                       onChange={(e) => setCustomTopicName(e.target.value)}
                       className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 placeholder:font-normal focus:border-ueh focus:ring-1 focus:ring-ueh focus:outline-none"
@@ -1834,10 +1342,10 @@ export default function MemoriesGallery() {
                   )}
                 </div>
 
-                {/* Bước 2: Chọn hoặc tạo Bộ thẻ bài (Album) trong chủ đề đó */}
+                {/* Bước 2: Chọn Bộ ảnh trong chủ đề đó */}
                 <div className="mt-3 pt-3 border-t border-slate-200/80">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    2. Chọn bộ thẻ bài (hoặc tạo bộ mới bằng ghi chú / tên riêng):
+                    2. Chọn bộ ảnh:
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
@@ -1850,20 +1358,20 @@ export default function MemoriesGallery() {
                           setActiveUploadAlbum(e.target.value);
                         }
                       }}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-amber-800 focus:border-ueh focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:border-ueh focus:outline-none"
                     >
                       {getAlbumsForTopic(isCustomTopic && customTopicName.trim() ? customTopicName.trim() : activeUploadTopic).map((alb) => (
                         <option key={alb} value={alb}>
-                          Bộ thẻ: {alb}
+                          Bộ ảnh: {alb}
                         </option>
                       ))}
-                      <option value="__custom_album__">+ Tạo bộ thẻ bài mới bằng ghi chú / tên riêng...</option>
+                      <option value="__custom_album__">+ Tạo bộ ảnh mới bằng tên riêng...</option>
                     </select>
 
                     {isCustomAlbum && (
                       <input
                         type="text"
-                        placeholder="Gõ tên bộ ảnh mới (VD: Lễ tốt nghiệp, Kỷ yếu...)"
+                        placeholder="Gõ tên bộ ảnh mới (VD: Lễ tốt nghiệp, Họp mặt...)"
                         value={customAlbumName}
                         onChange={(e) => setCustomAlbumName(e.target.value)}
                         className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 placeholder:font-normal focus:border-ueh focus:ring-1 focus:ring-ueh focus:outline-none"
@@ -1871,11 +1379,6 @@ export default function MemoriesGallery() {
                       />
                     )}
                   </div>
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    {isCustomAlbum
-                      ? `✨ Ảnh sẽ được gom vào bộ thẻ bài mới "${customAlbumName.trim() || 'Mới'}" trong chủ đề "${isCustomTopic ? customTopicName : activeUploadTopic}".`
-                      : `📌 Ảnh sẽ được lưu vào bộ thẻ "${activeUploadAlbum}". Mọi người đều có thể đóng góp tiếp vào bộ này.`}
-                  </p>
                 </div>
               </div>
 
@@ -1943,7 +1446,7 @@ export default function MemoriesGallery() {
                         <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input
                             type="text"
-                            placeholder="Tên lá bài / ảnh..."
+                            placeholder="Tên ảnh..."
                             value={item.title}
                             onChange={(e) => updateStagedFile(item.id, "title", e.target.value)}
                             className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs focus:bg-white focus:border-ueh focus:outline-none"
@@ -1957,19 +1460,21 @@ export default function MemoriesGallery() {
                           />
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => updateStagedFile(item.id, "isPinned", !item.isPinned)}
-                          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold shrink-0 transition-colors ${
-                            item.isPinned
-                              ? "bg-amber-100 text-amber-800 border border-amber-300"
-                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                          }`}
-                          title="Ghim ảnh này lên đầu bộ bài"
-                        >
-                          <Pin size={11} className={item.isPinned ? "fill-amber-800" : ""} />
-                          <span className="hidden sm:inline">{item.isPinned ? "Đã ghim" : "Ghim"}</span>
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => updateStagedFile(item.id, "isPinned", !item.isPinned)}
+                            className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold shrink-0 transition-colors ${
+                              item.isPinned
+                                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
+                            title="Ghim ảnh này lên đầu bộ ảnh"
+                          >
+                            <Pin size={11} className={item.isPinned ? "fill-amber-800" : ""} />
+                            <span className="hidden sm:inline">{item.isPinned ? "Đã ghim" : "Ghim"}</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
