@@ -45,6 +45,7 @@ export interface AlbumPhoto {
   uploaderClass?: string;
   createdAt: number;
   isPinned?: boolean;
+  pinnedAt?: number;
 }
 
 export interface GalleryTaxonomy {
@@ -146,7 +147,8 @@ export function normalizePhoto(
     uploader: p.uploader || p.user_id || "Ban liên lạc (Admin)",
     uploaderClass: p.uploaderClass || "TC10",
     createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
-    isPinned: Boolean(p.isPinned),
+    isPinned: Boolean(p.isPinned ?? p.is_pinned),
+    pinnedAt: p.pinnedAt,
   };
 }
 
@@ -372,8 +374,13 @@ export default function MemoriesGallery() {
           const albPhotos = photos
             .filter((p) => p.topic === top && resolveAlbum(p, top, taxonomy.albumsMap) === albName)
             .sort((a, b) => {
-              if (a.isPinned && !b.isPinned) return -1;
-              if (!a.isPinned && b.isPinned) return 1;
+              const aPin = a.isPinned || (a as any).is_pinned;
+              const bPin = b.isPinned || (b as any).is_pinned;
+              if (aPin && !bPin) return -1;
+              if (!aPin && bPin) return 1;
+              if (aPin && bPin) {
+                return (b.pinnedAt || b.createdAt || 0) - (a.pinnedAt || a.createdAt || 0);
+              }
               return (b.createdAt || 0) - (a.createdAt || 0);
             });
 
@@ -397,8 +404,13 @@ export default function MemoriesGallery() {
       const albPhotos = photos
         .filter((p) => p.topic === selectedTopic && resolveAlbum(p, selectedTopic, taxonomy.albumsMap) === albName)
         .sort((a, b) => {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
+          const aPin = a.isPinned || (a as any).is_pinned;
+          const bPin = b.isPinned || (b as any).is_pinned;
+          if (aPin && !bPin) return -1;
+          if (!aPin && bPin) return 1;
+          if (aPin && bPin) {
+            return (b.pinnedAt || b.createdAt || 0) - (a.pinnedAt || a.createdAt || 0);
+          }
           return (b.createdAt || 0) - (a.createdAt || 0);
         });
 
@@ -429,8 +441,13 @@ export default function MemoriesGallery() {
   // Sắp xếp ảnh: Ghim lên đầu, tiếp đến là mới nhất
   const sortedPhotos = useMemo(() => {
     return [...currentDisplayPhotos].sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
+      const aPin = a.isPinned || (a as any).is_pinned;
+      const bPin = b.isPinned || (b as any).is_pinned;
+      if (aPin && !bPin) return -1;
+      if (!aPin && bPin) return 1;
+      if (aPin && bPin) {
+        return (b.pinnedAt || b.createdAt || 0) - (a.pinnedAt || a.createdAt || 0);
+      }
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
   }, [currentDisplayPhotos]);
@@ -517,24 +534,25 @@ export default function MemoriesGallery() {
       return;
     }
     let nextState = false;
+    const now = Date.now();
     const updated = photos.map((p) => {
       if (p.id === photoId) {
         nextState = !p.isPinned;
         toast.success(nextState ? "Đã ghim ảnh lên đầu bộ ảnh!" : "Đã bỏ ghim ảnh");
-        return { ...p, isPinned: nextState };
+        return { ...p, isPinned: nextState, pinnedAt: nextState ? now : undefined };
       }
       return p;
     });
     savePhotos(updated);
     if (activePhoto?.id === photoId) {
-      setActivePhoto((prev) => (prev ? { ...prev, isPinned: !prev.isPinned } : null));
+      setActivePhoto((prev) => (prev ? { ...prev, isPinned: !prev.isPinned, pinnedAt: nextState ? now : undefined } : null));
     }
 
-    // Đồng bộ lên Cloud
+    // Đồng bộ lên Cloud & Local server
     fetch("/api/gallery", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: photoId, isPinned: nextState }),
+      body: JSON.stringify({ id: photoId, isPinned: nextState, pinnedAt: nextState ? now : undefined }),
     }).catch(() => {});
   };
 

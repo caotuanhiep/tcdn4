@@ -6,6 +6,7 @@ import {
   MapPin, 
   Building2
 } from "lucide-react";
+import { getSupabase } from "@/lib/supabase/client";
 
 export interface MapRegion {
   id: string;
@@ -71,28 +72,83 @@ export default function MigrationMap({
   });
 
   useEffect(() => {
-    function computeCounts() {
+    async function computeCounts() {
+      const counts = { hcm: 0, hn: 0, dn: 0, overseas: 0 };
+      const countedKeys = new Set<string>();
+
+      // 1. Quét từ bảng profiles trên Supabase (người dùng thật đăng ký tài khoản)
+      try {
+        const { data: profiles, error } = await getSupabase()
+          .from("profiles")
+          .select("*");
+        if (!error && profiles && profiles.length > 0) {
+          profiles.forEach((p: any) => {
+            const key = (p.full_name || p.id || "").toLowerCase().trim();
+            if (key && !countedKeys.has(key)) {
+              countedKeys.add(key);
+              const loc = (p.location_region || "").toLowerCase();
+              const specific = (p.specific_location || "").toLowerCase();
+              if (loc === "hn" || specific.includes("hà nội")) counts.hn++;
+              else if (loc === "dn" || specific.includes("đà nẵng")) counts.dn++;
+              else if (loc === "overseas" || /úc|mỹ|usa|singapore|canada|đức|pháp|nhật|hàn|australia/i.test(specific)) counts.overseas++;
+              else counts.hcm++;
+            }
+          });
+        }
+      } catch {}
+
+      // 2. Quét từ local cache profiles (admin users cache)
+      try {
+        const cached = localStorage.getItem("tcdn4_admin_users_cache");
+        if (cached) {
+          const list = JSON.parse(cached);
+          if (Array.isArray(list)) {
+            list.forEach((p: any) => {
+              const key = (p.full_name || p.id || "").toLowerCase().trim();
+              if (key && !countedKeys.has(key)) {
+                countedKeys.add(key);
+                const loc = (p.location_region || "").toLowerCase();
+                const specific = (p.specific_location || "").toLowerCase();
+                if (loc === "hn" || specific.includes("hà nội")) counts.hn++;
+                else if (loc === "dn" || specific.includes("đà nẵng")) counts.dn++;
+                else if (loc === "overseas" || /úc|mỹ|usa|singapore|canada|đức|pháp|nhật|hàn|australia/i.test(specific)) counts.overseas++;
+                else counts.hcm++;
+              }
+            });
+          }
+        }
+      } catch {}
+
+      // 3. Quét từ danh sách đăng ký tham gia sự kiện tcdn4_registrations
       try {
         const stored = localStorage.getItem("tcdn4_registrations");
         const regs = stored ? JSON.parse(stored) : [];
-        const counts = { hcm: 0, hn: 0, dn: 0, overseas: 0 };
-        regs.forEach((r: any) => {
-          const addr = r.address || "";
-          if (/Hà Nội|hn/i.test(addr)) counts.hn++;
-          else if (/Đà Nẵng|dn/i.test(addr)) counts.dn++;
-          else if (/Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(addr) || r.region === "overseas") counts.overseas++;
-          else counts.hcm++;
-        });
-        setRegionCounts(counts);
+        if (Array.isArray(regs)) {
+          regs.forEach((r: any) => {
+            const key = (r.fullName || r.phone || r.id || "").toLowerCase().trim();
+            if (key && !countedKeys.has(key)) {
+              countedKeys.add(key);
+              const addr = r.address || "";
+              if (/Hà Nội|hn/i.test(addr)) counts.hn++;
+              else if (/Đà Nẵng|dn/i.test(addr)) counts.dn++;
+              else if (/Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(addr) || r.region === "overseas") counts.overseas++;
+              else counts.hcm++;
+            }
+          });
+        }
       } catch {}
+
+      setRegionCounts(counts);
     }
 
     computeCounts();
     window.addEventListener("storage", computeCounts);
     window.addEventListener("tcdn4_registration_updated", computeCounts);
+    window.addEventListener("tcdn4_profile_updated", computeCounts);
     return () => {
       window.removeEventListener("storage", computeCounts);
       window.removeEventListener("tcdn4_registration_updated", computeCounts);
+      window.removeEventListener("tcdn4_profile_updated", computeCounts);
     };
   }, []);
 

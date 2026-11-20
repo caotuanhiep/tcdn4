@@ -782,29 +782,31 @@ export default function ImagesPanel() {
 
   const togglePin = async (it: any) => {
     const nextPinned = !it.is_pinned;
-    const updated = items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned } : x));
+    const now = Date.now();
+    const updated = items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned, isPinned: nextPinned, pinnedAt: nextPinned ? now : undefined } : x));
     setItems(updated);
+
+    try {
+      const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
+      const list = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(list)) {
+        const nextMemories = list.map((p: any) =>
+          p.id === it.id ? { ...p, isPinned: nextPinned, is_pinned: nextPinned, pinnedAt: nextPinned ? now : undefined } : p
+        );
+        localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(nextMemories));
+      }
+    } catch {}
 
     try {
       await fetch("/api/gallery", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: it.id, isPinned: nextPinned }),
+        body: JSON.stringify({ id: it.id, isPinned: nextPinned, pinnedAt: nextPinned ? now : undefined }),
       });
     } catch {}
 
     try {
-      const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const nextMemories = parsed.map((p: any) =>
-            p.id === it.id ? { ...p, isPinned: nextPinned } : p
-          );
-          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(nextMemories));
-          window.dispatchEvent(new Event("tcdn4_memories_updated"));
-        }
-      }
+      window.dispatchEvent(new Event("tcdn4_memories_updated"));
     } catch {}
 
     toast.success(nextPinned ? "Đã ghim ảnh lên đầu." : "Đã bỏ ghim ảnh.");

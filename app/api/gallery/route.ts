@@ -174,11 +174,11 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
     console.warn("loadManifest error:", err);
   }
 
-  if (cloudPhotos && cloudPhotos.length > 0) {
-    return cloudPhotos;
-  }
   if (localPhotos && localPhotos.length > 0) {
     return localPhotos;
+  }
+  if (cloudPhotos && cloudPhotos.length > 0) {
+    return cloudPhotos;
   }
   return DEFAULT_INITIAL_PHOTOS;
 }
@@ -319,10 +319,15 @@ export async function GET(req: NextRequest) {
     loadTaxonomy(supabase),
   ]);
 
-  // Sắp xếp: Ghim lên đầu, tiếp theo là mới nhất
+  // Sắp xếp: Ghim lên đầu (ưu tiên ảnh ghim mới nhất), tiếp theo là ảnh mới nhất
   const sorted = [...photos].sort((a, b) => {
-    if (a.isPinned && !b.isPinned) return -1;
-    if (!a.isPinned && b.isPinned) return 1;
+    const aPin = a.isPinned || (a as any).is_pinned;
+    const bPin = b.isPinned || (b as any).is_pinned;
+    if (aPin && !bPin) return -1;
+    if (!aPin && bPin) return 1;
+    if (aPin && bPin) {
+      return ((b as any).pinnedAt || b.createdAt || 0) - ((a as any).pinnedAt || a.createdAt || 0);
+    }
     return (b.createdAt || 0) - (a.createdAt || 0);
   });
 
@@ -572,9 +577,12 @@ export async function PUT(req: NextRequest) {
     const currentList = await loadManifest(supabase);
     const updatedList = currentList.map((p) => {
       if (p.id === id) {
+        const nextPinned = typeof isPinned === "boolean" ? isPinned : !!p.isPinned;
         return {
           ...p,
-          isPinned: typeof isPinned === "boolean" ? isPinned : p.isPinned,
+          isPinned: nextPinned,
+          is_pinned: nextPinned,
+          pinnedAt: nextPinned ? (body.pinnedAt || Date.now()) : undefined,
           likes: typeof likes === "number" ? likes : p.likes,
         };
       }
