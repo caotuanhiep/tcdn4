@@ -11,6 +11,8 @@ interface AlbumPhoto {
   type: "image" | "video";
   category?: string;
   topic?: string;
+  album?: string;
+  subTopic?: string;
   caption?: string;
   likes: number;
   comments: any[];
@@ -28,6 +30,8 @@ const DEFAULT_INITIAL_PHOTOS: AlbumPhoto[] = [
     type: "image",
     category: "Thời sinh viên",
     topic: "Thời sinh viên",
+    album: "Lễ tốt nghiệp",
+    subTopic: "Lễ tốt nghiệp",
     likes: 12,
     comments: [],
     uploader: "Ban liên lạc (Admin)",
@@ -58,9 +62,19 @@ async function loadManifest(): Promise<AlbumPhoto[]> {
       const text = await data.text();
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((p: AlbumPhoto) => {
+        return parsed.map((p: any) => {
           const top = normalizeTopic(p.topic || p.category);
-          return { ...p, topic: top, category: top };
+          const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? (p.title?.toLowerCase().includes("tốt nghiệp") ? "Lễ tốt nghiệp" : "Lễ tốt nghiệp") : "Ảnh chung")).trim();
+          return {
+            ...p,
+            topic: top,
+            category: top,
+            album: alb,
+            subTopic: alb,
+            likes: typeof p.likes === "number" ? p.likes : 0,
+            comments: Array.isArray(p.comments) ? p.comments : [],
+            uploader: p.uploader || "Ban liên lạc (Admin)",
+          };
         });
       }
     }
@@ -155,6 +169,8 @@ export async function POST(req: NextRequest) {
 
       const rawTopic = (formData.get("topic") as string) || (formData.get("category") as string);
       const topic = normalizeTopic(rawTopic);
+      const rawAlbum = (formData.get("album") as string) || (formData.get("subTopic") as string) || (topic === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung");
+      const album = rawAlbum.trim() || "Ảnh chung";
       const uploader = (formData.get("uploader") as string) || "Ban liên lạc (Admin)";
       const uploaderClass = (formData.get("uploaderClass") as string) || "TC10";
       const commonTitle = (formData.get("title") as string) || "";
@@ -197,6 +213,8 @@ export async function POST(req: NextRequest) {
           type: "image",
           category: topic,
           topic: topic,
+          album: album,
+          subTopic: album,
           caption: caption,
           likes: 1,
           comments: [],
@@ -230,7 +248,16 @@ export async function POST(req: NextRequest) {
     if (body.action === "add" && body.photo) {
       const currentList = await loadManifest();
       const top = normalizeTopic(body.photo.topic || body.photo.category);
-      const newPhoto = { ...body.photo, topic: top, category: top };
+      const alb = (body.photo.album || body.photo.subTopic || (top === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
+      const newPhoto = {
+        ...body.photo,
+        topic: top,
+        category: top,
+        album: alb,
+        subTopic: alb,
+        comments: Array.isArray(body.photo.comments) ? body.photo.comments : [],
+        likes: typeof body.photo.likes === "number" ? body.photo.likes : 0,
+      };
       const updatedManifest = [newPhoto, ...currentList];
       await saveManifest(updatedManifest);
       await trySaveToDbTable(newPhoto);
@@ -241,7 +268,16 @@ export async function POST(req: NextRequest) {
       const currentList = await loadManifest();
       const normalizedBatch = body.photos.map((p: any) => {
         const top = normalizeTopic(p.topic || p.category);
-        return { ...p, topic: top, category: top };
+        const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
+        return {
+          ...p,
+          topic: top,
+          category: top,
+          album: alb,
+          subTopic: alb,
+          comments: Array.isArray(p.comments) ? p.comments : [],
+          likes: typeof p.likes === "number" ? p.likes : 0,
+        };
       });
       const updatedManifest = [...normalizedBatch, ...currentList];
       await saveManifest(updatedManifest);

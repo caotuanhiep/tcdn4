@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon, Link2, CheckCircle2, FolderHeart, Tag } from "lucide-react";
+import { Loader2, Pin, PinOff, Trash2, Upload, Plus, Image as ImageIcon, Link2, CheckCircle2, FolderHeart, Tag, Layers } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 
@@ -15,6 +15,15 @@ export const DEFAULT_TOPICS = [
   "Kỷ niệm 15 năm",
   "Khác",
 ];
+
+export const DEFAULT_ALBUMS_MAP: Record<string, string[]> = {
+  "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
+  "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
+  "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
+  "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
+  "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
+  "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+};
 
 // Hàm chuẩn hóa chủ đề: Ảnh nào chưa chọn chủ đề hoặc thuộc nhóm cũ đều vào "Khác"
 export function resolveTopic(t?: string): string {
@@ -111,6 +120,11 @@ export default function ImagesPanel() {
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopicName, setCustomTopicName] = useState("");
 
+  // Sub-album / Bộ thẻ bài state
+  const [uploadAlbum, setUploadAlbum] = useState("Lễ tốt nghiệp");
+  const [isCustomAlbum, setIsCustomAlbum] = useState(false);
+  const [customAlbumName, setCustomAlbumName] = useState("");
+
   // Upload State
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
@@ -134,6 +148,7 @@ export default function ImagesPanel() {
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((p: any) => {
             const topic = resolveTopic(p.topic || p.category);
+            const alb = (p.album || p.subTopic || (topic === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
             list.push({
               id: p.id,
               image_url: p.imgSrc || p.image_url,
@@ -143,6 +158,10 @@ export default function ImagesPanel() {
               title: p.title || "Ảnh kỷ niệm",
               topic: topic,
               category: topic,
+              album: alb,
+              subTopic: alb,
+              comments: Array.isArray(p.comments) ? p.comments : [],
+              likes: typeof p.likes === "number" ? p.likes : 0,
               source: "supabase",
             });
             seenIds.add(p.id);
@@ -234,6 +253,8 @@ export default function ImagesPanel() {
 
     const rawTopic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
     const finalTopic = resolveTopic(rawTopic);
+    const rawAlbum = isCustomAlbum ? (customAlbumName.trim() || "Ảnh kỷ niệm") : (uploadAlbum.trim() || "Ảnh chung");
+    const finalAlbum = rawAlbum.trim() || "Ảnh chung";
 
     if (uploadMode === "file") {
       if (selectedFiles.length === 0) {
@@ -257,6 +278,8 @@ export default function ImagesPanel() {
           const formData = new FormData();
           formData.append("files", compressed);
           formData.append("topic", finalTopic);
+          formData.append("album", finalAlbum);
+          formData.append("subTopic", finalAlbum);
           formData.append("uploader", "Ban liên lạc (Admin)");
           formData.append("uploaderClass", "TC10");
           if (photoTitle.trim()) {
@@ -297,6 +320,10 @@ export default function ImagesPanel() {
               title: p.title,
               topic: p.topic,
               category: p.category,
+              album: p.album || finalAlbum,
+              subTopic: p.subTopic || finalAlbum,
+              comments: [],
+              likes: 0,
               source: "supabase",
             }));
             addedItems.push(...converted);
@@ -590,8 +617,49 @@ export default function ImagesPanel() {
               )}
             </div>
             <p className="text-[11px] text-slate-500">
-              Ảnh tải lên từ admin sẽ tự động đồng bộ vào đúng bộ bài xòe của chủ đề này ngoài trang chủ.
+              Ảnh tải lên từ admin sẽ tự động đồng bộ vào đúng chủ đề ngoài trang chủ.
             </p>
+          </div>
+
+          {/* Lựa chọn Bộ thẻ bài (Album) */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+            <label className="block text-xs font-bold text-amber-900 flex items-center gap-1.5">
+              <Layers size={14} className="text-amber-700" />
+              <span>Bộ thẻ bài (Album trong chủ đề này):</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select
+                value={isCustomAlbum ? "__custom_album__" : uploadAlbum}
+                onChange={(e) => {
+                  if (e.target.value === "__custom_album__") {
+                    setIsCustomAlbum(true);
+                  } else {
+                    setIsCustomAlbum(false);
+                    setUploadAlbum(e.target.value);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-amber-900 focus:border-ueh focus:outline-none"
+              >
+                {(DEFAULT_ALBUMS_MAP[isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic] || ["Ảnh chung"]).map((alb) => (
+                  <option key={alb} value={alb}>
+                    Bộ thẻ: {alb}
+                  </option>
+                ))}
+                <option value="__custom_album__">➕ Tạo bộ thẻ bài mới...</option>
+              </select>
+
+              {isCustomAlbum && (
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Gõ tên bộ thẻ mới (VD: Lễ tốt nghiệp, Giảng đường...)"
+                  value={customAlbumName}
+                  onChange={(e) => setCustomAlbumName(e.target.value)}
+                  className="w-full rounded-xl border-2 border-amber-500 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none"
+                />
+              )}
+            </div>
           </div>
 
           <div>
