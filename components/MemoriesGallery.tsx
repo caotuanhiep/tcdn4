@@ -212,7 +212,7 @@ export default function MemoriesGallery() {
 
   // Điều hướng:
   // selectedTopic: "all" (Xem tất cả các bộ ảnh) hoặc tên chủ đề cụ thể (VD: "Thời sinh viên")
-  const [selectedTopic, setSelectedTopic] = useState<string>("Thời sinh viên");
+  const [selectedTopic, setSelectedTopic] = useState<string>("all");
   // selectedAlbum: null (Hiển thị danh sách các bộ ảnh của chủ đề đó) hoặc tên bộ ảnh cụ thể (VD: "Lễ tốt nghiệp")
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
 
