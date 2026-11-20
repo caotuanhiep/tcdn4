@@ -75,15 +75,19 @@ export const DEFAULT_TOPICS = DEFAULT_TAXONOMY.topics;
 export const DEFAULT_ALBUMS_MAP = DEFAULT_TAXONOMY.albumsMap;
 
 // Hàm chuẩn hóa chủ đề
-export function resolveTopic(t?: string): string {
+export function resolveTopic(t?: string, validTopics?: string[]): string {
   if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
-    return "Khác";
+    return validTopics && validTopics.length > 0 ? validTopics[0] : "Khác";
   }
   const clean = t.trim();
-  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
-  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
-  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
-  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  if (validTopics && validTopics.length > 0) {
+    if (validTopics.includes(clean)) return clean;
+    if (clean === "Cuộc sống hiện tại" && validTopics.includes("Hiện tại")) return "Hiện tại";
+    if (clean === "Dã ngoại & du lịch" && validTopics.includes("Dã ngoại")) return "Dã ngoại";
+    if (clean === "Họp lớp, hẹn hò" && validTopics.includes("Du lịch, gặp gỡ")) return "Du lịch, gặp gỡ";
+    if (clean === "Hội ngộ 15 năm (2026)" && validTopics.includes("Kỷ niệm 15 năm")) return "Kỷ niệm 15 năm";
+    return validTopics[0];
+  }
   return clean;
 }
 
@@ -94,22 +98,33 @@ export function resolveAlbum(
   albumsMap: Record<string, string[]> = DEFAULT_ALBUMS_MAP
 ): string {
   const alb = (photo.album || photo.subTopic || "").trim();
-  if (alb) return alb;
+  const availableAlbums = albumsMap[topic] || [];
+  if (alb && (availableAlbums.length === 0 || availableAlbums.includes(alb))) {
+    return alb;
+  }
   
   const title = (photo.title || "").toLowerCase();
   if (topic === "Thời sinh viên") {
-    if (title.includes("tốt nghiệp") || title.includes("tot nghiep")) return "Lễ tốt nghiệp";
-    if (title.includes("giảng đường") || title.includes("lớp học") || title.includes("lop")) return "Ảnh giảng đường";
-    if (title.includes("sinh viên") || title.includes("ktx") || title.includes("kí túc")) return "Đời sinh viên";
-    return "Lễ tốt nghiệp";
+    if (title.includes("tốt nghiệp") || title.includes("tot nghiep")) {
+      if (availableAlbums.includes("Lễ tốt nghiệp")) return "Lễ tốt nghiệp";
+    }
+    if (title.includes("giảng đường") || title.includes("lớp học") || title.includes("lop")) {
+      if (availableAlbums.includes("Ảnh giảng đường")) return "Ảnh giảng đường";
+    }
+    if (title.includes("sinh viên") || title.includes("ktx") || title.includes("kí túc")) {
+      if (availableAlbums.includes("Đời sinh viên")) return "Đời sinh viên";
+    }
   }
-  const defaults = albumsMap[topic] || DEFAULT_ALBUMS_MAP[topic];
-  return defaults && defaults.length > 0 ? defaults[0] : "Ảnh chung";
+  return availableAlbums.length > 0 ? availableAlbums[0] : "Ảnh chung";
 }
 
 // Hàm chuẩn hóa một đối tượng ảnh
-export function normalizePhoto(p: any, albumsMap: Record<string, string[]> = DEFAULT_ALBUMS_MAP): AlbumPhoto {
-  const topic = resolveTopic(p.topic || p.category);
+export function normalizePhoto(
+  p: any, 
+  validTopics: string[] = DEFAULT_TOPICS,
+  albumsMap: Record<string, string[]> = DEFAULT_ALBUMS_MAP
+): AlbumPhoto {
+  const topic = resolveTopic(p.topic || p.category, validTopics);
   const album = resolveAlbum(p, topic, albumsMap);
   return {
     id: p.id || `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -222,22 +237,40 @@ export default function MemoriesGallery() {
     const seenIds = new Set<string>();
 
     let currentTaxonomy = DEFAULT_TAXONOMY;
+    let localTax: (GalleryTaxonomy & { updatedAt?: number }) | null = null;
 
-    // 1. Tải ảnh & taxonomy từ Supabase Cloud qua API /api/gallery
+    // 1. Đọc taxonomy từ cache localStorage trước
     try {
-      const res = await fetch("/api/gallery");
+      const storedTax = localStorage.getItem(TAXONOMY_STORAGE_KEY);
+      if (storedTax) {
+        const parsedTax = JSON.parse(storedTax);
+        if (parsedTax && Array.isArray(parsedTax.topics) && parsedTax.topics.length > 0) {
+          localTax = parsedTax;
+          currentTaxonomy = parsedTax;
+          setTaxonomy(parsedTax);
+        }
+      }
+    } catch {}
+
+    // 2. Tải ảnh & taxonomy từ Supabase Cloud qua API /api/gallery (no-store)
+    try {
+      const res = await fetch("/api/gallery", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (data.taxonomy && Array.isArray(data.taxonomy.topics)) {
-          currentTaxonomy = data.taxonomy;
-          setTaxonomy(data.taxonomy);
-          try {
-            localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(data.taxonomy));
-          } catch {}
+        if (data.taxonomy && Array.isArray(data.taxonomy.topics) && data.taxonomy.topics.length > 0) {
+          const serverUpdated = data.taxonomy.updatedAt || 0;
+          const localUpdated = localTax?.updatedAt || 0;
+          if (serverUpdated >= localUpdated || !localTax) {
+            currentTaxonomy = data.taxonomy;
+            setTaxonomy(data.taxonomy);
+            try {
+              localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(data.taxonomy));
+            } catch {}
+          }
         }
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((rawP: any) => {
-            const p = normalizePhoto(rawP, currentTaxonomy.albumsMap);
+            const p = normalizePhoto(rawP, currentTaxonomy.topics, currentTaxonomy.albumsMap);
             if (!seenIds.has(p.id)) {
               list.push(p);
               seenIds.add(p.id);
@@ -254,7 +287,7 @@ export default function MemoriesGallery() {
       const storedTax = localStorage.getItem(TAXONOMY_STORAGE_KEY);
       if (storedTax) {
         const parsedTax = JSON.parse(storedTax);
-        if (parsedTax && Array.isArray(parsedTax.topics)) {
+        if (parsedTax && Array.isArray(parsedTax.topics) && parsedTax.topics.length > 0) {
           currentTaxonomy = parsedTax;
           setTaxonomy(parsedTax);
         }
@@ -265,7 +298,7 @@ export default function MemoriesGallery() {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           parsed.forEach((rawP: any) => {
-            const p = normalizePhoto(rawP, currentTaxonomy.albumsMap);
+            const p = normalizePhoto(rawP, currentTaxonomy.topics, currentTaxonomy.albumsMap);
             if (!seenIds.has(p.id)) {
               list.push(p);
               seenIds.add(p.id);
@@ -289,7 +322,7 @@ export default function MemoriesGallery() {
   }, [loadStoredPhotos]);
 
   const savePhotos = (newPhotos: AlbumPhoto[]) => {
-    const normalized = newPhotos.map((p) => normalizePhoto(p, taxonomy.albumsMap));
+    const normalized = newPhotos.map((p) => normalizePhoto(p, taxonomy.topics, taxonomy.albumsMap));
     setPhotos(normalized);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -299,31 +332,15 @@ export default function MemoriesGallery() {
     } catch {}
   };
 
-  // Danh sách toàn bộ chủ đề
+  // Danh sách toàn bộ chủ đề: taxonomy.topics là Source of Truth
   const allTopics = useMemo(() => {
-    const list = [...taxonomy.topics];
-    photos.forEach((p) => {
-      if (p.topic && p.topic !== "all" && !list.includes(p.topic)) {
-        list.push(p.topic);
-      }
-    });
-    return list;
-  }, [taxonomy.topics, photos]);
+    return taxonomy.topics;
+  }, [taxonomy.topics]);
 
-  // Lấy danh sách các bộ ảnh (Albums) theo chủ đề đã chọn
+  // Lấy danh sách các bộ ảnh theo chủ đề đã chọn: taxonomy.albumsMap là Source of Truth
   const getAlbumsForTopic = useCallback((topicName: string): string[] => {
-    const fromTax = taxonomy.albumsMap[topicName] || DEFAULT_ALBUMS_MAP[topicName] || ["Ảnh chung"];
-    const list = [...fromTax];
-    photos.forEach((p) => {
-      if (p.topic === topicName) {
-        const alb = resolveAlbum(p, topicName, taxonomy.albumsMap);
-        if (alb && !list.includes(alb)) {
-          list.push(alb);
-        }
-      }
-    });
-    return list;
-  }, [taxonomy.albumsMap, photos]);
+    return taxonomy.albumsMap[topicName] || ["Ảnh chung"];
+  }, [taxonomy.albumsMap]);
 
   // Cập nhật album mặc định khi thay đổi upload topic
   useEffect(() => {
@@ -698,7 +715,7 @@ export default function MemoriesGallery() {
           const result = await res.json();
           if (result.success && Array.isArray(result.addedPhotos)) {
             result.addedPhotos.forEach((ap: any) => {
-              newPhotos.push(normalizePhoto(ap, taxonomy.albumsMap));
+              newPhotos.push(normalizePhoto(ap, taxonomy.topics, taxonomy.albumsMap));
             });
           }
         }
@@ -728,7 +745,7 @@ export default function MemoriesGallery() {
           uploaderClass: resolvedClass,
           createdAt: now + idx,
           isPinned: staged.isPinned && isAdmin,
-        }, taxonomy.albumsMap));
+        }, taxonomy.topics, taxonomy.albumsMap));
       }
     }
 

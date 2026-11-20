@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { createServerClient } from "@supabase/ssr";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const MANIFEST_PATH = "gallery/gallery-manifest.json";
 const TAXONOMY_PATH = "gallery/gallery-taxonomy.json";
@@ -8,6 +10,36 @@ const BUCKET_NAME = "alumni-media";
 export interface GalleryTaxonomy {
   topics: string[];
   albumsMap: Record<string, string[]>;
+  updatedAt?: number;
+}
+
+export function getSupabaseForRequest(req?: NextRequest): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (serviceKey) {
+    return createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+
+  const authHeader = req?.headers.get("authorization");
+  if (authHeader) {
+    return createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+
+  if (req) {
+    return createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll: () => req.cookies.getAll(),
+        setAll: () => {},
+      },
+    }) as unknown as SupabaseClient;
+  }
+
+  return getSupabaseAdmin();
 }
 
 export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
@@ -79,9 +111,9 @@ export function normalizeTopic(t?: string): string {
 }
 
 // Helper: Tải manifest ảnh từ Supabase Storage
-async function loadManifest(): Promise<AlbumPhoto[]> {
+async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = client || getSupabaseAdmin();
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(MANIFEST_PATH);
     if (!error && data) {
       const text = await data.text();
@@ -110,14 +142,15 @@ async function loadManifest(): Promise<AlbumPhoto[]> {
 }
 
 // Helper: Lưu manifest ảnh lên Supabase Storage
-async function saveManifest(photos: AlbumPhoto[]): Promise<boolean> {
+async function saveManifest(photos: AlbumPhoto[], client?: SupabaseClient): Promise<boolean> {
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = client || getSupabaseAdmin();
+    const buffer = Buffer.from(JSON.stringify(photos, null, 2), "utf-8");
     const { error } = await supabase.storage.from(BUCKET_NAME).upload(
       MANIFEST_PATH,
-      JSON.stringify(photos, null, 2),
+      buffer,
       {
-        contentType: "application/json",
+        contentType: "application/json; charset=utf-8",
         upsert: true,
       }
     );
@@ -133,14 +166,14 @@ async function saveManifest(photos: AlbumPhoto[]): Promise<boolean> {
 }
 
 // Helper: Tải taxonomy (Chủ đề & Bộ ảnh) từ Supabase Storage
-async function loadTaxonomy(): Promise<GalleryTaxonomy> {
+async function loadTaxonomy(client?: SupabaseClient): Promise<GalleryTaxonomy> {
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = client || getSupabaseAdmin();
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(TAXONOMY_PATH);
     if (!error && data) {
       const text = await data.text();
       const parsed = JSON.parse(text);
-      if (parsed && Array.isArray(parsed.topics) && parsed.albumsMap) {
+      if (parsed && Array.isArray(parsed.topics) && parsed.topics.length > 0 && parsed.albumsMap) {
         return parsed;
       }
     }
@@ -150,19 +183,28 @@ async function loadTaxonomy(): Promise<GalleryTaxonomy> {
   return DEFAULT_TAXONOMY;
 }
 
-// Helper: Lưu taxonomy lên Supabase Storage
-async function saveTaxonomy(taxonomy: GalleryTaxonomy): Promise<boolean> {
+// Helper: Lưu taxonomy lên Supabase Storage (dùng Buffer UTF-8 chuẩn xác)
+async function saveTaxonomy(taxonomy: GalleryTaxonomy, client?: SupabaseClient): Promise<boolean> {
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = client || getSupabaseAdmin();
+    const taxWithTimestamp = {
+      ...taxonomy,
+      updatedAt: taxonomy.updatedAt || Date.now(),
+    };
+    const buffer = Buffer.from(JSON.stringify(taxWithTimestamp, null, 2), "utf-8");
     const { error } = await supabase.storage.from(BUCKET_NAME).upload(
       TAXONOMY_PATH,
-      JSON.stringify(taxonomy, null, 2),
+      buffer,
       {
-        contentType: "application/json",
+        contentType: "application/json; charset=utf-8",
         upsert: true,
       }
     );
-    return !error;
+    if (error) {
+      console.error("saveTaxonomy error:", error);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error("saveTaxonomy error:", err);
     return false;
@@ -191,10 +233,12 @@ async function trySaveToDbTable(photo: AlbumPhoto) {
 }
 
 // GET /api/gallery - Lấy toàn bộ ảnh và taxonomy từ Cloud (công khai, không cần đăng nhập)
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url); // Dynamic read
+  const supabase = getSupabaseForRequest(req);
   const [photos, taxonomy] = await Promise.all([
-    loadManifest(),
-    loadTaxonomy(),
+    loadManifest(supabase),
+    loadTaxonomy(supabase),
   ]);
 
   // Sắp xếp: Ghim lên đầu, tiếp theo là mới nhất
@@ -219,6 +263,7 @@ export async function GET() {
 // POST /api/gallery - Upload ảnh từ Admin hoặc Thành viên
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabaseForRequest(req);
     const contentType = req.headers.get("content-type") || "";
 
     // 1. Trường hợp upload Multipart Form Data (file từ thiết bị)
@@ -242,8 +287,7 @@ export async function POST(req: NextRequest) {
       const caption = (formData.get("caption") as string) || undefined;
       const isPinned = formData.get("isPinned") === "true";
 
-      const supabase = getSupabaseAdmin();
-      const currentList = await loadManifest();
+      const currentList = await loadManifest(supabase);
       const newPhotos: AlbumPhoto[] = [];
 
       for (let i = 0; i < allFiles.length; i++) {
@@ -298,7 +342,7 @@ export async function POST(req: NextRequest) {
       }
 
       const updatedManifest = [...newPhotos, ...currentList];
-      await saveManifest(updatedManifest);
+      await saveManifest(updatedManifest, supabase);
 
       return NextResponse.json({
         success: true,
@@ -310,13 +354,50 @@ export async function POST(req: NextRequest) {
     // 2. Trường hợp gửi JSON (Link ảnh hoặc đồng bộ)
     const body = await req.json();
 
-    if (body.action === "save_taxonomy" && body.taxonomy) {
-      await saveTaxonomy(body.taxonomy);
-      return NextResponse.json({ success: true, taxonomy: body.taxonomy });
+    if ((body.action === "save_taxonomy" || body.action === "update_taxonomy") && body.taxonomy) {
+      await saveTaxonomy(body.taxonomy, supabase);
+      let updatedManifest: AlbumPhoto[] | null = null;
+
+      // Nếu có cập nhật danh sách ảnh đi kèm hoặc có chỉ thị di dời ảnh (khi xóa chủ đề / xóa bộ ảnh)
+      if (Array.isArray(body.photos)) {
+        updatedManifest = body.photos;
+        await saveManifest(body.photos, supabase);
+      } else if (body.migrateTopic || body.migrateAlbum) {
+        const currentList = await loadManifest(supabase);
+        const migrated = currentList.map((p) => {
+          let topic = p.topic || p.category || "Khác";
+          let album = p.album || p.subTopic || "Ảnh chung";
+
+          if (body.migrateTopic && (topic === body.migrateTopic.from || p.category === body.migrateTopic.from)) {
+            topic = body.migrateTopic.to;
+            album = body.migrateTopic.toAlbum || (body.taxonomy.albumsMap[topic]?.[0] || "Ảnh chung");
+          }
+
+          if (body.migrateAlbum && topic === body.migrateAlbum.topic && album === body.migrateAlbum.from) {
+            album = body.migrateAlbum.to;
+          }
+
+          return {
+            ...p,
+            topic,
+            category: topic,
+            album,
+            subTopic: album,
+          };
+        });
+        await saveManifest(migrated, supabase);
+        updatedManifest = migrated;
+      }
+
+      return NextResponse.json({
+        success: true,
+        taxonomy: body.taxonomy,
+        photos: updatedManifest,
+      });
     }
 
     if (body.action === "add" && body.photo) {
-      const currentList = await loadManifest();
+      const currentList = await loadManifest(supabase);
       const top = normalizeTopic(body.photo.topic || body.photo.category);
       const alb = (body.photo.album || body.photo.subTopic || (top === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
       const newPhoto = {
@@ -329,13 +410,13 @@ export async function POST(req: NextRequest) {
         likes: typeof body.photo.likes === "number" ? body.photo.likes : 0,
       };
       const updatedManifest = [newPhoto, ...currentList];
-      await saveManifest(updatedManifest);
+      await saveManifest(updatedManifest, supabase);
       await trySaveToDbTable(newPhoto);
       return NextResponse.json({ success: true, photos: updatedManifest });
     }
 
     if (body.action === "add_batch" && Array.isArray(body.photos)) {
-      const currentList = await loadManifest();
+      const currentList = await loadManifest(supabase);
       const normalizedBatch = body.photos.map((p: any) => {
         const top = normalizeTopic(p.topic || p.category);
         const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
@@ -350,7 +431,7 @@ export async function POST(req: NextRequest) {
         };
       });
       const updatedManifest = [...normalizedBatch, ...currentList];
-      await saveManifest(updatedManifest);
+      await saveManifest(updatedManifest, supabase);
       return NextResponse.json({ success: true, photos: updatedManifest });
     }
 
@@ -364,16 +445,17 @@ export async function POST(req: NextRequest) {
 // DELETE /api/gallery - Xóa ảnh khỏi Cloud
 export async function DELETE(req: NextRequest) {
   try {
+    const supabase = getSupabaseForRequest(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) {
       return NextResponse.json({ success: false, error: "Thiếu ID ảnh" }, { status: 400 });
     }
 
-    const currentList = await loadManifest();
+    const currentList = await loadManifest(supabase);
     const target = currentList.find((p) => p.id === id);
     const updatedList = currentList.filter((p) => p.id !== id);
-    await saveManifest(updatedList);
+    await saveManifest(updatedList, supabase);
 
     // Xóa file trên Storage nếu là link Supabase Storage
     if (target?.imgSrc?.includes(BUCKET_NAME)) {
@@ -381,7 +463,6 @@ export async function DELETE(req: NextRequest) {
         const parts = target.imgSrc.split(`${BUCKET_NAME}/`);
         if (parts[1]) {
           const filePath = parts[1].split("?")[0];
-          const supabase = getSupabaseAdmin();
           await supabase.storage.from(BUCKET_NAME).remove([filePath]);
         }
       } catch {}
@@ -389,7 +470,6 @@ export async function DELETE(req: NextRequest) {
 
     // Thử xóa trong table gallery
     try {
-      const supabase = getSupabaseAdmin();
       await supabase.from("gallery").delete().eq("id", id);
     } catch {}
 
@@ -402,13 +482,14 @@ export async function DELETE(req: NextRequest) {
 // PUT /api/gallery - Cập nhật trạng thái Ghim / Like ảnh
 export async function PUT(req: NextRequest) {
   try {
+    const supabase = getSupabaseForRequest(req);
     const body = await req.json();
     const { id, isPinned, likes } = body;
     if (!id) {
       return NextResponse.json({ success: false, error: "Thiếu ID ảnh" }, { status: 400 });
     }
 
-    const currentList = await loadManifest();
+    const currentList = await loadManifest(supabase);
     const updatedList = currentList.map((p) => {
       if (p.id === id) {
         return {
@@ -420,7 +501,7 @@ export async function PUT(req: NextRequest) {
       return p;
     });
 
-    await saveManifest(updatedList);
+    await saveManifest(updatedList, supabase);
     return NextResponse.json({ success: true, photos: updatedList });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Lỗi máy chủ" }, { status: 500 });

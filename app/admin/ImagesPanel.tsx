@@ -12,12 +12,11 @@ import {
   Link2, 
   FolderHeart, 
   Tag, 
-  FolderPlus,
-  Layers,
-  Settings,
-  X,
-  Check
+  Layers, 
+  Settings, 
+  X 
 } from "lucide-react";
+import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 
 const MEMORIES_STORAGE_KEY = "tcdn4_memories_gallery";
@@ -26,6 +25,7 @@ const TAXONOMY_STORAGE_KEY = "tcdn4_gallery_taxonomy";
 export interface GalleryTaxonomy {
   topics: string[];
   albumsMap: Record<string, string[]>;
+  updatedAt?: number;
 }
 
 export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
@@ -39,27 +39,31 @@ export const DEFAULT_TAXONOMY: GalleryTaxonomy = {
   ],
   albumsMap: {
     "Thời sinh viên": ["Lễ tốt nghiệp", "Ảnh giảng đường", "Đời sinh viên"],
-    "Dã ngoại": ["Dã ngoại & Cắm trại", "Chuyến đi thực tế"],
-    "Hiện tại": ["Gia đình & Cuộc sống", "Công việc & Sự nghiệp"],
-    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè"],
-    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Áo kỷ niệm"],
-    "Khác": ["Khoảnh khắc khác", "Ảnh đóng góp"],
+    "Dã ngoại": ["Hoạt động Team", "Night Gala"],
+    "Hiện tại": ["Cuộc sống & sự nghiệp"],
+    "Du lịch, gặp gỡ": ["Họp lớp & Hội ngộ", "Du lịch bạn bè", "Đám cưới, hiếu hỷ", "Gặp gỡ", "Tour Bà nà, Hội An"],
+    "Kỷ niệm 15 năm": ["Hội ngộ 15 năm (2026)", "Họp trù bị"],
+    "Khác": ["Khoảnh khắc khác"],
   },
 };
 
 export const DEFAULT_TOPICS = DEFAULT_TAXONOMY.topics;
 export const DEFAULT_ALBUMS_MAP = DEFAULT_TAXONOMY.albumsMap;
 
-// Hàm chuẩn hóa chủ đề
-export function resolveTopic(t?: string): string {
+// Hàm chuẩn hóa chủ đề dựa trên danh sách chủ đề hợp lệ hiện tại
+export function resolveTopic(t?: string, validTopics?: string[]): string {
   if (!t || t.trim() === "" || t === "Chưa phân loại" || t === "Kỷ niệm" || t === "all") {
-    return "Khác";
+    return validTopics && validTopics.length > 0 ? validTopics[0] : "Khác";
   }
   const clean = t.trim();
-  if (clean === "Cuộc sống hiện tại") return "Hiện tại";
-  if (clean === "Dã ngoại & du lịch") return "Dã ngoại";
-  if (clean === "Họp lớp, hẹn hò") return "Du lịch, gặp gỡ";
-  if (clean === "Hội ngộ 15 năm (2026)") return "Kỷ niệm 15 năm";
+  if (validTopics && validTopics.length > 0) {
+    if (validTopics.includes(clean)) return clean;
+    if (clean === "Cuộc sống hiện tại" && validTopics.includes("Hiện tại")) return "Hiện tại";
+    if (clean === "Dã ngoại & du lịch" && validTopics.includes("Dã ngoại")) return "Dã ngoại";
+    if (clean === "Họp lớp, hẹn hò" && validTopics.includes("Du lịch, gặp gỡ")) return "Du lịch, gặp gỡ";
+    if (clean === "Hội ngộ 15 năm (2026)" && validTopics.includes("Kỷ niệm 15 năm")) return "Kỷ niệm 15 năm";
+    return validTopics[0];
+  }
   return clean;
 }
 
@@ -173,23 +177,43 @@ export default function ImagesPanel() {
     const seenIds = new Set<string>();
 
     let currentTax = DEFAULT_TAXONOMY;
+    let localTax: (GalleryTaxonomy & { updatedAt?: number }) | null = null;
 
-    // 1. Tải ảnh & taxonomy từ API Cloud (/api/gallery)
+    // 1. Tải taxonomy trước từ cache nếu có
     try {
-      const res = await fetch("/api/gallery");
+      const storedTax = localStorage.getItem(TAXONOMY_STORAGE_KEY);
+      if (storedTax) {
+        const parsedTax = JSON.parse(storedTax);
+        if (parsedTax && Array.isArray(parsedTax.topics) && parsedTax.topics.length > 0) {
+          localTax = parsedTax;
+          currentTax = parsedTax;
+          setTaxonomy(parsedTax);
+        }
+      }
+    } catch {}
+
+    // 2. Tải ảnh & taxonomy từ API Cloud (/api/gallery)
+    try {
+      const res = await fetch("/api/gallery", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (data.taxonomy && Array.isArray(data.taxonomy.topics)) {
-          currentTax = data.taxonomy;
-          setTaxonomy(data.taxonomy);
-          try {
-            localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(data.taxonomy));
-          } catch {}
+        if (data.taxonomy && Array.isArray(data.taxonomy.topics) && data.taxonomy.topics.length > 0) {
+          const serverUpdated = data.taxonomy.updatedAt || 0;
+          const localUpdated = localTax?.updatedAt || 0;
+          // Chỉ ghi đè từ server nếu server có thời gian cập nhật mới hơn hoặc local chưa có
+          if (serverUpdated >= localUpdated || !localTax) {
+            currentTax = data.taxonomy;
+            setTaxonomy(data.taxonomy);
+            try {
+              localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(data.taxonomy));
+            } catch {}
+          }
         }
         if (data.photos && Array.isArray(data.photos)) {
           data.photos.forEach((p: any) => {
-            const topic = resolveTopic(p.topic || p.category);
-            const alb = (p.album || p.subTopic || (topic === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
+            const topic = resolveTopic(p.topic || p.category, currentTax.topics);
+            const defaultAlbum = currentTax.albumsMap[topic]?.[0] || "Ảnh chung";
+            const alb = (p.album || p.subTopic || defaultAlbum).trim();
             list.push({
               id: p.id,
               image_url: p.imgSrc || p.image_url,
@@ -213,25 +237,17 @@ export default function ImagesPanel() {
       console.warn("Lỗi tải ảnh từ /api/gallery:", err);
     }
 
-    // 2. Kết hợp với ảnh trong localStorage nếu có
+    // 3. Kết hợp với ảnh trong localStorage nếu có
     try {
-      const storedTax = localStorage.getItem(TAXONOMY_STORAGE_KEY);
-      if (storedTax) {
-        const parsedTax = JSON.parse(storedTax);
-        if (parsedTax && Array.isArray(parsedTax.topics)) {
-          currentTax = parsedTax;
-          setTaxonomy(parsedTax);
-        }
-      }
-
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           parsed.forEach((p: any) => {
             if (!seenIds.has(p.id)) {
-              const topic = resolveTopic(p.topic || p.category);
-              const alb = (p.album || p.subTopic || "Ảnh chung").trim();
+              const topic = resolveTopic(p.topic || p.category, currentTax.topics);
+              const defaultAlbum = currentTax.albumsMap[topic]?.[0] || "Ảnh chung";
+              const alb = (p.album || p.subTopic || defaultAlbum).trim();
               list.push({
                 id: p.id,
                 image_url: p.imgSrc || p.image_url,
@@ -274,28 +290,24 @@ export default function ImagesPanel() {
     };
   }, [load]);
 
-  // Danh sách chủ đề
+  // Danh sách chủ đề: Nguồn dữ liệu duy nhất là taxonomy.topics
   const allAvailableTopics = useMemo(() => {
-    const list = [...taxonomy.topics];
-    items.forEach((it) => {
-      const top = resolveTopic(it.topic);
-      if (top && top !== "all" && !list.includes(top)) list.push(top);
-    });
-    return list;
-  }, [taxonomy.topics, items]);
+    return taxonomy.topics;
+  }, [taxonomy.topics]);
 
   // Danh sách bộ ảnh của uploadTopic
   const uploadAlbumsList = useMemo(() => {
     const topic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
-    const fromTax = taxonomy.albumsMap[topic] || DEFAULT_ALBUMS_MAP[topic] || ["Ảnh chung"];
-    const set = new Set<string>(fromTax);
-    items.forEach((it) => {
-      if (resolveTopic(it.topic) === topic && it.album) set.add(it.album);
-    });
-    return Array.from(set);
-  }, [taxonomy.albumsMap, uploadTopic, isCustomTopic, customTopicName, items]);
+    return taxonomy.albumsMap[topic] || ["Ảnh chung"];
+  }, [taxonomy.albumsMap, uploadTopic, isCustomTopic, customTopicName]);
 
-  // Cập nhật uploadAlbum khi uploadTopic thay đổi
+  // Cập nhật uploadTopic và uploadAlbum mặc định
+  useEffect(() => {
+    if (taxonomy.topics.length > 0 && !taxonomy.topics.includes(uploadTopic)) {
+      setUploadTopic(taxonomy.topics[0]);
+    }
+  }, [taxonomy.topics, uploadTopic]);
+
   useEffect(() => {
     if (uploadAlbumsList.length > 0 && !uploadAlbumsList.includes(uploadAlbum)) {
       setUploadAlbum(uploadAlbumsList[0]);
@@ -305,40 +317,95 @@ export default function ImagesPanel() {
   // Danh sách album theo filter topic
   const filterAlbumsList = useMemo(() => {
     if (selectedFilterTopic === "all") return [];
-    const fromTax = taxonomy.albumsMap[selectedFilterTopic] || DEFAULT_ALBUMS_MAP[selectedFilterTopic] || [];
-    const set = new Set<string>(fromTax);
-    items.forEach((it) => {
-      if (resolveTopic(it.topic) === selectedFilterTopic && it.album) set.add(it.album);
-    });
-    return Array.from(set);
-  }, [selectedFilterTopic, taxonomy.albumsMap, items]);
+    return taxonomy.albumsMap[selectedFilterTopic] || [];
+  }, [selectedFilterTopic, taxonomy.albumsMap]);
 
   // Lọc ảnh theo chủ đề & bộ ảnh
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedFilterTopic !== "all") {
-      result = result.filter((it) => resolveTopic(it.topic) === selectedFilterTopic);
+      result = result.filter((it) => resolveTopic(it.topic, taxonomy.topics) === selectedFilterTopic);
     }
     if (selectedFilterAlbum !== "all") {
       result = result.filter((it) => (it.album || "Ảnh chung") === selectedFilterAlbum);
     }
     return result;
-  }, [items, selectedFilterTopic, selectedFilterAlbum]);
+  }, [items, selectedFilterTopic, selectedFilterAlbum, taxonomy.topics]);
 
-  // Lưu taxonomy lên Supabase & LocalStorage
-  const persistTaxonomy = async (newTax: GalleryTaxonomy) => {
-    setTaxonomy(newTax);
+  // Lưu taxonomy lên Supabase & LocalStorage và hỗ trợ di dời ảnh
+  const persistTaxonomy = async (
+    newTax: GalleryTaxonomy,
+    options?: {
+      migrateTopic?: { from: string; to: string; toAlbum?: string };
+      migrateAlbum?: { topic: string; from: string; to: string };
+      updatedItems?: any[];
+    }
+  ) => {
+    const taxWithTimestamp: GalleryTaxonomy = {
+      ...newTax,
+      updatedAt: Date.now(),
+    };
+    setTaxonomy(taxWithTimestamp);
     try {
-      localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(newTax));
+      localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(taxWithTimestamp));
+      if (options?.updatedItems) {
+        localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(options.updatedItems));
+      }
       window.dispatchEvent(new Event("tcdn4_memories_updated"));
     } catch {}
 
     try {
-      await fetch("/api/gallery", {
+      const supabase = getSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 1. Ghi trực tiếp từ browser client có auth token
+      try {
+        const blob = new Blob([JSON.stringify(taxWithTimestamp, null, 2)], { type: "application/json" });
+        await supabase.storage.from("alumni-media").upload("gallery/gallery-taxonomy.json", blob, {
+          upsert: true,
+          contentType: "application/json",
+        });
+      } catch (err) {
+        console.warn("Client direct storage upload warning:", err);
+      }
+
+      // 2. Gửi API kèm Bearer token để cập nhật backend
+      const res = await fetch("/api/gallery", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_taxonomy", taxonomy: newTax }),
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ 
+          action: "save_taxonomy", 
+          taxonomy: taxWithTimestamp,
+          migrateTopic: options?.migrateTopic,
+          migrateAlbum: options?.migrateAlbum,
+        }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.photos && Array.isArray(data.photos)) {
+          const synced = data.photos.map((p: any) => ({
+            id: p.id,
+            image_url: p.imgSrc || p.image_url,
+            user_id: p.uploader || "Ban liên lạc (Admin)",
+            is_pinned: !!p.isPinned,
+            created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+            title: p.title || "Ảnh kỷ niệm",
+            topic: resolveTopic(p.topic || p.category, taxWithTimestamp.topics),
+            category: resolveTopic(p.topic || p.category, taxWithTimestamp.topics),
+            album: p.album || p.subTopic || "Ảnh chung",
+            subTopic: p.album || p.subTopic || "Ảnh chung",
+            comments: Array.isArray(p.comments) ? p.comments : [],
+            likes: typeof p.likes === "number" ? p.likes : 0,
+            source: "supabase",
+          }));
+          setItems(synced);
+          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(synced));
+        }
+      }
     } catch (err) {
       console.warn("Lỗi lưu taxonomy lên server:", err);
     }
@@ -364,30 +431,60 @@ export default function ImagesPanel() {
     toast.success(`Đã thêm chủ đề "${val}" thành công!`);
   };
 
-  // Xóa chủ đề
+  // Xóa chủ đề (Di dời các bức ảnh thuộc chủ đề này sang chủ đề còn lại)
   const handleDeleteTopic = async (topicName: string) => {
     if (taxonomy.topics.length <= 1) {
       toast.error("Phải giữ lại ít nhất 1 chủ đề!");
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa chủ đề "${topicName}"? Các ảnh thuộc chủ đề này sẽ được chuyển sang "Khác".`)) {
+    const targetTopic = taxonomy.topics.find((t) => t !== topicName);
+    if (!targetTopic) {
+      toast.error("Không tìm thấy chủ đề thay thế để chuyển ảnh!");
       return;
     }
+
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa chủ đề "${topicName}"? Tất cả ảnh thuộc chủ đề này sẽ được chuyển sang "${targetTopic}".`)) {
+      return;
+    }
+
     const updatedTopics = taxonomy.topics.filter((t) => t !== topicName);
     const updatedAlbumsMap = { ...taxonomy.albumsMap };
     delete updatedAlbumsMap[topicName];
-    if (!updatedTopics.includes("Khác")) {
-      updatedTopics.push("Khác");
-      updatedAlbumsMap["Khác"] = ["Khoảnh khắc khác"];
-    }
+
+    const targetAlbum = updatedAlbumsMap[targetTopic]?.[0] || "Ảnh chung";
+
+    // Cập nhật tất cả các ảnh trong state items local
+    const updatedItems = items.map((it) => {
+      if (resolveTopic(it.topic, taxonomy.topics) === topicName) {
+        return {
+          ...it,
+          topic: targetTopic,
+          category: targetTopic,
+          album: targetAlbum,
+          subTopic: targetAlbum,
+        };
+      }
+      return it;
+    });
+
+    setItems(updatedItems);
 
     const updatedTax: GalleryTaxonomy = {
       topics: updatedTopics,
       albumsMap: updatedAlbumsMap,
     };
-    await persistTaxonomy(updatedTax);
+
+    await persistTaxonomy(updatedTax, {
+      migrateTopic: {
+        from: topicName,
+        to: targetTopic,
+        toAlbum: targetAlbum,
+      },
+      updatedItems,
+    });
+
     if (selectedFilterTopic === topicName) setSelectedFilterTopic("all");
-    toast.success(`Đã xóa chủ đề "${topicName}"`);
+    toast.success(`Đã xóa chủ đề "${topicName}" thành công!`);
   };
 
   // Thêm bộ ảnh mới vào chủ đề
@@ -411,25 +508,53 @@ export default function ImagesPanel() {
     toast.success(`Đã thêm bộ ảnh "${val}" vào chủ đề "${topicName}"!`);
   };
 
-  // Xóa bộ ảnh khỏi chủ đề
+  // Xóa bộ ảnh khỏi chủ đề (Di dời các ảnh trong bộ ảnh này sang bộ ảnh còn lại)
   const handleDeleteAlbum = async (topicName: string, albumName: string) => {
     const currentAlbums = taxonomy.albumsMap[topicName] || [];
     if (currentAlbums.length <= 1) {
       toast.error("Mỗi chủ đề cần có ít nhất 1 bộ ảnh!");
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa bộ ảnh "${albumName}" khỏi chủ đề "${topicName}"?`)) {
+
+    const remainingAlbums = currentAlbums.filter((a) => a !== albumName);
+    const targetAlbum = remainingAlbums[0];
+
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa bộ ảnh "${albumName}" khỏi chủ đề "${topicName}"? Các ảnh trong bộ này sẽ được chuyển sang "${targetAlbum}".`)) {
       return;
     }
+
     const updatedTax: GalleryTaxonomy = {
       ...taxonomy,
       albumsMap: {
         ...taxonomy.albumsMap,
-        [topicName]: currentAlbums.filter((a) => a !== albumName),
+        [topicName]: remainingAlbums,
       },
     };
-    await persistTaxonomy(updatedTax);
-    toast.success(`Đã xóa bộ ảnh "${albumName}"`);
+
+    const updatedItems = items.map((it) => {
+      if (resolveTopic(it.topic, taxonomy.topics) === topicName && (it.album === albumName || it.subTopic === albumName)) {
+        return {
+          ...it,
+          album: targetAlbum,
+          subTopic: targetAlbum,
+        };
+      }
+      return it;
+    });
+
+    setItems(updatedItems);
+
+    await persistTaxonomy(updatedTax, {
+      migrateAlbum: {
+        topic: topicName,
+        from: albumName,
+        to: targetAlbum,
+      },
+      updatedItems,
+    });
+
+    if (selectedFilterAlbum === albumName) setSelectedFilterAlbum("all");
+    toast.success(`Đã xóa bộ ảnh "${albumName}" thành công!`);
   };
 
   const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,7 +574,7 @@ export default function ImagesPanel() {
     e.preventDefault();
 
     const rawTopic = isCustomTopic && customTopicName.trim() ? customTopicName.trim() : uploadTopic;
-    const finalTopic = resolveTopic(rawTopic);
+    const finalTopic = resolveTopic(rawTopic, taxonomy.topics);
     const rawAlbum = isCustomAlbum ? (customAlbumName.trim() || "Ảnh kỷ niệm") : (uploadAlbum.trim() || "Ảnh chung");
     const finalAlbum = rawAlbum.trim() || "Ảnh chung";
 
@@ -773,7 +898,7 @@ export default function ImagesPanel() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {taxonomy.topics.map((top) => {
               const albums = taxonomy.albumsMap[top] || [];
-              const photosInTopicCount = items.filter((it) => resolveTopic(it.topic) === top).length;
+              const photosInTopicCount = items.filter((it) => resolveTopic(it.topic, taxonomy.topics) === top).length;
               return (
                 <div key={top} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 flex flex-col justify-between">
                   <div>
@@ -800,7 +925,7 @@ export default function ImagesPanel() {
                       <span className="text-[11px] font-bold text-slate-500">Các bộ ảnh:</span>
                       <div className="flex flex-wrap gap-1.5">
                         {albums.map((alb) => {
-                          const albCount = items.filter((it) => resolveTopic(it.topic) === top && it.album === alb).length;
+                          const albCount = items.filter((it) => resolveTopic(it.topic, taxonomy.topics) === top && it.album === alb).length;
                           return (
                             <div
                               key={alb}
@@ -1083,7 +1208,7 @@ export default function ImagesPanel() {
         </button>
 
         {allAvailableTopics.map((top) => {
-          const count = items.filter((it) => resolveTopic(it.topic) === top).length;
+          const count = items.filter((it) => resolveTopic(it.topic, taxonomy.topics) === top).length;
           const isSelected = selectedFilterTopic === top;
           return (
             <button
@@ -1169,7 +1294,7 @@ export default function ImagesPanel() {
                   <div className="mb-1 flex items-center gap-1 flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-ueh border border-blue-100">
                       <Tag size={10} className="text-ueh-orange" />
-                      {it.topic || "Khác"}
+                      {resolveTopic(it.topic, taxonomy.topics)}
                     </span>
                     {it.album && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-100 text-[10px] font-semibold text-slate-700">
