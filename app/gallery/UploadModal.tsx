@@ -7,7 +7,60 @@ import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import { STORAGE_BUCKET } from "@/types/database";
 
-const MAX_SIZE = 5 * 1024 * 1024;
+const MAX_SIZE = 15 * 1024 * 1024;
+
+async function compressImage(file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<File> {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(file);
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const outputType = file.type === "image/png" ? "image/webp" : (file.type || "image/jpeg");
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+            } else {
+              const newName = file.name.replace(/\.[^/.]+$/, "") + (outputType === "image/webp" ? ".webp" : ".jpg");
+              resolve(new File([blob], newName, { type: outputType }));
+            }
+          },
+          outputType,
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
   const { user } = useAuth();
@@ -27,41 +80,47 @@ export default function UploadModal({ onClose, onUploaded }: { onClose: () => vo
   function pick(f: File | undefined) {
     if (!f) return;
     if (!f.type.startsWith("image/")) return toast.error("Vui lòng chọn file ảnh (JPG, PNG, WebP).");
-    if (f.size > MAX_SIZE) return toast.error("Ảnh vượt quá 5MB.");
+    if (f.size > MAX_SIZE) return toast.error("Ảnh vượt quá 15MB.");
     setFile(f);
   }
 
   async function submit() {
     if (!file || !user) return;
     setBusy(true);
-    const supabase = getSupabase();
-    const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    try {
+      const uploadFile = await compressImage(file);
+      const supabase = getSupabase();
+      const ext = (uploadFile.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-    if (upErr) {
-      toast.error(`Upload thất bại: ${upErr.message}`);
+      const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile, {
+        contentType: uploadFile.type,
+        upsert: false,
+      });
+      if (upErr) {
+        toast.error(`Upload thất bại: ${upErr.message}`);
+        setBusy(false);
+        return;
+      }
+
+      const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+      const { error: insErr } = await supabase
+        .from("gallery")
+        .insert({ image_url: pub.publicUrl, user_id: user.id, is_pinned: false });
+      if (insErr) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+        toast.error(`Không lưu được ảnh: ${insErr.message}`);
+        setBusy(false);
+        return;
+      }
+
+      toast.success("Cảm ơn bạn đã đóng góp ảnh!");
       setBusy(false);
-      return;
-    }
-
-    const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    const { error: insErr } = await supabase
-      .from("gallery")
-      .insert({ image_url: pub.publicUrl, user_id: user.id, is_pinned: false });
-    if (insErr) {
-      await supabase.storage.from(STORAGE_BUCKET).remove([path]);
-      toast.error(`Không lưu được ảnh: ${insErr.message}`);
+      onUploaded();
+    } catch (err: any) {
+      toast.error(`Lỗi: ${err.message || "Vui lòng thử lại"}`);
       setBusy(false);
-      return;
     }
-
-    toast.success("Cảm ơn bạn đã đóng góp ảnh!");
-    setBusy(false);
-    onUploaded();
   }
 
   return (

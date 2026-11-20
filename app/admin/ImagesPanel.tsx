@@ -42,6 +42,64 @@ const INITIAL_ADMIN_PHOTOS = [
   },
 ];
 
+// Helper nén ảnh thông minh phía Client trước khi gửi lên Cloud để tránh lỗi 413 Payload Too Large
+async function compressImage(file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<File> {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const outputType = file.type === "image/png" ? "image/webp" : (file.type || "image/jpeg");
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+            } else {
+              const newName = file.name.replace(/\.[^/.]+$/, "") + (outputType === "image/webp" ? ".webp" : ".jpg");
+              const compressedFile = new File([blob], newName, { type: outputType });
+              resolve(compressedFile);
+            }
+          },
+          outputType,
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ImagesPanel() {
   const toast = useToast();
   const [items, setItems] = useState<any[]>(INITIAL_ADMIN_PHOTOS);
@@ -61,6 +119,7 @@ export default function ImagesPanel() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploadingToSupabase, setUploadingToSupabase] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -183,43 +242,76 @@ export default function ImagesPanel() {
       }
 
       setUploadingToSupabase(true);
+      setUploadProgressText("Chuẩn bị xử lý ảnh...");
       try {
-        const formData = new FormData();
-        selectedFiles.forEach((f) => formData.append("files", f));
-        formData.append("topic", finalTopic);
-        formData.append("uploader", "Ban liên lạc (Admin)");
-        formData.append("uploaderClass", "TC10");
-        if (photoTitle.trim()) {
-          formData.append("title", photoTitle.trim());
+        const addedItems: any[] = [];
+        const total = selectedFiles.length;
+
+        for (let i = 0; i < total; i++) {
+          const file = selectedFiles[i];
+          setUploadProgressText(`Đang nén & tối ưu ảnh ${i + 1}/${total}...`);
+          const compressed = await compressImage(file);
+
+          setUploadProgressText(`Đang tải ảnh ${i + 1}/${total} lên Cloud (${Math.round(((i + 1) / total) * 100)}%)...`);
+
+          const formData = new FormData();
+          formData.append("files", compressed);
+          formData.append("topic", finalTopic);
+          formData.append("uploader", "Ban liên lạc (Admin)");
+          formData.append("uploaderClass", "TC10");
+          if (photoTitle.trim()) {
+            formData.append("title", total === 1 ? photoTitle.trim() : `${photoTitle.trim()} (${i + 1})`);
+          }
+
+          const res = await fetch("/api/gallery", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            if (res.status === 413 || errText.includes("PAYLOAD_TOO_LARGE") || errText.includes("Request Entity Too Large")) {
+              throw new Error(`Ảnh "${file.name}" vượt quá dung lượng cho phép (> 4.5MB).`);
+            }
+            throw new Error(`Lỗi máy chủ (${res.status}): ${errText.slice(0, 80) || res.statusText}`);
+          }
+
+          let result: any;
+          try {
+            result = await res.json();
+          } catch {
+            throw new Error(`Phản hồi từ máy chủ không hợp lệ khi tải ảnh "${file.name}"`);
+          }
+
+          if (!result.success) {
+            throw new Error(result.error || `Không thể lưu ảnh "${file.name}" lên Cloud`);
+          }
+
+          if (result.addedPhotos && Array.isArray(result.addedPhotos)) {
+            const converted = result.addedPhotos.map((p: any) => ({
+              id: p.id,
+              image_url: p.imgSrc,
+              user_id: p.uploader,
+              is_pinned: !!p.isPinned,
+              created_at: new Date(p.createdAt || Date.now()).toISOString(),
+              title: p.title,
+              topic: p.topic,
+              category: p.category,
+              source: "supabase",
+            }));
+            addedItems.push(...converted);
+          }
         }
 
-        const res = await fetch("/api/gallery", {
-          method: "POST",
-          body: formData,
-        });
-
-        const result = await res.json();
-        if (!res.ok || !result.success) {
-          throw new Error(result.error || "Không thể lưu ảnh lên Cloud");
+        if (addedItems.length === 0) {
+          throw new Error("Không có ảnh nào được tải lên thành công.");
         }
-
-        const addedItems = (result.addedPhotos || []).map((p: any) => ({
-          id: p.id,
-          image_url: p.imgSrc,
-          user_id: p.uploader,
-          is_pinned: !!p.isPinned,
-          created_at: new Date(p.createdAt || Date.now()).toISOString(),
-          title: p.title,
-          topic: p.topic,
-          category: p.category,
-          source: "supabase",
-        }));
 
         // Đồng bộ vào memories gallery localStorage để các tab mở sẵn cũng thấy ngay
         try {
           const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
           const list = stored ? JSON.parse(stored) : [];
-          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify([...(result.addedPhotos || []), ...list]));
+          localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify([...addedItems, ...list]));
           window.dispatchEvent(new Event("tcdn4_memories_updated"));
         } catch {}
 
@@ -230,11 +322,12 @@ export default function ImagesPanel() {
         setIsCustomTopic(false);
         setCustomTopicName("");
         setIsUploading(false);
-        toast.success(`Đã upload ${addedItems.length} ảnh vào bộ "${finalTopic}" lên Cloud thành công!`);
+        toast.success(`Đã upload thành công ${addedItems.length} ảnh vào bộ "${finalTopic}"!`);
       } catch (err: any) {
         toast.error(`Lỗi khi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
       } finally {
         setUploadingToSupabase(false);
+        setUploadProgressText("");
       }
     } else {
       // Mode URL
@@ -533,7 +626,7 @@ export default function ImagesPanel() {
               {uploadingToSupabase ? (
                 <>
                   <Loader2 size={14} className="animate-spin text-white" />
-                  <span>Đang tải lên Supabase...</span>
+                  <span>{uploadProgressText || "Đang tải lên Supabase..."}</span>
                 </>
               ) : (
                 <>
