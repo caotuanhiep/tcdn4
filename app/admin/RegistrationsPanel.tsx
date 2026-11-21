@@ -44,6 +44,18 @@ export default function RegistrationsPanel() {
         setList(JSON.parse(stored));
       }
     } catch {}
+
+    fetch("/api/registrations", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.registrations)) {
+          setList(data.registrations);
+          try {
+            localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
+          } catch {}
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const saveList = (data: Registration[]) => {
@@ -56,22 +68,38 @@ export default function RegistrationsPanel() {
     } catch {}
   };
 
-  const toggleStatus = (id: string) => {
+  const toggleStatus = async (id: string) => {
+    const target = list.find((x) => x.id === id);
+    if (!target) return;
+    const nextStatus = target.status === "confirmed" ? "pending" : "confirmed";
     const updated = list.map((item) => {
       if (item.id === id) {
-        const nextStatus = item.status === "confirmed" ? "pending" : "confirmed";
         return { ...item, status: nextStatus as "confirmed" | "pending" };
       }
       return item;
     });
     saveList(updated);
+
+    try {
+      await fetch("/api/registrations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: nextStatus }),
+      });
+    } catch {}
+
     toast.success("Đã cập nhật trạng thái thanh toán!");
   };
 
-  const removeReg = (id: string) => {
+  const removeReg = async (id: string) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa lượt đăng ký này?")) return;
     const updated = list.filter((item) => item.id !== id);
     saveList(updated);
+
+    try {
+      await fetch(`/api/registrations?id=${id}`, { method: "DELETE" });
+    } catch {}
+
     toast.success("Đã xóa lượt đăng ký!");
   };
 

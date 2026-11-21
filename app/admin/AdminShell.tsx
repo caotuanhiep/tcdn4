@@ -18,7 +18,7 @@ const TABS = [
   { id: "registrations" as Tab, label: "Đăng ký 15 Năm & Áo", icon: CalendarCheck },
   { id: "zalobot" as Tab, label: "Đấu nối Bot Zalo", icon: Bot },
   { id: "payment" as Tab, label: "Cấu hình Ngân hàng & QR", icon: CreditCard },
-  { id: "committee" as Tab, label: "Quản lý Ban Liên Lạc", icon: HeartHandshake },
+  { id: "committee" as Tab, label: "Ban Liên Lạc", icon: HeartHandshake },
   { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
   { id: "images" as Tab, label: "Quản lý hình ảnh", icon: ImageIcon },
 ];
@@ -38,14 +38,22 @@ export default function AdminShell() {
     });
   }, [tab]);
 
+  const isDevAdmin =
+    process.env.NODE_ENV === "development" &&
+    typeof window !== "undefined" &&
+    (localStorage.getItem("tcdn4_dev_mode") === "admin" ||
+      document.cookie.includes("tcdn4_dev_mode=admin") ||
+      new URLSearchParams(window.location.search).get("dev_admin") === "1");
+
   // Client-side guard
   useEffect(() => {
+    if (isDevAdmin) return;
     if (!loading && (!user || (profile && !isAdmin) || (!profile && user))) {
       router.replace("/");
     }
-  }, [loading, user, profile, isAdmin, router]);
+  }, [loading, user, profile, isAdmin, router, isDevAdmin]);
 
-  if (loading || !isAdmin) {
+  if (!isDevAdmin && (loading || !isAdmin)) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-ueh">
         <Loader2 className="h-8 w-8 animate-spin" />

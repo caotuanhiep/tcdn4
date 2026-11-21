@@ -31,6 +31,18 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtected = PROTECTED.some((p) => path === p || path.startsWith(p + "/"));
 
+  // Cho phép chế độ dev admin kiểm thử cục bộ mà không bị chặn xác thực Google OAuth
+  if (
+    process.env.NODE_ENV === "development" &&
+    (request.nextUrl.searchParams.get("dev_admin") === "1" ||
+      request.cookies.get("tcdn4_dev_mode")?.value === "admin")
+  ) {
+    if (request.nextUrl.searchParams.get("dev_admin") === "1") {
+      response.cookies.set("tcdn4_dev_mode", "admin", { path: "/" });
+    }
+    return response;
+  }
+
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/";

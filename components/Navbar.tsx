@@ -120,8 +120,8 @@ export default function Navbar() {
       <nav
         className={`sticky top-0 z-50 transition-all duration-200 ${
           scrolled
-            ? "border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs"
-            : "border-b border-slate-100 bg-white/85 backdrop-blur-md"
+            ? "border-b border-orange-200/80 bg-[#FFF8F2]/95 backdrop-blur-md shadow-xs"
+            : "border-b border-orange-100/70 bg-[#FFF7F0]/90 backdrop-blur-md"
         }`}
       >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
@@ -294,7 +294,7 @@ export default function Navbar() {
 
         {/* Mobile Dropdown Menu */}
         {mobileOpen && (
-          <div className="border-t border-slate-100 bg-white px-4 py-4 shadow-xl md:hidden">
+          <div className="border-t border-orange-100 bg-[#FFF9F4] px-4 py-4 shadow-xl md:hidden">
             <div className="flex flex-col gap-1.5">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;

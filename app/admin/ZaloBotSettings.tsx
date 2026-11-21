@@ -30,7 +30,11 @@ import {
   UserCheck,
   Zap,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Smartphone,
+  ExternalLink,
+  Share2,
+  CheckCheck
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
@@ -138,7 +142,7 @@ export default function ZaloBotSettings() {
   const toast = useToast();
   
   // Navigation Tabs (Theo chuẩn SMLIFE Kit)
-  const [activeTab, setActiveTab] = useState<"broadcast" | "auto" | "birthday" | "logs" | "connection">("broadcast");
+  const [activeTab, setActiveTab] = useState<"broadcast" | "auto" | "birthday" | "logs" | "connection" | "preview">("broadcast");
 
   // Connection & Keys
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -187,6 +191,43 @@ export default function ZaloBotSettings() {
 
   // Logs
   const [logs, setLogs] = useState<SendLog[]>(INITIAL_LOGS);
+
+  // Preview Tin Nhắn Zalo
+  const [previewScenario, setPreviewScenario] = useState<"registration" | "sepay" | "checkin" | "birthday" | "broadcast" | "custom">("registration");
+  const [previewCustomText, setPreviewCustomText] = useState("");
+  const [previewName, setPreviewName] = useState("Nguyễn Văn Tuấn");
+  const [previewClass, setPreviewClass] = useState("TC10");
+  const [previewAmount, setPreviewAmount] = useState("500.000");
+  const [previewSize, setPreviewSize] = useState("L (Nam)");
+  const [previewJob, setPreviewJob] = useState("Trưởng phòng Tài chính");
+  const [previewLocation, setPreviewLocation] = useState("TP. Hồ Chí Minh");
+  const [previewGuests, setPreviewGuests] = useState(0);
+  const [copiedPreview, setCopiedPreview] = useState(false);
+
+  const previewMessage = useMemo(() => {
+    if (previewScenario === "custom") {
+      return previewCustomText || "Nhập nội dung tin nhắn bất kỳ tại khung bên trái để xem trước hiển thị thực tế trên Zalo...";
+    }
+    if (previewScenario === "registration") {
+      const guestsText = previewGuests > 0 ? ` (dắt theo +${previewGuests} người nhà)` : "";
+      return `🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n👤 ${previewName} (${previewClass})${guestsText} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size ${previewSize}!\n🍻 Đã có 35 anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`;
+    }
+    if (previewScenario === "sepay") {
+      return `🔔 [XÁC NHẬN THANH TOÁN TỰ ĐỘNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n💰 Số tiền: +${previewAmount} VNĐ\n🏦 Ngân hàng: MB Bank (Cao Tuấn Hiệp)\n📝 Nội dung: TCDN4 ${previewName} ${previewClass}\n⏰ Thời gian: ${new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${new Date().toLocaleDateString("vi-VN")}\n🔢 Mã GD: SEPAY_982412\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: Khớp lệnh thành công cho ${previewName} (${previewClass})\n👕 Size áo đăng ký: ${previewSize}\n🎉 Cảm ơn bạn đã đồng hành cùng Hội ngộ 15 năm TCDN4!\n👉 Danh sách xác nhận: https://tcdn4.top/#event`;
+    }
+    if (previewScenario === "checkin") {
+      const jobInfo = previewJob ? ` đang làm ${previewJob}` : "";
+      const locInfo = previewLocation ? ` tại ${previewLocation}` : "";
+      return `🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên ${previewName} (${previewClass})${jobInfo}${locInfo} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory`;
+    }
+    if (previewScenario === "birthday") {
+      return `🎂 ALO ALO CẢ NHÀ ƠI!\nHôm nay là sinh nhật của bạn ${previewName} (${previewClass})! 🎉\nThay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng phong độ, tiền vào như nước Sông Sài Gòn, sự nghiệp thăng hoa và mãi giữ tinh thần trẻ khỏe thời sinh viên nhé! 🍻\n👉 Gửi lời chúc tới ${previewName}: https://tcdn4.top`;
+    }
+    if (previewScenario === "broadcast") {
+      return `📢 THÔNG BÁO TỪ BAN LIÊN LẠC TCDN4 - K33 UEH\n━━━━━━━━━━━━━━━━━━━━\nKính gửi anh chị em đồng môn TCDN4!\nChỉ còn ít ngày nữa là đến sự kiện Đại Hội Ngộ 15 Năm Ngày Ra Trường tại Cơ sở B (279 Nguyễn Tri Phương, Q.10).\n⏰ Thời gian: 08:30 Thứ 7, ngày 12/12/2026.\n👕 Anh chị em vào chốt size áo thun Polo kỷ niệm trước 30/11 để Ban tổ chức hoàn tất đặt may kịp tiến độ nhé!\n👉 Chi tiết và xác nhận tham dự: https://tcdn4.top/#event`;
+    }
+    return "";
+  }, [previewScenario, previewCustomText, previewName, previewClass, previewAmount, previewSize, previewJob, previewLocation, previewGuests]);
 
   // Load configuration
   useEffect(() => {
@@ -489,6 +530,7 @@ export default function ZaloBotSettings() {
             { id: "broadcast", label: "Đăng tin", count: broadcasts.length, icon: Send },
             { id: "auto", label: "Điểm danh & 15 Năm", count: 2, icon: Bell },
             { id: "birthday", label: "Sinh nhật", count: birthdayMembers.length, icon: Cake },
+            { id: "preview", label: "Xem trước tin nhắn", count: null, icon: MessageSquare },
             { id: "logs", label: "Nhật ký", count: logs.length, icon: FileText },
             { id: "connection", label: "Kết nối & Bot", count: null, icon: LinkIcon },
           ].map((tab) => {
@@ -1440,6 +1482,403 @@ export default function ZaloBotSettings() {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 6: XEM TRƯỚC TIN NHẮN ZALO (PREVIEW MOCKUP)
+          ========================================================================= */}
+      {activeTab === "preview" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* CỘT TRÁI (6 Cols): Bộ điều khiển & Kịch bản tin nhắn */}
+          <div className="lg:col-span-6 space-y-4">
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-5">
+              <div className="border-b border-slate-100 pb-3">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-ueh border border-blue-100 mb-1">
+                  <Smartphone size={12} className="text-[#0068FF]" /> Trình mô phỏng Zalo
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  Xem Trước Tin Nhắn Zalo Bot
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Kiểm tra giao diện tin nhắn hiển thị thực tế trên điện thoại của các thành viên trước khi gửi tự động vào nhóm.
+                </p>
+              </div>
+
+              {/* Bộ chọn kịch bản */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Chọn kịch bản thông báo:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: "registration", label: "Đăng ký 15 năm", icon: Sparkles, color: "text-amber-500" },
+                    { id: "sepay", label: "Xác nhận SePay", icon: CreditCard, color: "text-emerald-500" },
+                    { id: "checkin", label: "Điểm danh mới", icon: UserCheck, color: "text-blue-500" },
+                    { id: "birthday", label: "Chúc sinh nhật", icon: Cake, color: "text-pink-500" },
+                    { id: "broadcast", label: "Thông báo chung", icon: Send, color: "text-indigo-500" },
+                    { id: "custom", label: "Tùy chỉnh tự do", icon: Edit3, color: "text-slate-600" },
+                  ].map((s) => {
+                    const Icon = s.icon;
+                    const isSelected = previewScenario === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setPreviewScenario(s.id as any)}
+                        className={`flex items-center gap-2 rounded-2xl p-2.5 text-xs font-bold transition-all border text-left ${
+                          isSelected
+                            ? "bg-ueh text-white border-ueh shadow-xs"
+                            : "bg-slate-50 border-slate-200/80 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <Icon size={14} className={isSelected ? "text-ueh-gold" : s.color} />
+                        <span className="truncate">{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Form tùy biến tham số theo kịch bản */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="text-xs font-bold text-slate-700">Tham số xem trước:</div>
+
+                {previewScenario === "custom" ? (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                      Nội dung tin nhắn tự do:
+                    </label>
+                    <textarea
+                      rows={6}
+                      value={previewCustomText}
+                      onChange={(e) => setPreviewCustomText(e.target.value)}
+                      placeholder="Nhập nội dung tin nhắn bất kỳ tại đây..."
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                        Họ & Tên thành viên:
+                      </label>
+                      <input
+                        type="text"
+                        value={previewName}
+                        onChange={(e) => setPreviewName(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                        Lớp chuyên ngành:
+                      </label>
+                      <select
+                        value={previewClass}
+                        onChange={(e) => setPreviewClass(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none font-semibold"
+                      >
+                        <option value="TC10">TC10</option>
+                        <option value="TC11">TC11</option>
+                        <option value="TC12">TC12</option>
+                        <option value="TC13">TC13</option>
+                        <option value="K33">Toàn khóa K33</option>
+                      </select>
+                    </div>
+
+                    {(previewScenario === "registration" || previewScenario === "sepay") && (
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                          Size áo Polo kỷ niệm:
+                        </label>
+                        <select
+                          value={previewSize}
+                          onChange={(e) => setPreviewSize(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none font-semibold"
+                        >
+                          <option value="S (Nữ)">S (Nữ)</option>
+                          <option value="M (Nữ)">M (Nữ)</option>
+                          <option value="L (Nữ)">L (Nữ)</option>
+                          <option value="M (Nam)">M (Nam)</option>
+                          <option value="L (Nam)">L (Nam)</option>
+                          <option value="XL (Nam)">XL (Nam)</option>
+                          <option value="XXL (Nam)">XXL (Nam)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {previewScenario === "sepay" && (
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                          Số tiền chuyển khoản (VNĐ):
+                        </label>
+                        <input
+                          type="text"
+                          value={previewAmount}
+                          onChange={(e) => setPreviewAmount(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none font-mono font-bold text-emerald-700"
+                        />
+                      </div>
+                    )}
+
+                    {previewScenario === "registration" && (
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                          Người nhà đi cùng:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="5"
+                          value={previewGuests}
+                          onChange={(e) => setPreviewGuests(parseInt(e.target.value) || 0)}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {previewScenario === "checkin" && (
+                      <>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                            Chức danh / Nghề nghiệp:
+                          </label>
+                          <input
+                            type="text"
+                            value={previewJob}
+                            onChange={(e) => setPreviewJob(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                            Nơi sinh sống:
+                          </label>
+                          <input
+                            type="text"
+                            value={previewLocation}
+                            onChange={(e) => setPreviewLocation(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-ueh focus:outline-none"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Các nút hành động nhanh */}
+              <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(previewMessage);
+                    setCopiedPreview(true);
+                    toast.success("Đã sao chép nội dung tin nhắn Zalo!");
+                    setTimeout(() => setCopiedPreview(false), 2000);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs"
+                >
+                  {copiedPreview ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                  <span>{copiedPreview ? "Đã chép" : "Sao chép tin nhắn"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const shareUrl = `https://zalo.me/share?url=${encodeURIComponent(zaloGroup)}&title=${encodeURIComponent(previewMessage)}`;
+                    window.open(shareUrl, "_blank");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0068FF] px-4 py-2 text-xs font-bold text-white hover:bg-[#0052cc] transition-all shadow-md shadow-blue-500/20"
+                >
+                  <Share2 size={14} />
+                  <span>Mở gửi vào nhóm Zalo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/zalo-bot", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          type: previewScenario === "checkin" ? "checkin" : previewScenario === "birthday" ? "birthday" : "broadcast",
+                          fullName: previewName,
+                          className: previewClass,
+                          shirtSize: previewSize,
+                          title: "Tin mẫu Zalo",
+                          message: previewMessage,
+                        }),
+                      });
+                      const d = await res.json();
+                      if (d.success) {
+                        toast.success("Đã kích hoạt gửi thử qua Zalo Bot Webhook!");
+                      }
+                    } catch {
+                      toast.error("Lỗi khi gửi test!");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all ml-auto"
+                >
+                  <Zap size={14} className="text-amber-500" />
+                  <span>Gửi test qua API</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          {/* CỘT PHẢI (6 Cols): Mô phỏng màn hình Zalo trên Smartphone */}
+          <div className="lg:col-span-6 flex justify-center">
+            
+            <div className="w-full max-w-[380px] rounded-[42px] border-[10px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden ring-1 ring-slate-800">
+              
+              {/* Dynamic Island / Tai thỏ */}
+              <div className="bg-slate-900 pt-2 pb-1 px-6 flex items-center justify-between text-white text-[10px] font-semibold select-none">
+                <span>09:41</span>
+                <div className="h-4 w-20 bg-black rounded-full mx-auto" />
+                <div className="flex items-center gap-1">
+                  <span>5G</span>
+                  <div className="h-2 w-4 border border-white rounded-xs p-0.5 flex items-center">
+                    <div className="h-full w-full bg-white rounded-2xs" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Zalo App Bar */}
+              <div className="bg-[#0068FF] px-3.5 py-2.5 text-white flex items-center justify-between shadow-xs select-none">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-lg font-bold cursor-pointer">‹</span>
+                  <div className="relative">
+                    <div className="h-8 w-8 rounded-full bg-white text-[#0068FF] font-black text-xs flex items-center justify-center border-2 border-white/30 shadow-xs">
+                      UEH
+                    </div>
+                    <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 border border-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-black truncate leading-tight">
+                      TCDN4 - K33 UEH (15 Năm)
+                    </h4>
+                    <p className="text-[10px] text-blue-100 truncate flex items-center gap-1">
+                      <span>98 thành viên</span> • <span>Zalo Cloud</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-white/90">
+                  <span className="cursor-pointer text-xs">📞</span>
+                  <span className="cursor-pointer text-xs">📹</span>
+                  <span className="cursor-pointer text-xs font-bold">⋮</span>
+                </div>
+              </div>
+
+              {/* Zalo Chat Body */}
+              <div className="bg-[#E4ECF4] p-3.5 min-h-[460px] max-h-[520px] overflow-y-auto space-y-3 font-sans">
+                
+                {/* Date separator */}
+                <div className="flex justify-center my-1 select-none">
+                  <span className="rounded-full bg-black/15 backdrop-blur-xs px-3 py-0.5 text-[10px] font-medium text-slate-700">
+                    Hôm nay 09:41
+                  </span>
+                </div>
+
+                {/* Tin nhắn nhận từ bạn bè trước đó */}
+                <div className="flex items-start gap-2">
+                  <div className="h-7 w-7 rounded-full bg-slate-300 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                    HT
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-semibold text-slate-600 ml-1">Huy Trần</span>
+                    <div className="rounded-2xl rounded-tl-xs bg-white px-3 py-2 text-xs text-slate-800 shadow-xs max-w-[240px]">
+                      Ban liên lạc ơi cho mình hỏi đăng ký áo polo tới hạn nào vậy?
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOT MESSAGE BUBBLE */}
+                <div className="flex items-start gap-2 pt-1">
+                  {/* Bot Avatar */}
+                  <div className="h-7 w-7 rounded-full bg-ueh text-white font-black text-[9px] flex items-center justify-center shrink-0 ring-2 ring-blue-300 shadow-xs">
+                    BOT
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    {/* Bot Title & Verified Badge */}
+                    <div className="flex items-center gap-1.5 ml-1 mb-1">
+                      <span className="text-[11px] font-black text-slate-800">
+                        Ban Liên Lạc TCDN4
+                      </span>
+                      <span className="rounded-sm bg-[#0068FF] text-white text-[8px] font-black px-1 py-0.2 tracking-wider">
+                        BOT
+                      </span>
+                      <CheckCircle2 size={11} className="text-[#0068FF]" />
+                    </div>
+
+                    {/* Chat Bubble */}
+                    <div className="rounded-2xl rounded-tl-xs bg-white p-3.5 shadow-sm border border-slate-200/60 space-y-2.5">
+                      
+                      {/* Formatted Message Content */}
+                      <p className="text-[12px] leading-relaxed text-slate-800 whitespace-pre-wrap font-sans">
+                        {previewMessage}
+                      </p>
+
+                      {/* Embedded Rich Card Preview (Giống Zalo Card) */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2 text-left space-y-1">
+                        <div className="h-24 w-full rounded-lg bg-gradient-to-br from-[#003B5C] via-[#005580] to-[#E87722] flex flex-col items-center justify-center text-white p-3 text-center">
+                          <span className="text-[11px] font-black tracking-wide uppercase drop-shadow-xs">
+                            Hội Ngộ 15 Năm Ra Trường
+                          </span>
+                          <span className="text-[9px] text-amber-200 font-semibold mt-0.5">
+                            TCDN4 K33 - Đại Học Kinh Tế TP.HCM
+                          </span>
+                        </div>
+                        <div className="px-1 pt-1">
+                          <h5 className="text-[11px] font-bold text-slate-900 leading-tight">
+                            Cổng Thông Tin & Danh Bạ Cựu Sinh Viên K33
+                          </h5>
+                          <p className="text-[9px] text-slate-500 line-clamp-1">
+                            tcdn4.top • Đăng ký họp mặt, chốt size áo & điểm danh đồng môn
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Message Footer: Timestamp & Read Status */}
+                      <div className="flex items-center justify-end gap-1 pt-0.5 text-[10px] text-slate-400 select-none">
+                        <span>09:41</span>
+                        <CheckCheck size={12} className="text-[#0068FF]" />
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Zalo Input Bar Mockup */}
+              <div className="bg-white border-t border-slate-200 p-2 flex items-center gap-2 select-none">
+                <span className="text-slate-400 text-sm">😊</span>
+                <div className="flex-1 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
+                  Tin nhắn...
+                </div>
+                <span className="text-slate-400 text-sm">🎙️</span>
+                <span className="text-slate-400 text-sm">🖼️</span>
+                <div className="h-7 w-7 rounded-full bg-[#0068FF] text-white flex items-center justify-center text-xs font-bold">
+                  ➤
+                </div>
+              </div>
+
+              {/* Bottom Home Indicator */}
+              <div className="bg-white pb-2 pt-1 flex justify-center">
+                <div className="h-1 w-28 bg-slate-300 rounded-full" />
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
       )}
 

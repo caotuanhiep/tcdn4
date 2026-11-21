@@ -37,6 +37,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+      if (new URLSearchParams(window.location.search).get("dev_admin") === "1") {
+        localStorage.setItem("tcdn4_dev_mode", "admin");
+        document.cookie = "tcdn4_dev_mode=admin; path=/";
+      }
+      const devMode = localStorage.getItem("tcdn4_dev_mode");
+      if (devMode === "admin" || document.cookie.includes("tcdn4_dev_mode=admin")) {
+        document.cookie = "tcdn4_dev_mode=admin; path=/";
+        setUser({
+          id: "dev-admin-id",
+          email: "caotuanhiep@gmail.com",
+          app_metadata: {},
+          user_metadata: { full_name: "Cao Tuấn Hiệp" },
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+        } as any);
+        setProfile({
+          id: "dev-admin-id",
+          full_name: "Cao Tuấn Hiệp",
+          class_name: "TC10",
+          job_title: "Trưởng Ban Liên Lạc",
+          company: "UEH Alumni",
+          location_region: "hcm",
+          avatar_url: "/images/avatar-boy.png",
+          birthday: "1989-11-20",
+          role: "admin",
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
     const supabase = getSupabase();
     let active = true;
 
@@ -137,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("tcdn4_dev_mode");
+      }
       await getSupabase().auth.signOut();
     } catch {
       // ignore

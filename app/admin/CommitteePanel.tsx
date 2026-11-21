@@ -86,10 +86,10 @@ export default function CommitteePanel() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-ueh flex items-center gap-2">
-            <Users className="text-ueh-orange" /> Quản lý Ban Liên Lạc
+            <Users className="text-ueh-orange" /> Ban Liên Lạc
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Thiết lập danh sách ban liên lạc độc lập, vai trò, số điện thoại & ảnh đại diện hiển thị ngoài trang chủ.
+            Danh sách ban liên lạc đại diện các lớp TC10, TC11, TC12 hiển thị ngoài trang chủ website.
           </p>
         </div>
 
@@ -101,56 +101,64 @@ export default function CommitteePanel() {
         </button>
       </div>
 
-      {/* Grid danh sách thành viên */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Grid danh sách thành viên: 1 hàng 4 thẻ trên desktop, 2 thẻ trên mobile */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {members.map((m) => (
           <div
             key={m.id}
-            className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between"
+            className="group rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div>
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`h-12 w-12 shrink-0 rounded-xl ${m.avatarColor || "bg-ueh"} text-white flex items-center justify-center font-bold text-base overflow-hidden`}>
-                    {m.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.avatarUrl} alt={m.name} className="h-full w-full object-cover" />
-                    ) : (
-                      m.name.charAt(m.name.lastIndexOf(" ") + 1) || "B"
-                    )}
+              {/* Ảnh đại diện làm to rõ, bo viền đẹp */}
+              <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-slate-100 border border-slate-200 shadow-2xs">
+                {m.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.avatarUrl}
+                    alt={m.name}
+                    className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className={`h-full w-full ${m.avatarColor || "bg-ueh"} text-white flex items-center justify-center font-black text-3xl`}>
+                    {m.name.charAt(m.name.lastIndexOf(" ") + 1) || "B"}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-black text-slate-900 line-clamp-1">{m.name}</h4>
-                    <span className="text-[11px] font-bold text-ueh-orange">{m.role}</span>
-                  </div>
-                </div>
-                <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-ueh border border-blue-100">
+                )}
+                <span className="absolute top-2 right-2 rounded-lg bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-black text-ueh shadow-xs border border-white/80">
                   {m.className}
                 </span>
               </div>
 
-              <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl mb-3">
-                <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                  <Phone size={13} className="text-ueh" /> {m.phone}
+              <div>
+                <h4 className="text-xs sm:text-sm font-black text-slate-900 line-clamp-1">{m.name}</h4>
+                <p className="text-[11px] font-bold text-ueh-orange line-clamp-1 mt-0.5">{m.role}</p>
+              </div>
+
+              <div className="mt-2.5 space-y-1 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl">
+                <div className="flex items-center gap-1.5 text-slate-700 font-semibold truncate">
+                  <Phone size={11} className="text-ueh shrink-0" />
+                  <span className="truncate">{m.phone || "Đang cập nhật"}</span>
                 </div>
-                <div className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
-                  {m.duty}
-                </div>
+                {m.duty && (
+                  <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
+                    {m.duty}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between gap-1.5 pt-2.5 mt-2.5 border-t border-slate-100">
               <button
                 onClick={() => handleOpenEdit(m)}
-                className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 transition-colors"
               >
-                <Edit3 size={13} /> Sửa
+                <Edit3 size={11} /> Sửa
               </button>
               <button
                 onClick={() => handleDelete(m.id)}
-                className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                className="inline-flex items-center justify-center rounded-lg bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors"
+                title="Xóa thành viên"
               >
-                <Trash2 size={13} /> Xóa
+                <Trash2 size={13} />
               </button>
             </div>
           </div>

@@ -30,18 +30,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
 
-const CHIBI_AVATARS = [
-  { id: "boy", src: "/images/avatar-boy.png", label: "Bé Trai UEH" },
-  { id: "girl", src: "/images/avatar-girl.png", label: "Bé Gái UEH" },
-];
-
-const PRESET_AVATARS = [
-  "/images/avatar-boy.png",
-  "/images/avatar-girl.png",
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+const DEFAULT_AVATARS = [
+  { id: "boy", src: "/images/avatar-boy.png", label: "Mặc định 1" },
+  { id: "girl", src: "/images/avatar-girl.png", label: "Mặc định 2" },
 ];
 
 const OTHER_PROVINCES_PRESETS = [
@@ -370,10 +361,10 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
 
-              {/* Avatar Section & Upload Button */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/60">
-                <div className="relative shrink-0">
-                  <div className="h-18 w-18 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl">
+              {/* Avatar Section: Chạm vào avatar để đổi ảnh ngay, gợi ý 2 option mặc định gọn gàng */}
+              <div className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/70">
+                <label className="relative shrink-0 cursor-pointer group" title="Chạm vào để tải ảnh từ máy / điện thoại">
+                  <div className="h-20 w-20 sm:h-22 sm:w-22 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl relative">
                     {uploadingAvatar ? (
                       <Loader2 size={24} className="animate-spin text-white" />
                     ) : avatarUrl ? (
@@ -382,59 +373,59 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                     ) : (
                       fullName.trim().charAt(0) || "A"
                     )}
+
+                    {/* Lớp phủ đổi ảnh khi hover */}
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                      <Camera size={20} className="text-ueh-gold mb-0.5" />
+                      <span className="text-[10px] font-bold">Đổi ảnh</span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-ueh px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh-light transition-colors">
-                      <Camera size={14} className="text-ueh-gold" />
-                      <span>{uploadingAvatar ? "Đang tải ảnh..." : "Tải ảnh từ máy / điện thoại"}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleAvatarFileChange}
-                        disabled={uploadingAvatar}
-                      />
-                    </label>
+                  {/* Icon Camera góc dưới */}
+                  <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ueh text-white shadow-md border-2 border-white group-hover:scale-110 transition-transform">
+                    <Camera size={12} className="text-ueh-gold" />
+                  </span>
 
-                    {/* 2 Chibi Avatars Chọn nhanh theo yêu cầu */}
-                    <div className="flex items-center gap-1.5">
-                      {CHIBI_AVATARS.map((item) => (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarFileChange}
+                    disabled={uploadingAvatar}
+                  />
+                </label>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-800">
+                    {uploadingAvatar ? "Đang tải ảnh lên..." : "Ảnh đại diện thành viên"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 mb-2.5">
+                    Chạm trực tiếp vào ảnh để tải ảnh từ máy hoặc điện thoại.
+                  </p>
+
+                  {/* 2 Option ảnh mặc định gợi ý duy nhất */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">
+                      Ảnh mặc định:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {DEFAULT_AVATARS.map((item) => (
                         <button
                           key={item.id}
                           type="button"
                           onClick={() => setAvatarUrl(item.src)}
-                          className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold border transition-all ${
+                          title={`Chọn ${item.label}`}
+                          className={`h-9 w-9 overflow-hidden rounded-full border-2 transition-all hover:scale-105 ${
                             avatarUrl === item.src
-                              ? "bg-ueh text-white border-ueh shadow-xs scale-105"
-                              : "bg-white text-slate-700 border-slate-200 hover:border-ueh"
+                              ? "border-ueh ring-2 ring-blue-200 scale-105 shadow-xs"
+                              : "border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300"
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.src} alt={item.label} className="h-4 w-4 rounded-full object-cover" />
-                          <span>{item.label}</span>
+                          <img src={item.src} alt={item.label} className="h-full w-full object-cover" />
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-slate-400 mr-1">Hoặc ảnh khác:</span>
-                    {PRESET_AVATARS.map((src, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setAvatarUrl(src)}
-                        className={`h-6 w-6 overflow-hidden rounded-full ring-2 transition-transform hover:scale-110 ${
-                          avatarUrl === src ? "ring-ueh scale-110" : "ring-transparent opacity-60 hover:opacity-100"
-                        }`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt="avatar option" className="h-full w-full object-cover" />
-                      </button>
-                    ))}
                   </div>
                 </div>
               </div>

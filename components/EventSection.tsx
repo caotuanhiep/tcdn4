@@ -109,18 +109,34 @@ export default function EventSection() {
     fetchBankInfo().then((cfg) => {
       if (!cancelled) setBankInfo(cfg);
     });
+
+    // 1. Đọc từ local cache trước
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
       if (stored) {
         setRegistrations(JSON.parse(stored));
       }
     } catch {}
+
+    // 2. Tải danh sách đăng ký chuẩn từ máy chủ (đã đồng bộ với SePay và admin)
+    fetch("/api/registrations", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success && Array.isArray(data.registrations)) {
+          setRegistrations(data.registrations);
+          try {
+            localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const saveRegistrations = (newList: Registration[]) => {
+  const saveRegistrations = (newList: Registration[], addedItem?: Registration) => {
     setRegistrations(newList);
     try {
       localStorage.setItem("tcdn4_registrations", JSON.stringify(newList));
@@ -128,6 +144,14 @@ export default function EventSection() {
         window.dispatchEvent(new Event("tcdn4_registration_updated"));
       }
     } catch {}
+
+    if (addedItem) {
+      fetch("/api/registrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addedItem),
+      }).catch(() => {});
+    }
   };
 
   const cleanName = fullName ? fullName.trim().toUpperCase() : "TÊN";
@@ -160,7 +184,7 @@ export default function EventSection() {
     };
 
     const updated = [newReg, ...registrations];
-    saveRegistrations(updated);
+    saveRegistrations(updated, newReg);
 
     // Call Zalo Bot API automatically
     try {

@@ -152,9 +152,10 @@ export default function MigrationMap({
     };
   }, []);
 
+  const hasRealData = Object.values(regionCounts).some((c) => c > 0);
   const dynamicRegions = REGIONS.map((r) => ({
     ...r,
-    count: regionCounts[r.id] ?? 0,
+    count: hasRealData ? (regionCounts[r.id] ?? r.count) : r.count,
   }));
 
   const center = dynamicRegions.find((r) => r.isCenter) || dynamicRegions[0];
@@ -200,7 +201,7 @@ export default function MigrationMap({
               <Compass size={14} className="text-ueh-orange" /> Mạng lưới cựu sinh viên
             </div>
             <h2 className="text-3xl font-black text-ueh sm:text-5xl lg:text-6xl tracking-tight leading-tight">
-              Dấu Chân TCDN4 K33
+              Từ UEH ta đã đi ...
             </h2>
             <div className="mt-2.5 h-1 w-20 rounded-full bg-gradient-to-r from-ueh to-ueh-orange" />
             <p className="mt-3 max-w-xl text-xs sm:text-sm text-slate-600">

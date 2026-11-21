@@ -11,7 +11,13 @@ import {
   DollarSign, 
   RefreshCw,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Zap,
+  Copy,
+  ExternalLink,
+  ShieldCheck,
+  CheckCircle2,
+  Send
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { BANK_STORAGE_KEY, cacheBankInfo, normalizeBankConfig } from "@/lib/bank";
@@ -38,7 +44,15 @@ export default function PaymentSettingsPanel() {
   const [phoneReceive, setPhoneReceive] = useState("0903 123 456");
   const [amount, setAmount] = useState(1000000);
   const [syntaxPrefix, setSyntaxPrefix] = useState("TCDN4");
+  const [sepayApiKey, setSepayApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [testingSepay, setTestingSepay] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const webhookUrl = typeof window !== "undefined" 
+    ? `${window.location.origin}/api/sepay-webhook` 
+    : "https://tcdn4.top/api/sepay-webhook";
 
   const applyConfig = (parsed: any) => {
     if (parsed.bankCode) setBankCode(parsed.bankCode);
@@ -48,6 +62,7 @@ export default function PaymentSettingsPanel() {
     if (parsed.phoneReceive) setPhoneReceive(parsed.phoneReceive);
     if (parsed.amount) setAmount(parsed.amount);
     if (parsed.syntaxPrefix) setSyntaxPrefix(parsed.syntaxPrefix);
+    if (parsed.sepayApiKey) setSepayApiKey(parsed.sepayApiKey);
   };
 
   useEffect(() => {
@@ -99,6 +114,7 @@ export default function PaymentSettingsPanel() {
       phoneReceive: phoneReceive.trim(),
       amount: Number(amount),
       syntaxPrefix: "TCDN4",
+      sepayApiKey: sepayApiKey.trim(),
     };
 
     try {
@@ -125,6 +141,49 @@ export default function PaymentSettingsPanel() {
       toast.error("Không thể lưu cấu hình: " + (err?.message || "Lỗi máy chủ"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCopyWebhook = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2000);
+    toast.success("Đã sao chép Webhook URL SePay!");
+  };
+
+  const handleTestSepay = async () => {
+    setTestingSepay(true);
+    setTestResult(null);
+    try {
+      const testPayload = {
+        gateway: bankCode || "MB",
+        transactionDate: new Date().toLocaleString("vi-VN"),
+        accountNumber: accountNumber.trim(),
+        content: `TCDN4 TEST 15 NAM GIAO DICH THU NGHIEM`,
+        transferType: "in",
+        transferAmount: amount || 1000000,
+        referenceCode: `TEST_${Date.now()}`,
+      };
+
+      const res = await fetch("/api/sepay-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testPayload),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setTestResult(`✓ Giao dịch thử nghiệm thành công! ${data.message || "Đã nhận webhook"}`);
+        toast.success("Đã gửi thử nghiệm Webhook SePay thành công!");
+      } else {
+        setTestResult(`⚠ Phản hồi: ${data?.error || data?.message || "Thử nghiệm thất bại"}`);
+        toast.error("Thử nghiệm Webhook thất bại!");
+      }
+    } catch (err: any) {
+      setTestResult(`✗ Lỗi kết nối: ${err.message}`);
+      toast.error("Lỗi khi gọi API Webhook: " + err.message);
+    } finally {
+      setTestingSepay(false);
     }
   };
 
@@ -288,6 +347,134 @@ export default function PaymentSettingsPanel() {
               <span className="text-slate-400">Số tiền:</span>
               <span className="font-black text-emerald-700">{amount.toLocaleString("vi-VN")} VNĐ</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          CẤU HÌNH TỰ ĐỘNG XÁC THỰC THANH TOÁN QUA CỔNG SEPAY
+          ========================================================================= */}
+      <div className="rounded-3xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/40 via-white to-blue-50/30 p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-indigo-100/80 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-md">
+              <Zap size={20} className="text-amber-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  Cổng Xác Thực Thanh Toán Tự Động (SePay Webhook)
+                </h3>
+                <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold">
+                  Sẵn sàng
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tự động nhận biến động số dư ngân hàng và chuyển trạng thái "Đã thanh toán" cho cựu sinh viên.
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="https://my.sepay.vn"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition-colors shadow-2xs shrink-0"
+          >
+            <ExternalLink size={13} />
+            <span>Đăng nhập SePay.vn</span>
+          </a>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Cột trái: Cấu hình URL Webhook & API Key */}
+          <div className="lg:col-span-7 space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                URL Nhận Webhook SePay (Dán vào portal SePay):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={webhookUrl}
+                  className="w-full rounded-xl border border-indigo-200 bg-indigo-50/50 px-3.5 py-2.5 font-mono text-xs font-bold text-indigo-950 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyWebhook}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors shrink-0"
+                >
+                  {copiedWebhook ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copiedWebhook ? "Đã chép" : "Sao chép"}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Vào <strong>my.sepay.vn</strong> &rarr; <strong>Tích hợp</strong> &rarr; <strong>Webhook</strong> &rarr; Thêm Webhook và dán link trên.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                API Key SePay (Tùy chọn - nếu bật xác thực header):
+              </label>
+              <input
+                type="text"
+                value={sepayApiKey}
+                onChange={(e) => setSepayApiKey(e.target.value)}
+                placeholder="VD: sepay_live_xxxx... (để trống nếu không bật kiểm tra key)"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Test button & result */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck size={15} className="text-indigo-600" /> Kiểm tra thông luồng SePay Webhook
+                </span>
+                <button
+                  type="button"
+                  disabled={testingSepay}
+                  onClick={handleTestSepay}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                >
+                  {testingSepay ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>{testingSepay ? "Đang gửi..." : "Gửi thử nghiệm"}</span>
+                </button>
+              </div>
+
+              {testResult && (
+                <div className={`p-2.5 rounded-xl text-xs font-semibold ${
+                  testResult.startsWith("✓") 
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200" 
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}>
+                  {testResult}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Cột phải: Cơ chế hoạt động */}
+          <div className="lg:col-span-5 rounded-2xl border border-slate-200/80 bg-white p-5 text-xs text-slate-600 space-y-3">
+            <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+              <CheckCircle2 size={15} className="text-emerald-600" /> Cơ chế tự động đối soát:
+            </h4>
+            <ol className="list-decimal pl-4 space-y-2 leading-relaxed text-[11px] text-slate-600">
+              <li>
+                <strong>Cựu sinh viên chuyển khoản:</strong> Nội dung chuyển khoản theo mẫu <em>TCDN4 - TÊN - SĐT</em> hoặc chứa 4 số cuối điện thoại / họ tên.
+              </li>
+              <li>
+                <strong>SePay nhận giao dịch:</strong> SePay bắt biến động số dư ngân hàng theo thời gian thực và đẩy gói tin Webhook về máy chủ.
+              </li>
+              <li>
+                <strong>Tự động khớp lệnh:</strong> Hệ thống tìm phiếu đăng ký tương ứng, tự động đổi trạng thái sang <strong>"Đã thanh toán (confirmed)"</strong>.
+              </li>
+              <li>
+                <strong>Thông báo tức thì:</strong> Tự động gửi thông báo xác nhận thanh toán thành công vào nhóm Zalo lớp để chào mừng đồng môn!
+              </li>
+            </ol>
           </div>
         </div>
       </div>

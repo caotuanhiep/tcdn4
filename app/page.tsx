@@ -29,7 +29,7 @@ export default function HomePage() {
         onSelectRegion={setSelectedRegion}
       />
 
-      {/* 6. Dấu chân TCDN4 (Bản đồ phân bổ cựu sinh viên, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
+      {/* 6. Từ UEH ta đã đi ... (Bản đồ phân bổ cựu sinh viên, điểm vàng Cơ sở B: 279 Nguyễn Tri Phương Q.10) */}
       <MigrationMap
         selectedRegion={selectedRegion}
         onSelectRegion={setSelectedRegion}

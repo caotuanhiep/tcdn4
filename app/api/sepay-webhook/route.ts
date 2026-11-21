@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { loadRegistrations, saveRegistrations } from "@/app/api/registrations/route";
+
+function removeVietnameseTones(str: string) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +39,7 @@ export async function POST(request: Request) {
     } = data;
 
     // Chỉ xử lý giao dịch tiền vào (tiền vào tài khoản lớp)
-    if (transferType !== "in" && transferType !== "IN") {
+    if (transferType && transferType.toLowerCase() !== "in") {
       return NextResponse.json({
         success: true,
         message: "Ignored: Giao dịch không phải tiền vào",
@@ -38,56 +47,74 @@ export async function POST(request: Request) {
     }
 
     const rawContent = (content || "").toUpperCase();
+    const cleanContent = removeVietnameseTones(rawContent).replace(/[^A-Z0-9]/g, "");
     const amountNum = Number(transferAmount) || 0;
 
-    // 3. Cập nhật vào Supabase nếu có bảng registrations / profiles
     let matchedName = "Thành viên TCDN4";
     let matchedClass = "TC4";
     let isMatched = false;
+    let matchedId = "";
 
+    // 3. Khớp lệnh với danh sách đăng ký lưu trữ tập trung
     try {
-      const supabaseAdmin = getSupabaseAdmin();
+      const allRegs = await loadRegistrations();
+      if (allRegs && allRegs.length > 0) {
+        const updated = allRegs.map((reg) => {
+          if (reg.status === "confirmed") return reg;
 
-      // Tìm phiếu đăng ký tương ứng
-      const { data: regs } = await supabaseAdmin
-        .from("registrations")
-        .select("*")
-        .eq("status", "pending");
+          const regPhoneClean = (reg.phone || "").replace(/[^0-9]/g, "");
+          const regPhoneLast4 = regPhoneClean.slice(-4);
+          const regNameClean = removeVietnameseTones((reg.fullName || "").toUpperCase()).replace(/[^A-Z0-9]/g, "");
+          const regIdClean = (reg.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-      if (regs && regs.length > 0) {
-        for (const reg of regs) {
-          const regNameClean = (reg.full_name || "").toUpperCase().replace(/\s+/g, "");
-          const regPhoneLast4 = (reg.phone || "").slice(-4);
+          // Khớp nếu nội dung chuyển khoản chứa 4 số cuối điện thoại, tên không dấu, hoặc ID đăng ký
+          const phoneMatch = regPhoneLast4.length >= 4 && cleanContent.includes(regPhoneLast4);
+          const nameMatch = regNameClean.length >= 3 && cleanContent.includes(regNameClean);
+          const idMatch = regIdClean.length >= 4 && cleanContent.includes(regIdClean);
 
-          // Khớp nếu nội dung chứa 4 số cuối điện thoại hoặc tên
-          if (
-            (regPhoneLast4 && rawContent.includes(regPhoneLast4)) ||
-            (regNameClean && rawContent.includes(regNameClean)) ||
-            (reg.id && rawContent.includes(reg.id.toUpperCase()))
-          ) {
-            matchedName = reg.full_name || matchedName;
-            matchedClass = reg.class_name || matchedClass;
+          if (!isMatched && (phoneMatch || nameMatch || idMatch)) {
             isMatched = true;
+            matchedName = reg.fullName;
+            matchedClass = reg.className;
+            matchedId = reg.id;
 
-            // Cập nhật trạng thái thành confirmed
-            await supabaseAdmin
-              .from("registrations")
-              .update({
-                status: "confirmed",
-                paid_amount: amountNum,
-                payment_ref: referenceCode || gateway,
-                confirmed_at: new Date().toISOString(),
-              })
-              .eq("id", reg.id);
-            break;
+            return {
+              ...reg,
+              status: "confirmed" as const,
+              paidAmount: amountNum > 0 ? amountNum : reg.paidAmount,
+              paymentRef: referenceCode || gateway || "SEPAY_AUTO",
+              confirmedAt: new Date().toISOString(),
+              note: (reg.note ? reg.note + " | " : "") + `SePay tự động khớp: ${referenceCode || gateway}`,
+            };
           }
+          return reg;
+        });
+
+        if (isMatched) {
+          await saveRegistrations(updated);
         }
       }
-    } catch (e) {
-      console.warn("SePay webhook Supabase update note:", e);
+    } catch (err) {
+      console.warn("Lỗi khớp lệnh manifest registrations:", err);
     }
 
-    // 4. Tự động bắn thông báo xác nhận thanh toán vào Nhóm Zalo qua Zalo Bot Webhook
+    // 4. Dự phòng cập nhật table Supabase registrations (nếu đã tạo bảng)
+    if (isMatched) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase
+          .from("registrations")
+          .update({
+            status: "confirmed",
+            paid_amount: amountNum,
+            payment_ref: referenceCode || gateway,
+            confirmed_at: new Date().toISOString(),
+          })
+          .eq("id", matchedId);
+      } catch {}
+    }
+
+    // 5. Tự động bắn thông báo xác nhận thanh toán vào Nhóm Zalo qua Zalo Bot Webhook
     const zaloBotWebhook = process.env.ZALO_BOT_WEBHOOK_URL;
     const zaloNotification = `🔔 [XÁC NHẬN THANH TOÁN TỰ ĐỘNG - SEPAY]
 ━━━━━━━━━━━━━━━━━━━━
@@ -108,26 +135,27 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             message: zaloNotification,
             type: "sepay_payment_confirmed",
-            data,
+            matched: isMatched,
+            name: matchedName,
+            className: matchedClass,
+            amount: amountNum,
           }),
         });
       } catch (err) {
-        console.error("Lỗi gửi SePay alert tới Zalo Bot Webhook:", err);
+        console.warn("Không gửi được Zalo Bot notification:", err);
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: "SePay webhook processed successfully",
-      isMatched,
-      matchedName,
-      amount: amountNum,
+      matched: isMatched,
+      matchedMember: isMatched ? `${matchedName} (${matchedClass})` : null,
+      message: isMatched
+        ? `Đã khớp thành công cho ${matchedName} (${matchedClass})`
+        : "Đã nhận webhook giao dịch nhưng chưa khớp được với phiếu đăng ký nào",
     });
-  } catch (error: any) {
-    console.error("SePay Webhook Error:", error);
-    return NextResponse.json(
-      { success: false, error: error?.message || "Internal Server Error" },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    console.error("SePay webhook error:", err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
