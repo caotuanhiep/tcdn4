@@ -783,33 +783,42 @@ export default function ImagesPanel() {
   const togglePin = async (it: any) => {
     const nextPinned = !it.is_pinned;
     const now = Date.now();
-    const updated = items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned, isPinned: nextPinned, pinnedAt: nextPinned ? now : undefined } : x));
-    setItems(updated);
+    const pinnedAt = nextPinned ? now : undefined;
+    const previousItems = items;
+    setItems(items.map((x) => (x.id === it.id ? { ...x, is_pinned: nextPinned, isPinned: nextPinned, pinnedAt } : x)));
+
+    try {
+      const res = await fetch("/api/gallery", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, isPinned: nextPinned, pinnedAt }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      setItems(previousItems);
+      toast.error(`Ghim ảnh thất bại: ${err?.message || "Lỗi máy chủ"}`);
+      return;
+    }
 
     try {
       const stored = localStorage.getItem(MEMORIES_STORAGE_KEY);
       const list = stored ? JSON.parse(stored) : [];
       if (Array.isArray(list)) {
         const nextMemories = list.map((p: any) =>
-          p.id === it.id ? { ...p, isPinned: nextPinned, is_pinned: nextPinned, pinnedAt: nextPinned ? now : undefined } : p
+          p.id === it.id ? { ...p, isPinned: nextPinned, is_pinned: nextPinned, pinnedAt } : p
         );
         localStorage.setItem(MEMORIES_STORAGE_KEY, JSON.stringify(nextMemories));
       }
     } catch {}
 
     try {
-      await fetch("/api/gallery", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: it.id, isPinned: nextPinned, pinnedAt: nextPinned ? now : undefined }),
-      });
-    } catch {}
-
-    try {
       window.dispatchEvent(new Event("tcdn4_memories_updated"));
     } catch {}
 
-    toast.success(nextPinned ? "Đã ghim ảnh lên đầu." : "Đã bỏ ghim ảnh.");
+    toast.success(nextPinned ? "Đã ghim ảnh - ảnh này sẽ làm ảnh bìa bộ ảnh." : "Đã bỏ ghim ảnh.");
   };
 
   const remove = async (it: any) => {

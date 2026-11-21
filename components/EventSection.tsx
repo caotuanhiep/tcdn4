@@ -44,7 +44,7 @@ interface Registration {
 
 const INITIAL_REGISTRATIONS: Registration[] = [];
 
-import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
+import { DEFAULT_BANK_INFO, getBankInfo, fetchBankInfo, BankConfig } from "@/lib/bank";
 
 export default function EventSection() {
   const toast = useToast();
@@ -105,12 +105,19 @@ export default function EventSection() {
 
   useEffect(() => {
     setBankInfo(getBankInfo());
+    let cancelled = false;
+    fetchBankInfo().then((cfg) => {
+      if (!cancelled) setBankInfo(cfg);
+    });
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
       if (stored) {
         setRegistrations(JSON.parse(stored));
       }
     } catch {}
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const saveRegistrations = (newList: Registration[]) => {
@@ -458,7 +465,7 @@ export default function EventSection() {
                   </div>
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quy mô</div>
-                    <div className="text-sm font-bold text-slate-900">Tập thể TC10, TC11, TC12 (~35 bạn)</div>
+                    <div className="text-sm font-bold text-slate-900">Tập thể TC10, TC11, TC12</div>
                     <div className="text-xs text-slate-500">Kèm gia đình & F1 (tùy chọn)</div>
                   </div>
                 </div>

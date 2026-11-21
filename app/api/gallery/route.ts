@@ -133,7 +133,28 @@ export function normalizeTopic(t?: string, validTopics?: string[]): string {
   return clean;
 }
 
-// Helper: Tải manifest ảnh từ Storage và local disk
+// Helper: Đọc manifest trên Cloud (Supabase Storage) - luôn bỏ qua mọi lớp cache (CDN / Next fetch cache)
+async function downloadCloudManifestText(supabase: SupabaseClient): Promise<string | null> {
+  // 1. Ưu tiên đọc qua public URL kèm cache-buster để tránh CDN trả bản cũ sau khi upsert
+  try {
+    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(MANIFEST_PATH);
+    if (pub?.publicUrl) {
+      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) return await res.text();
+    }
+  } catch {}
+  // 2. Fallback: tải qua SDK (bucket private hoặc public URL lỗi)
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(MANIFEST_PATH);
+    if (!error && data) return await data.text();
+  } catch {}
+  return null;
+}
+
+// Helper: Tải manifest ảnh.
+// NGUỒN SỰ THẬT = Cloud (Supabase Storage). File local data/gallery-manifest.json chỉ là bản dự phòng
+// khi không kết nối được Cloud. (Trước đây ưu tiên file local -> trên Vercel file này là bản snapshot
+// cố định trong git, ghi đè không được (read-only FS) nên mọi thao tác Ghim/Xóa đều bị "mất" sau khi tải lại.)
 async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
   let localPhotos: AlbumPhoto[] | null = null;
   try {
@@ -149,9 +170,8 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
   let cloudPhotos: AlbumPhoto[] | null = null;
   try {
     const supabase = client || getSupabaseAdmin();
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(MANIFEST_PATH);
-    if (!error && data) {
-      const text = await data.text();
+    const text = await downloadCloudManifestText(supabase);
+    if (text) {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
         cloudPhotos = parsed.map((p: any) => {
@@ -174,36 +194,48 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
     console.warn("loadManifest error:", err);
   }
 
-  if (localPhotos && localPhotos.length > 0) {
-    return localPhotos;
-  }
   if (cloudPhotos && cloudPhotos.length > 0) {
     return cloudPhotos;
+  }
+  if (localPhotos && localPhotos.length > 0) {
+    return localPhotos;
   }
   return DEFAULT_INITIAL_PHOTOS;
 }
 
-// Helper: Lưu manifest ảnh lên Storage và local disk
+// Helper: Lưu manifest ảnh lên Storage và local disk.
+// Trả về true nếu lưu thành công ít nhất 1 nơi (Cloud hoặc local disk khi chạy dev).
 async function saveManifest(photos: AlbumPhoto[], client?: SupabaseClient): Promise<boolean> {
+  let localOk = false;
+  let cloudOk = false;
   try {
     ensureDataDir();
     fs.writeFileSync(LOCAL_MANIFEST_PATH, JSON.stringify(photos, null, 2), "utf-8");
+    localOk = true;
   } catch {}
 
   try {
     const supabase = client || getSupabaseAdmin();
     const buffer = Buffer.from(JSON.stringify(photos, null, 2), "utf-8");
-    await supabase.storage.from(BUCKET_NAME).upload(
+    const { error } = await supabase.storage.from(BUCKET_NAME).upload(
       MANIFEST_PATH,
       buffer,
       {
         contentType: "application/json; charset=utf-8",
         upsert: true,
+        cacheControl: "0",
       }
     );
-  } catch {}
+    if (error) {
+      console.error("saveManifest cloud error:", error.message || error);
+    } else {
+      cloudOk = true;
+    }
+  } catch (err) {
+    console.error("saveManifest cloud exception:", err);
+  }
 
-  return true;
+  return cloudOk || localOk;
 }
 
 // Helper: Tải taxonomy (Chủ đề & Bộ ảnh) từ local disk & Supabase Storage
@@ -589,7 +621,17 @@ export async function PUT(req: NextRequest) {
       return p;
     });
 
-    await saveManifest(updatedList, supabase);
+    if (!currentList.some((p) => p.id === id)) {
+      return NextResponse.json({ success: false, error: "Không tìm thấy ảnh trên máy chủ" }, { status: 404 });
+    }
+
+    const saved = await saveManifest(updatedList, supabase);
+    if (!saved) {
+      return NextResponse.json(
+        { success: false, error: "Không lưu được trạng thái lên Cloud (kiểm tra SUPABASE_SERVICE_ROLE_KEY / quyền Storage)" },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ success: true, photos: updatedList });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Lỗi máy chủ" }, { status: 500 });

@@ -14,6 +14,8 @@ import {
   HelpCircle
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { BANK_STORAGE_KEY, cacheBankInfo, normalizeBankConfig } from "@/lib/bank";
+import { getSupabase } from "@/lib/supabase/client";
 
 const POPULAR_BANKS = [
   { code: "MB", name: "MB Bank (Ngân hàng Quân Đội)" },
@@ -38,20 +40,40 @@ export default function PaymentSettingsPanel() {
   const [syntaxPrefix, setSyntaxPrefix] = useState("TCDN4");
   const [saving, setSaving] = useState(false);
 
+  const applyConfig = (parsed: any) => {
+    if (parsed.bankCode) setBankCode(parsed.bankCode);
+    if (parsed.bankName) setBankName(parsed.bankName);
+    if (parsed.accountNumber) setAccountNumber(parsed.accountNumber);
+    if (parsed.accountName) setAccountName(parsed.accountName);
+    if (parsed.phoneReceive) setPhoneReceive(parsed.phoneReceive);
+    if (parsed.amount) setAmount(parsed.amount);
+    if (parsed.syntaxPrefix) setSyntaxPrefix(parsed.syntaxPrefix);
+  };
+
   useEffect(() => {
+    let localCache: any = null;
     try {
-      const stored = localStorage.getItem("tcdn4_bank_config");
+      const stored = localStorage.getItem(BANK_STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.bankCode) setBankCode(parsed.bankCode);
-        if (parsed.bankName) setBankName(parsed.bankName);
-        if (parsed.accountNumber) setAccountNumber(parsed.accountNumber);
-        if (parsed.accountName) setAccountName(parsed.accountName);
-        if (parsed.phoneReceive) setPhoneReceive(parsed.phoneReceive);
-        if (parsed.amount) setAmount(parsed.amount);
-        if (parsed.syntaxPrefix) setSyntaxPrefix(parsed.syntaxPrefix);
+        localCache = JSON.parse(stored);
+        applyConfig(localCache);
       }
     } catch {}
+
+    // Nguồn chuẩn: cấu hình đã lưu trên máy chủ (dùng chung cho mọi thiết bị)
+    fetch("/api/settings/bank", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.success) return;
+        if (data.source !== "default") {
+          applyConfig(data.config);
+          cacheBankInfo(normalizeBankConfig(data.config));
+        } else if (localCache) {
+          toast.error("Cấu hình tài khoản chưa được lưu lên máy chủ. Bấm \"Lưu cấu hình\" để áp dụng cho toàn website.");
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleBankChange = (code: string) => {
@@ -65,7 +87,7 @@ export default function PaymentSettingsPanel() {
     accountName.trim()
   )}`;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
@@ -80,10 +102,27 @@ export default function PaymentSettingsPanel() {
     };
 
     try {
-      localStorage.setItem("tcdn4_bank_config", JSON.stringify(config));
-      toast.success("Đã lưu cấu hình tài khoản & mã QR thành công!");
+      const supabase = getSupabase();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch("/api/settings/bank", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(config),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      cacheBankInfo(normalizeBankConfig(data.config || config));
+      toast.success("Đã lưu cấu hình tài khoản & mã QR lên máy chủ - áp dụng cho toàn website!");
     } catch (err: any) {
-      toast.error("Không thể lưu cấu hình: " + err.message);
+      toast.error("Không thể lưu cấu hình: " + (err?.message || "Lỗi máy chủ"));
     } finally {
       setSaving(false);
     }

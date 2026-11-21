@@ -67,7 +67,7 @@ const OVERSEAS_PRESETS = [
   "Châu Âu",
 ];
 
-import { DEFAULT_BANK_INFO, getBankInfo, BankConfig } from "@/lib/bank";
+import { DEFAULT_BANK_INFO, getBankInfo, fetchBankInfo, BankConfig } from "@/lib/bank";
 
 const SHIRT_SIZES = [
   "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
@@ -109,6 +109,13 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     setBankInfo(getBankInfo());
+    let cancelled = false;
+    fetchBankInfo().then((cfg) => {
+      if (!cancelled) setBankInfo(cfg);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Lời nhắn lưu bút & Ảnh kỷ niệm (nếu không đi trực tiếp)

@@ -527,33 +527,48 @@ export default function MemoriesGallery() {
     savePhotos(updatedPhotos);
   };
 
-  const handleTogglePin = (photoId: string, e?: React.MouseEvent) => {
+  const handleTogglePin = async (photoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!isAdmin) {
       toast.error("Chỉ Ban Liên Lạc (Admin) mới có quyền ghim ảnh!");
       return;
     }
-    let nextState = false;
+    const target = photos.find((p) => p.id === photoId);
+    if (!target) return;
+    const previousPhotos = photos;
+    const nextState = !target.isPinned;
     const now = Date.now();
-    const updated = photos.map((p) => {
-      if (p.id === photoId) {
-        nextState = !p.isPinned;
-        toast.success(nextState ? "Đã ghim ảnh lên đầu bộ ảnh!" : "Đã bỏ ghim ảnh");
-        return { ...p, isPinned: nextState, pinnedAt: nextState ? now : undefined };
-      }
-      return p;
-    });
-    savePhotos(updated);
+    const pinnedAt = nextState ? now : undefined;
+
+    // Cập nhật lạc quan trên giao diện (chỉ state, KHÔNG phát event reload để tránh GET cũ ghi đè trước khi PUT xong)
+    setPhotos(photos.map((p) => (p.id === photoId ? { ...p, isPinned: nextState, pinnedAt } : p)));
     if (activePhoto?.id === photoId) {
-      setActivePhoto((prev) => (prev ? { ...prev, isPinned: !prev.isPinned, pinnedAt: nextState ? now : undefined } : null));
+      setActivePhoto((prev) => (prev ? { ...prev, isPinned: nextState, pinnedAt } : null));
     }
 
-    // Đồng bộ lên Cloud & Local server
-    fetch("/api/gallery", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: photoId, isPinned: nextState, pinnedAt: nextState ? now : undefined }),
-    }).catch(() => {});
+    // Đồng bộ lên Cloud & chờ xác nhận từ máy chủ
+    try {
+      const res = await fetch("/api/gallery", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: photoId, isPinned: nextState, pinnedAt }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      if (Array.isArray(data.photos)) {
+        savePhotos(data.photos);
+      }
+      toast.success(nextState ? "Đã ghim ảnh - ảnh này sẽ làm ảnh bìa bộ ảnh!" : "Đã bỏ ghim ảnh");
+    } catch (err: any) {
+      // Hoàn tác nếu máy chủ không lưu được
+      setPhotos(previousPhotos);
+      if (activePhoto?.id === photoId) {
+        setActivePhoto((prev) => (prev ? { ...prev, isPinned: target.isPinned, pinnedAt: target.pinnedAt } : null));
+      }
+      toast.error(`Ghim ảnh thất bại: ${err?.message || "Lỗi máy chủ"}`);
+    }
   };
 
   const handleDeletePhoto = (photoId: string, e?: React.MouseEvent) => {
@@ -930,12 +945,8 @@ export default function MemoriesGallery() {
                   className="group relative cursor-pointer select-none transition-all duration-300 hover:-translate-y-1"
                   title={`Bấm để mở xem bộ ảnh "${alb.name}"`}
                 >
-                  {/* Hiệu ứng thẻ xếp tầng phía sau (Stacked photo deck effect) */}
-                  <div className="absolute inset-0 rounded-2xl bg-white border border-slate-200/80 shadow-md translate-x-2 -translate-y-1.5 opacity-60 transition-transform duration-300 group-hover:translate-x-2.5 group-hover:-translate-y-2" />
-                  <div className="absolute inset-0 rounded-2xl bg-white border border-slate-200/90 shadow-md translate-x-1 -translate-y-0.5 opacity-80 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:-translate-y-1" />
-
-                  {/* Thẻ chính hiển thị ảnh bìa tràn viền */}
-                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md border-2 border-white transition-all duration-300 group-hover:shadow-xl">
+                  {/* Thẻ ảnh bìa: dùng ảnh được ghim mới nhất của bộ ảnh (nếu không có ảnh ghim thì lấy ảnh mới nhất) */}
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md border border-slate-200 transition-all duration-300 group-hover:shadow-xl">
                     {alb.coverPhoto ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
