@@ -77,38 +77,77 @@ export default function Hero() {
 
         const profiles = dbProfiles || [];
         
-        // Tập hợp danh sách thành viên duy nhất
-        const uniqueMembers = new Map<string, { attending: boolean; single: boolean }>();
+        // Tập hợp danh sách thành viên duy nhất (loại bỏ trùng lặp triệt để qua ID, SĐT hoặc Tên)
+        interface MemberEntry {
+          id?: string;
+          name: string;
+          phone: string;
+          attending: boolean;
+          single: boolean;
+        }
 
-        profiles.forEach((p: any) => {
-          const key = (p.id || p.full_name || "").toLowerCase().trim();
-          if (key) {
-            uniqueMembers.set(key, {
-              attending: p.attendance_status === "attending",
-              single: p.marital_status === "single",
+        const uniqueMembers: MemberEntry[] = [];
+
+        const addOrMerge = (item: {
+          id?: string;
+          name?: string;
+          phone?: string;
+          attending: boolean;
+          single: boolean;
+        }) => {
+          const cleanId = (item.id || "").toLowerCase().trim();
+          const cleanName = (item.name || "").toLowerCase().trim();
+          const cleanPhone = (item.phone || "").replace(/[^0-9]/g, "");
+
+          if (!cleanId && !cleanName && !cleanPhone) return;
+
+          const existing = uniqueMembers.find((m) => {
+            if (cleanId && m.id && m.id === cleanId) return true;
+            if (cleanPhone && m.phone && m.phone === cleanPhone) return true;
+            if (cleanName && m.name && m.name === cleanName) return true;
+            return false;
+          });
+
+          if (existing) {
+            if (item.attending) existing.attending = true;
+            if (item.single) existing.single = true;
+            if (!existing.id && cleanId) existing.id = cleanId;
+            if (!existing.phone && cleanPhone) existing.phone = cleanPhone;
+            if (!existing.name && cleanName) existing.name = cleanName;
+          } else {
+            uniqueMembers.push({
+              id: cleanId,
+              name: cleanName,
+              phone: cleanPhone,
+              attending: item.attending,
+              single: item.single,
             });
           }
+        };
+
+        profiles.forEach((p: any) => {
+          addOrMerge({
+            id: p.id,
+            name: p.full_name,
+            phone: p.phone,
+            attending: p.attendance_status === "attending",
+            single: p.marital_status === "single",
+          });
         });
 
         regs.forEach((r: any) => {
-          const key = (r.fullName || r.phone || r.id || "").toLowerCase().trim();
-          if (key) {
-            const existing = uniqueMembers.get(key);
-            uniqueMembers.set(key, {
-              attending: true,
-              single: existing ? existing.single : false,
-            });
-          }
+          addOrMerge({
+            id: r.id,
+            name: r.fullName,
+            phone: r.phone,
+            attending: true,
+            single: false,
+          });
         });
 
-        const checkedInCount = uniqueMembers.size;
-        let attendingCount = 0;
-        let singleCount = 0;
-
-        uniqueMembers.forEach((val) => {
-          if (val.attending) attendingCount++;
-          if (val.single) singleCount++;
-        });
+        const checkedInCount = uniqueMembers.length;
+        const attendingCount = uniqueMembers.filter((m) => m.attending).length;
+        const singleCount = uniqueMembers.filter((m) => m.single).length;
 
         if (active) {
           setStats({
