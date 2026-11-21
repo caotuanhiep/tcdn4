@@ -112,12 +112,12 @@ export default function Hero() {
   };
 
   return (
-    <section id="home" className="relative overflow-hidden bg-gradient-to-b from-[#EBF5FB] via-[#F0F8FF] to-[#F8FAFC] px-4 pb-14 pt-8 sm:pt-12 sm:pb-20 border-b border-blue-100/70">
-      {/* Background Distinct Dot Pattern */}
+    <section id="home" className="relative overflow-hidden bg-gradient-to-b from-[#EBF5FB] via-[#F4F9FD] to-white px-4 pb-14 pt-8 sm:pt-12 sm:pb-20">
+      {/* Background Subtle Dot Pattern fading gently to bottom */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
+        className="pointer-events-none absolute inset-0 opacity-15 [mask-image:linear-gradient(to_bottom,black_20%,transparent_85%)]"
         style={{
-          backgroundImage: "radial-gradient(#003B5C 1.5px, transparent 1.5px)",
+          backgroundImage: "radial-gradient(#003B5C 1.2px, transparent 1.2px)",
           backgroundSize: "24px 24px",
         }}
       />

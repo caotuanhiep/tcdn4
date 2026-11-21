@@ -107,7 +107,7 @@ export default function GuestbookSection() {
   };
 
   return (
-    <section id="guestbook" className="scroll-mt-16 bg-slate-50/70 py-12 sm:py-16">
+    <section id="guestbook" className="scroll-mt-16 bg-gradient-to-b from-white via-slate-50/80 to-white py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Khung Card xanh lá đậm nổi bật, không tràn viền toàn trang */}

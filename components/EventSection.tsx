@@ -243,7 +243,7 @@ export default function EventSection() {
   }, [user, profile, registrations]);
 
   return (
-    <section id="event" className="scroll-mt-16 bg-white py-14 sm:py-20">
+    <section id="event" className="scroll-mt-16 bg-gradient-to-b from-white via-white to-slate-50/40 py-14 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Section Header */}

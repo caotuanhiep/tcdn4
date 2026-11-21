@@ -809,7 +809,7 @@ export default function MemoriesGallery() {
   };
 
   return (
-    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-slate-50 via-blue-50/30 to-slate-100 py-12 sm:py-16 relative border-t border-slate-200/60 overflow-hidden">
+    <section id="memories" className="scroll-mt-16 bg-gradient-to-b from-white via-slate-50/80 to-white py-12 sm:py-16 relative overflow-hidden">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Header với Tiêu đề & Nút Đóng góp ảnh */}

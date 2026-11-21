@@ -209,7 +209,7 @@ export default function AlumniDirectory({
   const displayedList = filteredList.slice(0, visibleCount);
 
   return (
-    <section id="directory" className="scroll-mt-16 bg-slate-100/60 py-16 sm:py-24">
+    <section id="directory" className="scroll-mt-16 bg-gradient-to-b from-white via-slate-100/70 to-white py-16 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Section Header với Tiêu đề Cực To */}

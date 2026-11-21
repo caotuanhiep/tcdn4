@@ -23,7 +23,7 @@ export default function CommitteeSection() {
     setMembers(getCommitteeMembers());
   }, []);
   return (
-    <section id="committee" className="scroll-mt-16 bg-white py-14 sm:py-20 border-t border-slate-200/80">
+    <section id="committee" className="scroll-mt-16 bg-gradient-to-b from-white via-slate-50/50 to-white py-14 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         
         {/* Header với Tiêu đề Cực To */}
