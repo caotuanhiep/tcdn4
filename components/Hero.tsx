@@ -54,23 +54,61 @@ export default function Hero() {
         // 1. Tải profiles thực tế trực tiếp từ Supabase
         const { data: dbProfiles } = await getSupabase()
           .from("profiles")
-          .select("id, full_name, attendance_status, marital_status");
+          .select("id, full_name, attendance_status, marital_status, phone");
 
-        // 2. Dự phòng thêm registrations lưu trong localStorage
-        const stored = localStorage.getItem("tcdn4_registrations");
-        const localRegs = stored ? JSON.parse(stored) : [];
+        // 2. Tải danh sách đăng ký sự kiện từ API hoặc localStorage
+        let regs: any[] = [];
+        try {
+          const res = await fetch("/api/registrations", { cache: "no-store" });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.items)) {
+              regs = data.items;
+            }
+          }
+        } catch {}
+
+        if (regs.length === 0) {
+          try {
+            const stored = localStorage.getItem("tcdn4_registrations");
+            if (stored) regs = JSON.parse(stored);
+          } catch {}
+        }
 
         const profiles = dbProfiles || [];
         
-        // Thẻ 1: Số thành viên đã điểm danh (tổng số hồ sơ profiles kết hợp đăng ký)
-        const checkedInCount = Math.max(profiles.length, localRegs.length, 38);
+        // Tập hợp danh sách thành viên duy nhất
+        const uniqueMembers = new Map<string, { attending: boolean; single: boolean }>();
 
-        // Thẻ 2: Số người đã đăng ký đi gặp mặt 15 năm (attendance_status === 'attending' trong DB profiles)
-        const dbAttending = profiles.filter((p: any) => p.attendance_status === "attending").length;
-        const attendingCount = Math.max(dbAttending, localRegs.length, 32);
+        profiles.forEach((p: any) => {
+          const key = (p.id || p.full_name || "").toLowerCase().trim();
+          if (key) {
+            uniqueMembers.set(key, {
+              attending: p.attendance_status === "attending",
+              single: p.marital_status === "single",
+            });
+          }
+        });
 
-        // Thẻ 3: Số người còn độc thân (marital_status === 'single')
-        const singleCount = profiles.filter((p: any) => p.marital_status === "single").length || 12;
+        regs.forEach((r: any) => {
+          const key = (r.fullName || r.phone || r.id || "").toLowerCase().trim();
+          if (key) {
+            const existing = uniqueMembers.get(key);
+            uniqueMembers.set(key, {
+              attending: true,
+              single: existing ? existing.single : false,
+            });
+          }
+        });
+
+        const checkedInCount = uniqueMembers.size;
+        let attendingCount = 0;
+        let singleCount = 0;
+
+        uniqueMembers.forEach((val) => {
+          if (val.attending) attendingCount++;
+          if (val.single) singleCount++;
+        });
 
         if (active) {
           setStats({
