@@ -212,24 +212,25 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         });
       } catch {}
 
-      // 2. Nếu đăng ký tham gia -> cập nhật vào danh sách sự kiện EventSection (localStorage)
+      // 2. Nếu đăng ký tham gia -> cập nhật vào danh sách sự kiện EventSection
       if (attendanceStatus === "attending") {
+        const regEntry = {
+          id: user?.id || `reg-${Date.now()}`,
+          fullName: fullName.trim(),
+          className,
+          phone: phone.trim(),
+          shirtSize,
+          address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
+          guestsCount,
+          status: "pending",
+          paidAmount: bankInfo.amount,
+          createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+        };
+
         try {
           const stored = localStorage.getItem("tcdn4_registrations");
           const list = stored ? JSON.parse(stored) : [];
-          const existingIdx = list.findIndex((x: any) => x.phone === phone.trim() || x.fullName === fullName.trim());
-          const regEntry = {
-            id: `reg-${Date.now()}`,
-            fullName: fullName.trim(),
-            className,
-            phone: phone.trim(),
-            shirtSize,
-            address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
-            guestsCount,
-            status: "pending",
-            paidAmount: bankInfo.amount,
-            createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-          };
+          const existingIdx = list.findIndex((x: any) => x.phone === phone.trim() || x.fullName === fullName.trim() || (user?.id && x.id === user.id));
           if (existingIdx >= 0) {
             list[existingIdx] = { ...list[existingIdx], ...regEntry };
           } else {
@@ -237,6 +238,19 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           }
           localStorage.setItem("tcdn4_registrations", JSON.stringify(list));
         } catch {}
+
+        // Gửi lên API server để lưu vào hệ thống đăng ký
+        try {
+          await fetch("/api/registrations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(regEntry),
+          });
+        } catch {}
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("tcdn4_registration_updated"));
+        }
 
         // Gửi thông báo đến Bot Zalo
         try {

@@ -55,6 +55,8 @@ export function getStorageClient(req?: NextRequest): SupabaseClient {
 }
 
 export async function loadRegistrations(client?: SupabaseClient): Promise<RegistrationItem[]> {
+  let stored: RegistrationItem[] = [];
+
   // 1. Đọc từ Cloud Supabase Storage với cache-buster
   try {
     const supabase = client || getSupabaseAdmin();
@@ -64,31 +66,98 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
       if (res.ok) {
         const text = await res.text();
         const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) stored = parsed;
       }
     }
   } catch {}
 
-  try {
-    const supabase = client || getSupabaseAdmin();
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(REGISTRATIONS_PATH);
-    if (!error && data) {
-      const text = await data.text();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
+  if (stored.length === 0) {
+    try {
+      const supabase = client || getSupabaseAdmin();
+      const { data, error } = await supabase.storage.from(BUCKET_NAME).download(REGISTRATIONS_PATH);
+      if (!error && data) {
+        const text = await data.text();
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) stored = parsed;
+      }
+    } catch {}
+  }
 
   // 2. Fallback đọc từ local file
-  try {
-    if (fs.existsSync(LOCAL_REGISTRATIONS_PATH)) {
-      const text = fs.readFileSync(LOCAL_REGISTRATIONS_PATH, "utf-8");
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
+  if (stored.length === 0) {
+    try {
+      if (fs.existsSync(LOCAL_REGISTRATIONS_PATH)) {
+        const text = fs.readFileSync(LOCAL_REGISTRATIONS_PATH, "utf-8");
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) stored = parsed;
+      }
+    } catch {}
+  }
 
-  return [];
+  // 3. Tự động hợp nhất thành viên đã điểm danh từ bảng profiles trong Supabase
+  try {
+    const supabase = client || getSupabaseAdmin();
+    const { data: dbProfiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
+
+    if (dbProfiles && dbProfiles.length > 0) {
+      const mergedList = [...stored];
+      const seen = new Set<string>();
+
+      mergedList.forEach((item) => {
+        if (item.phone) seen.add(item.phone.trim().toLowerCase());
+        if (item.fullName) seen.add(item.fullName.trim().toLowerCase());
+        if (item.id) seen.add(item.id.toLowerCase());
+      });
+
+      for (const p of dbProfiles) {
+        if (!p.full_name) continue;
+        if (p.attendance_status === "not_attending") continue;
+
+        const phoneKey = p.phone ? p.phone.trim().toLowerCase() : "";
+        const nameKey = p.full_name.trim().toLowerCase();
+        const idKey = p.id ? p.id.toLowerCase() : "";
+
+        const alreadyExists = (phoneKey && seen.has(phoneKey)) || seen.has(nameKey) || (idKey && seen.has(idKey));
+
+        if (!alreadyExists) {
+          if (phoneKey) seen.add(phoneKey);
+          seen.add(nameKey);
+          if (idKey) seen.add(idKey);
+
+          const address =
+            p.delivery_address?.trim() ||
+            p.specific_location?.trim() ||
+            (p.location_region === "hn" ? "Hà Nội" :
+             p.location_region === "overseas" ? "Nước ngoài" :
+             "TP. Hồ Chí Minh");
+
+          mergedList.push({
+            id: p.id || `profile-${Date.now()}`,
+            fullName: p.full_name.trim(),
+            className: (p.class_name as any) || "TC10",
+            phone: p.phone?.trim() || "",
+            shirtSize: p.shirt_size || "L (Nam)",
+            address: address,
+            avatarUrl: p.avatar_url || undefined,
+            guestsCount: 0,
+            status: "pending",
+            paidAmount: 1000000,
+            createdAt: p.created_at
+              ? new Date(p.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+              : new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+          });
+        }
+      }
+
+      return mergedList;
+    }
+  } catch (err) {
+    console.error("loadRegistrations profiles merge error:", err);
+  }
+
+  return stored;
 }
 
 export async function saveRegistrations(items: RegistrationItem[], client?: SupabaseClient): Promise<boolean> {
@@ -125,7 +194,7 @@ export async function GET(req: NextRequest) {
   const supabase = getStorageClient(req);
   const items = await loadRegistrations(supabase);
   return NextResponse.json(
-    { success: true, registrations: items },
+    { success: true, registrations: items, items: items },
     {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate",

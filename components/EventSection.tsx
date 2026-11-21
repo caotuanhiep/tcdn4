@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { getSupabase } from "@/lib/supabase/client";
 
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
@@ -110,29 +111,78 @@ export default function EventSection() {
       if (!cancelled) setBankInfo(cfg);
     });
 
-    // 1. Đọc từ local cache trước
-    try {
-      const stored = localStorage.getItem("tcdn4_registrations");
-      if (stored) {
-        setRegistrations(JSON.parse(stored));
-      }
-    } catch {}
-
-    // 2. Tải danh sách đăng ký chuẩn từ máy chủ (đã đồng bộ với SePay và admin)
-    fetch("/api/registrations", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.success && Array.isArray(data.registrations)) {
-          setRegistrations(data.registrations);
-          try {
-            localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
-          } catch {}
+    const loadData = async () => {
+      // 1. Đọc từ local cache trước
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        if (stored && !cancelled) {
+          setRegistrations(JSON.parse(stored));
         }
-      })
-      .catch(() => {});
+      } catch {}
+
+      let combined: Registration[] = [];
+
+      // 2. Tải danh sách đăng ký chuẩn từ máy chủ (đã bao gồm các thành viên điểm danh từ profiles)
+      try {
+        const res = await fetch("/api/registrations", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success && Array.isArray(data.registrations)) {
+            combined = data.registrations;
+          }
+        }
+      } catch {}
+
+      // 3. Dự phòng trực tiếp từ profiles nếu API chậm hoặc offline
+      try {
+        const { data: dbProfiles } = await getSupabase()
+          .from("profiles")
+          .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
+
+        if (dbProfiles && dbProfiles.length > 0) {
+          const seen = new Set(combined.map((r) => (r.phone || r.fullName || r.id).toLowerCase().trim()));
+          for (const p of dbProfiles) {
+            if (!p.full_name || p.attendance_status === "not_attending") continue;
+            const key = (p.phone || p.full_name || p.id).toLowerCase().trim();
+            if (!seen.has(key)) {
+              seen.add(key);
+              combined.push({
+                id: p.id,
+                fullName: p.full_name.trim(),
+                className: (p.class_name as any) || "TC10",
+                phone: p.phone?.trim() || "",
+                shirtSize: p.shirt_size || "L (Nam)",
+                address: p.delivery_address?.trim() || p.specific_location?.trim() || (p.location_region === "hn" ? "Hà Nội" : "TP. Hồ Chí Minh"),
+                avatarUrl: p.avatar_url || undefined,
+                guestsCount: 0,
+                status: "pending",
+                paidAmount: 1000000,
+                createdAt: p.created_at ? new Date(p.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }) : "Gần đây",
+              });
+            }
+          }
+        }
+      } catch {}
+
+      if (!cancelled && combined.length > 0) {
+        setRegistrations(combined);
+        try {
+          localStorage.setItem("tcdn4_registrations", JSON.stringify(combined));
+        } catch {}
+      }
+    };
+
+    loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+
+    window.addEventListener("tcdn4_registration_updated", handleUpdate);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("tcdn4_registration_updated", handleUpdate);
     };
   }, []);
 
@@ -232,10 +282,13 @@ export default function EventSection() {
     if (!user) return null;
     const userName = (profile?.full_name || user.user_metadata?.full_name || "").toLowerCase().trim();
     const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
+    const userId = (user?.id || "").toLowerCase();
 
     return registrations.find((r) => {
       const rName = (r.fullName || "").toLowerCase().trim();
       const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+      const rId = (r.id || "").toLowerCase();
+      if (userId && rId === userId) return true;
       if (userName && rName === userName) return true;
       if (userPhone && rPhone && rPhone === userPhone) return true;
       return false;
