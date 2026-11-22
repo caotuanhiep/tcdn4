@@ -62,6 +62,19 @@ export default function UsersPanel() {
   const fetchUsers = async () => {
     try {
       if (users.length === 0) setLoading(true);
+      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.users)) {
+          setUsers(data.users);
+          try {
+            localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(data.users));
+          } catch {}
+          return;
+        }
+      }
+
+      // Fallback sang getSupabase nếu chưa cấu hình endpoint
       const { data, error } = await getSupabase()
         .from("profiles")
         .select("*")
@@ -85,14 +98,34 @@ export default function UsersPanel() {
   }, []);
 
   const handleChangeRole = async (userId: string, newRole: string) => {
+    const previous = [...users];
+    const updated = users.map((u) => (u.id === userId ? { ...u, role: newRole as any } : u));
+    setUsers(updated);
     try {
-      const updated = users.map((u) => (u.id === userId ? { ...u, role: newRole as any } : u));
-      setUsers(updated);
+      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updated));
+    } catch {}
 
-      await getSupabase().from("profiles").update({ role: newRole }).eq("id", userId);
-      toast.success(`Đã cập nhật vai trò thành ${newRole === "admin" ? "Super Admin" : newRole === "committee" ? "Ban liên lạc" : "Thành viên"}!`);
-    } catch {
-      toast.success(`Đã cập nhật vai trò nội bộ!`);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: userId, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Lỗi lưu quyền lên máy chủ");
+      }
+      toast.success(
+        `Đã cập nhật vai trò thành ${
+          newRole === "admin" ? "Super Admin" : newRole === "committee" ? "Ban liên lạc" : "Thành viên"
+        }!`
+      );
+    } catch (err: any) {
+      setUsers(previous);
+      try {
+        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
+      } catch {}
+      toast.error(`Không thể lưu vai trò: ${err?.message || "Lỗi kết nối máy chủ"}`);
     }
   };
 
@@ -106,13 +139,19 @@ export default function UsersPanel() {
     if (!editingUser) return;
 
     setSavingEdit(true);
+    const previous = [...users];
+    const updatedList = users.map((u) => (u.id === editingUser.id ? editingUser : u));
+    setUsers(updatedList);
     try {
-      const updatedList = users.map((u) => (u.id === editingUser.id ? editingUser : u));
-      setUsers(updatedList);
+      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updatedList));
+    } catch {}
 
-      await getSupabase()
-        .from("profiles")
-        .update({
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingUser.id,
           full_name: editingUser.full_name,
           class_name: editingUser.class_name,
           job_title: editingUser.job_title,
@@ -121,13 +160,20 @@ export default function UsersPanel() {
           specific_location: editingUser.specific_location,
           phone: editingUser.phone,
           role: editingUser.role,
-        })
-        .eq("id", editingUser.id);
-
-      toast.success("Đã cập nhật thông tin thành viên thành công!");
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Lỗi cập nhật máy chủ");
+      }
+      toast.success("Đã cập nhật thông tin thành viên thành công trên máy chủ!");
       setIsEditModalOpen(false);
     } catch (err: any) {
-      toast.error("Lỗi cập nhật: " + err.message);
+      setUsers(previous);
+      try {
+        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
+      } catch {}
+      toast.error("Lỗi cập nhật: " + (err?.message || "Lỗi máy chủ"));
     } finally {
       setSavingEdit(false);
     }
@@ -136,14 +182,28 @@ export default function UsersPanel() {
   const handleDeleteUser = async (userId: string) => {
     if (!confirm("Bạn có chắc chắn muốn xóa thành viên này khỏi danh bạ?")) return;
 
+    const previous = [...users];
+    const remaining = users.filter((u) => u.id !== userId);
+    setUsers(remaining);
     try {
-      const remaining = users.filter((u) => u.id !== userId);
-      setUsers(remaining);
+      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(remaining));
+    } catch {}
 
-      await getSupabase().from("profiles").delete().eq("id", userId);
+    try {
+      const res = await fetch(`/api/admin/users?id=${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Lỗi xóa thành viên");
+      }
       toast.success("Đã xóa thành viên khỏi danh bạ!");
     } catch (err: any) {
-      toast.error("Lỗi xóa: " + err.message);
+      setUsers(previous);
+      try {
+        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
+      } catch {}
+      toast.error("Lỗi xóa: " + (err?.message || "Lỗi máy chủ"));
     }
   };
 

@@ -215,10 +215,10 @@ export default function ZaloBotSettings() {
   // Navigation Tabs: connection | broadcast | auto | birthday | logs
   const [activeTab, setActiveTab] = useState<"connection" | "broadcast" | "auto" | "birthday" | "logs">("connection");
 
-  // Token & Zalo OA Connection
-  const [zaloToken, setZaloToken] = useState("");
-  const [oaName, setOaName] = useState("TCDN4 K33 UEH Alumni");
-  const [oaAppId, setOaAppId] = useState("482910482910");
+  // Token & Bot Nhóm Zalo Connection
+  const [botToken, setBotToken] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [botName, setBotName] = useState("TCDN4 K33 Bot");
   const [isTokenValid, setIsTokenValid] = useState(true);
   const [isCheckingToken, setIsCheckingToken] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -278,9 +278,9 @@ export default function ZaloBotSettings() {
       const savedConfig = localStorage.getItem("tcdn4_zalo_bot_config");
       if (savedConfig) {
         const p = JSON.parse(savedConfig);
-        if (p.zaloToken) setZaloToken(p.zaloToken);
-        if (p.oaName) setOaName(p.oaName);
-        if (p.oaAppId) setOaAppId(p.oaAppId);
+        if (p.botToken || p.zaloToken) setBotToken(p.botToken || p.zaloToken);
+        if (p.webhookUrl) setWebhookUrl(p.webhookUrl);
+        if (p.botName) setBotName(p.botName);
         if (typeof p.autoCheckin === "boolean") setAutoCheckin(p.autoCheckin);
         if (typeof p.autoRegistration === "boolean") setAutoRegistration(p.autoRegistration);
         if (typeof p.autoBirthday === "boolean") setAutoBirthday(p.autoBirthday);
@@ -301,15 +301,33 @@ export default function ZaloBotSettings() {
       if (savedLogs) setLogs(JSON.parse(savedLogs));
     } catch {}
 
+    // Tải cấu hình từ server (đã lưu tập trung trên Supabase Storage)
+    fetch("/api/settings/zalo")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.config) {
+          if (d.config.botToken) setBotToken(d.config.botToken);
+          if (d.config.webhookUrl) setWebhookUrl(d.config.webhookUrl);
+          if (d.config.botName) setBotName(d.config.botName);
+        }
+      })
+      .catch(() => {});
+
     scanBirthdays();
   }, []);
 
-  const saveBotConfig = (patch: Record<string, any>) => {
+  const saveBotConfig = async (patch: Record<string, any>) => {
     try {
       const saved = localStorage.getItem("tcdn4_zalo_bot_config");
       const current = saved ? JSON.parse(saved) : {};
       const updated = { ...current, ...patch };
       localStorage.setItem("tcdn4_zalo_bot_config", JSON.stringify(updated));
+
+      await fetch("/api/settings/zalo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
     } catch {}
   };
 
@@ -358,18 +376,53 @@ export default function ZaloBotSettings() {
     setBirthdayMembers(list);
   };
 
-  // Handle Token validation
-  const handleValidateToken = async () => {
-    if (!zaloToken.trim()) {
-      toast.error("Vui lòng dán Access Token từ Zalo OA Developer Portal!");
+  // Handle Save Bot Connection
+  const handleSaveConnection = async () => {
+    if (!botToken.trim() && !webhookUrl.trim()) {
+      toast.error("Vui lòng nhập API Token hoặc Webhook URL của Bot Nhóm!");
       return;
     }
     setIsCheckingToken(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setIsCheckingToken(false);
-    setIsTokenValid(true);
-    saveBotConfig({ zaloToken: zaloToken.trim(), isTokenValid: true });
-    toast.success("Đã xác thực và kết nối Zalo OA thành công!");
+    try {
+      await saveBotConfig({ 
+        botToken: botToken.trim(), 
+        webhookUrl: webhookUrl.trim(),
+        botName: botName.trim(),
+        isTokenValid: true 
+      });
+      setIsTokenValid(true);
+      toast.success("Đã lưu cấu hình Bot Nhóm Zalo thành công lên máy chủ!");
+    } catch {
+      toast.error("Lỗi khi lưu cấu hình!");
+    } finally {
+      setIsCheckingToken(false);
+    }
+  };
+
+  const handleTestSendGroup = async (grp: ZaloGroupItem) => {
+    try {
+      const res = await fetch("/api/zalo-bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "broadcast",
+          title: `Tin thử nghiệm tới ${grp.name}`,
+          message: `🔥 Alo alo! Đây là tin thử nghiệm từ hệ thống TCDN4 Alumni Hub kết nối tới nhóm ${grp.name}!`,
+          targetGroups: grp.name,
+          webhookUrl: webhookUrl.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.webhookSent) {
+        toast.success(`Đã bắn tin thành công tới Webhook của nhóm "${grp.name}"!`);
+      } else {
+        toast.info(
+          `Đã tạo nội dung tin thử nghiệm thành công! (Lưu ý: Chưa gắn Webhook URL nhóm Zalo nên tin chưa được đẩy ra ngoài)`
+        );
+      }
+    } catch {
+      toast.error("Lỗi gửi tin thử nghiệm");
+    }
   };
 
   // Add group
@@ -499,7 +552,7 @@ export default function ZaloBotSettings() {
       .join(", ");
 
     try {
-      await fetch("/api/zalo-bot", {
+      const res = await fetch("/api/zalo-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -507,8 +560,11 @@ export default function ZaloBotSettings() {
           title: composerTitle || "Thông báo từ Ban Liên Lạc",
           message: composerContent,
           targetGroups: targetNames,
+          webhookUrl: webhookUrl.trim() || undefined,
         }),
       });
+
+      const resData = await res.json();
 
       const newLog: SendLog = {
         id: `log-${Date.now()}`,
@@ -517,7 +573,7 @@ export default function ZaloBotSettings() {
         type: "broadcast",
         title: composerTitle || "Thông báo tức thì",
         content: composerContent,
-        status: "success",
+        status: resData.webhookSent ? "success" : "pending",
       };
 
       const updatedLogs = [newLog, ...logs];
@@ -526,7 +582,13 @@ export default function ZaloBotSettings() {
         localStorage.setItem("tcdn4_zalo_logs", JSON.stringify(updatedLogs));
       } catch {}
 
-      toast.success(`Đã phát loa tin nhắn tới: ${targetNames}!`);
+      if (resData.webhookSent) {
+        toast.success(`Đã phát loa tin nhắn tới: ${targetNames}!`);
+      } else {
+        toast.info(
+          `Đã tạo thông báo thành công! (Lưu ý: Chưa gắn Webhook Bot nhóm nên tin chưa tự động đẩy vào Zalo)`
+        );
+      }
     } catch {
       toast.error("Gửi tin thất bại, vui lòng thử lại!");
     } finally {
@@ -575,8 +637,8 @@ export default function ZaloBotSettings() {
 
             <div className="flex-1">
               <div className="flex items-center gap-1 mb-1 pl-1">
-                <span className="text-[11px] font-bold text-slate-700">TCDN4 AI Bot</span>
-                <span className="rounded bg-blue-100 text-[#0068FF] text-[9px] font-black px-1 py-0.2">OA</span>
+                <span className="text-[11px] font-bold text-slate-700">TCDN4 Bot Nhóm</span>
+                <span className="rounded bg-blue-100 text-[#0068FF] text-[9px] font-black px-1.5 py-0.2">BOT NHÓM</span>
               </div>
 
               {/* Message Bubble */}
@@ -612,13 +674,13 @@ export default function ZaloBotSettings() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-bold text-ueh border border-blue-100 mb-1.5">
-              <Bot size={14} className="text-ueh-orange" /> SMLIFE Kit Architecture
+              <Bot size={14} className="text-ueh-orange" /> Bot Nhóm Zalo K33
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Đấu Nối Zalo Bot & Quản Lý Nhóm
+              Đấu Nối Bot Nhóm Zalo & Quản Lý Nhóm
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
-              Tự động kết nối Zalo OA qua Token, quản lý danh sách các nhóm lớp K33 và tích hợp AI trợ lý soạn tin nhắn hài hước, dí dỏm.
+              Tự động hóa thông báo đến các nhóm Zalo lớp K33 (TC10, TC11, TC12, Ban Liên Lạc). Quản lý đẩy tin sự kiện, điểm danh và tích hợp AI trợ lý soạn tin dí dỏm.
             </p>
           </div>
 
@@ -677,76 +739,110 @@ export default function ZaloBotSettings() {
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: ĐẤU NỐI ZALO OA & QUẢN LÝ NHÓM (CHUẨN SMLIFE KIT)                 */}
+      {/* TAB 1: ĐẤU NỐI BOT NHÓM ZALO & QUẢN LÝ NHÓM                               */}
       {/* ========================================================================= */}
       {activeTab === "connection" && (
         <div className="space-y-6">
-          {/* Card 1: Dán Token Zalo OA tự động kết nối */}
+          {/* Card 1: Cấu hình Bot Nhóm Zalo */}
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Key size={18} className="text-[#0068FF]" /> Kết Nối Zalo OA Qua Token
+                  <Bot size={20} className="text-[#0068FF]" /> Kết Nối Bot Nhóm Zalo
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Chỉ cần dán Access Token từ Zalo OA Developer Portal vào đây, hệ thống sẽ tự động xác thực và kích hoạt.
+                  Cấu hình Bot tự động đẩy thông báo sự kiện vào các nhóm Zalo và nhận phản hồi từ thành viên.
                 </p>
               </div>
 
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
-                <CheckCircle2 size={13} /> Đã sẵn sàng kết nối
+                <CheckCircle2 size={13} /> {webhookUrl || botToken ? "Đã cấu hình" : "Chờ thiết lập"}
               </span>
             </div>
 
             <div className="space-y-4">
+              {/* Bot API Token */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Zalo OA Access Token (Hoặc Secret Key)
+                  Bot API Token / Secret Key (Từ dịch vụ Bot Zalo)
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="password"
-                    value={zaloToken}
-                    onChange={(e) => setZaloToken(e.target.value)}
-                    placeholder="Dán mã Token từ Zalo OA Developer Portal tại đây..."
+                    value={botToken}
+                    onChange={(e) => setBotToken(e.target.value)}
+                    placeholder="Dán mã API Token của Bot Nhóm tại đây..."
                     className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-mono focus:border-ueh focus:outline-none"
                   />
                   <button
-                    onClick={handleValidateToken}
+                    onClick={handleSaveConnection}
                     disabled={isCheckingToken}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-[#0068FF] px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-all shadow-xs shrink-0"
                   >
                     {isCheckingToken ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                    <span>{isCheckingToken ? "Đang xác thực..." : "Lưu & Xác Thực"}</span>
+                    <span>{isCheckingToken ? "Đang lưu..." : "Lưu Cấu Hình"}</span>
                   </button>
                 </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Mã API Token do dịch vụ Bot Nhóm (như SMLIFE, Ahachat, ZCA hoặc bot riêng) cấp cho bạn.
+                </p>
               </div>
 
-              {/* Box trạng thái Zalo OA sau khi kết nối */}
+              {/* Webhook URL Gửi Tin Vào Nhóm */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Webhook URL Đẩy Tin Vào Nhóm (Outgoing Webhook / Send Message Endpoint)</span>
+                </label>
+                <input
+                  type="url"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="https://api.your-bot-service.com/send-message hoặc Webhook URL..."
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-mono focus:border-ueh focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Địa chỉ URL mà website sẽ gọi tới để yêu cầu Bot bắn tin vào các nhóm Zalo khi có cựu sinh viên đăng ký họp mặt, điểm danh hoặc sinh nhật.
+                </p>
+              </div>
+
+              {/* Endpoint Nhận Tin Của Website */}
               <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/80 via-white to-sky-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="h-11 w-11 rounded-2xl bg-[#0068FF] text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
-                    Z
+                    <Bot size={22} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900">{oaName}</span>
-                      <span className="rounded bg-blue-100 text-[#0068FF] text-[10px] font-black px-1.5 py-0.2">OA Đã Xác Minh</span>
+                      <span className="text-sm font-bold text-slate-900">{botName}</span>
+                      <span className="rounded bg-blue-100 text-[#0068FF] text-[10px] font-black px-1.5 py-0.2">BOT NHÓM</span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
-                      <span>App ID: <strong className="font-mono text-slate-700">{oaAppId}</strong></span>
-                      <span>•</span>
-                      <span>Webhook Endpoint: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">/api/zalo-bot</code></span>
+                      <span>Webhook Nhận Tin:</span>
+                      <code className="bg-white px-2 py-0.5 rounded border border-slate-200 font-mono text-[11px] text-ueh font-bold">
+                        https://tcdn4.top/api/zalo-bot
+                      </code>
+                      <button
+                        onClick={() => handleCopy("https://tcdn4.top/api/zalo-bot", "endpoint")}
+                        className="text-slate-400 hover:text-ueh p-0.5"
+                        title="Sao chép Endpoint URL"
+                      >
+                        {copiedCode === "endpoint" ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toast.success("Đã gửi tín hiệu Ping kiểm tra tới máy chủ Zalo OA thành công!")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs"
+                    onClick={() => {
+                      fetch("/api/zalo-bot")
+                        .then((r) => r.json())
+                        .then(() => toast.success("Endpoint /api/zalo-bot đang hoạt động bình thường!"))
+                        .catch(() => toast.error("Không thể kết nối tới endpoint /api/zalo-bot"));
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs shrink-0"
                   >
-                    Ping Test
+                    Kiểm tra Endpoint
                   </button>
                 </div>
               </div>
@@ -773,23 +869,29 @@ export default function ZaloBotSettings() {
               </button>
             </div>
 
-            {/* Hộp quy trình 3 bước xác minh bot vào nhóm chuẩn SMLIFE Kit */}
+            {/* Hộp quy trình 3 bước mời Bot vào Nhóm Zalo & Khắc phục lỗi */}
             <div className="mb-6 rounded-2xl border border-amber-200/90 bg-amber-50/60 p-4">
               <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5 mb-2">
-                <Info size={14} className="text-amber-700" /> Quy trình 3 bước mời Bot vào Nhóm Zalo (SMLIFE Kit):
+                <Info size={14} className="text-amber-700" /> Quy trình kết nối Bot vào Nhóm & Khắc phục lỗi Bot không phản hồi:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-amber-800">
                 <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
-                  <div className="font-bold text-ueh mb-0.5">1. Mời Bot vào Nhóm</div>
-                  <p className="text-[11px] text-slate-600">Thêm Zalo OA hoặc tài khoản Bot vào nhóm Zalo của lớp/khóa.</p>
+                  <div className="font-bold text-ueh mb-0.5">1. Mời Bot & Bổ nhiệm Phó Nhóm</div>
+                  <p className="text-[11px] text-slate-600">
+                    Mời tài khoản Bot vào nhóm Zalo. <strong>Rất quan trọng:</strong> Hãy bổ nhiệm Bot làm <strong>Phó Nhóm</strong> để Zalo không chặn quyền gửi tin nhắn tự động của Bot trong nhóm.
+                  </p>
                 </div>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
-                  <div className="font-bold text-ueh mb-0.5">2. Nhắn mã xác minh</div>
-                  <p className="text-[11px] text-slate-600">Soạn tin nhắn vào nhóm: <code className="bg-amber-100 font-bold px-1 rounded">/verify #MÃ_NHÓM</code></p>
+                  <div className="font-bold text-ueh mb-0.5">2. Khai báo Webhook Callback</div>
+                  <p className="text-[11px] text-slate-600">
+                    Trên trang quản lý Bot của bạn, điền Webhook Callback trỏ về: <code className="bg-amber-100 font-bold px-1 rounded">https://tcdn4.top/api/zalo-bot</code> để khi có tin trong nhóm, Bot biết gửi về website.
+                  </p>
                 </div>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
-                  <div className="font-bold text-ueh mb-0.5">3. Tự động liên kết</div>
-                  <p className="text-[11px] text-slate-600">Bot tự khớp lệnh, nhận diện ID nhóm và bắt đầu gửi tin tự động.</p>
+                  <div className="font-bold text-ueh mb-0.5">3. Nhắn mã xác nhận liên kết</div>
+                  <p className="text-[11px] text-slate-600">
+                    Soạn vào nhóm: <code className="bg-amber-100 font-bold px-1 rounded">/verify #MÃ_NHÓM</code> (hoặc <code className="bg-amber-100 font-bold px-1 rounded">@Bot /verify #MÃ</code>). Website sẽ nhận được và phản hồi xác nhận thành công!
+                  </p>
                 </div>
               </div>
             </div>
@@ -837,7 +939,7 @@ export default function ZaloBotSettings() {
 
                       <td className="py-3 px-3 text-center">
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 size={11} /> Đã xác minh
+                          <CheckCircle2 size={11} /> {webhookUrl ? "Đã liên kết" : "Sẵn sàng"}
                         </span>
                       </td>
 
@@ -852,9 +954,7 @@ export default function ZaloBotSettings() {
                       <td className="py-3 px-3 text-right">
                         <div className="inline-flex items-center gap-2">
                           <button
-                            onClick={() => {
-                              toast.success(`Đã gửi tin thử nghiệm tới nhóm "${grp.name}"!`);
-                            }}
+                            onClick={() => handleTestSendGroup(grp)}
                             className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-200 transition-colors"
                           >
                             Bắn tin test

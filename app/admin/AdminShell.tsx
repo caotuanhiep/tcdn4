@@ -62,10 +62,10 @@ export default function AdminShell() {
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 md:flex-row">
-      {/* Sidebar */}
-      <aside className="md:w-64 md:shrink-0">
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm md:sticky md:top-24">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-3.5 sm:px-4 py-6 md:py-8 md:flex-row w-full overflow-x-hidden md:overflow-x-visible">
+      {/* Sidebar / Mobile Tabs */}
+      <aside className="w-full md:w-64 md:shrink-0">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-sm md:sticky md:top-24">
           <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trang Quản Trị</p>
@@ -80,19 +80,19 @@ export default function AdminShell() {
             </Link>
           </div>
 
-          <nav className="flex gap-1.5 md:flex-col">
+          <nav className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 md:mx-0 md:px-0 md:pb-0 md:flex-col md:overflow-visible">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold transition md:flex-none ${
+                className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all whitespace-nowrap md:w-full md:shrink ${
                   tab === id
                     ? "bg-ueh text-white shadow-xs"
-                    : "text-slate-600 hover:bg-slate-50"
+                    : "text-slate-600 hover:bg-slate-50 bg-slate-50/70 md:bg-transparent"
                 }`}
               >
                 <Icon size={16} className={tab === id ? "text-ueh-gold" : "text-slate-400"} />
-                <span className="truncate">{label}</span>
+                <span>{label}</span>
               </button>
             ))}
           </nav>

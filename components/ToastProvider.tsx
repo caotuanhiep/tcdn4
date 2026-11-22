@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
-import { CheckCircle2, AlertCircle, X } from "lucide-react";
+import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 
-type ToastType = "success" | "error";
+type ToastType = "success" | "error" | "info";
 interface ToastItem {
   id: number;
   type: ToastType;
@@ -13,6 +13,7 @@ interface ToastItem {
 interface ToastContextValue {
   success: (message: string) => void;
   error: (message: string) => void;
+  info: (message: string) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -37,6 +38,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [value] = useState<ToastContextValue>(() => ({
     success: (m) => push("success", m),
     error: (m) => push("error", m),
+    info: (m) => push("info", m),
   }));
 
   return (
@@ -50,11 +52,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg ${
               t.type === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : t.type === "info"
+                ? "border-blue-200 bg-blue-50 text-blue-800"
                 : "border-rose-200 bg-rose-50 text-rose-800"
             }`}
           >
             {t.type === "success" ? (
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            ) : t.type === "info" ? (
+              <Info size={18} className="mt-0.5 shrink-0 text-[#0068FF]" />
             ) : (
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
             )}

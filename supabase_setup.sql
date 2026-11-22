@@ -35,6 +35,20 @@ CREATE POLICY "Cho phép user sửa hồ sơ cá nhân"
 ON public.profiles FOR ALL 
 USING (auth.uid() = id);
 
+-- Policy: Cho phép Super Admin và Ban liên lạc cập nhật, phân quyền và quản lý mọi hồ sơ
+CREATE POLICY "Cho phép admin và ban liên lạc quản lý profiles" 
+ON public.profiles FOR ALL 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.role IN ('admin', 'committee')
+  )
+  OR auth.uid() IN (
+    SELECT id FROM auth.users WHERE email = 'caotuanhiep@gmail.com'
+  )
+);
+
 -- 2. TẠO BẢNG GÓC KỶ NIỆM (GALLERY)
 CREATE TABLE IF NOT EXISTS public.gallery (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

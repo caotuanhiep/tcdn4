@@ -1,9 +1,50 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { loadZaloBotConfig } from "@/app/api/settings/zalo/route";
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const challenge = searchParams.get("challenge") || searchParams.get("hub.challenge");
+
+  if (challenge) {
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  return NextResponse.json({
+    status: "ok",
+    service: "TCDN4 Zalo Bot Webhook Endpoint",
+    time: new Date().toISOString(),
+  });
+}
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+
+    // KIỂM TRA SỰ KIỆN WEBHOOK TỪ ZALO GỬI TỚI (Ví dụ user nhắn /verify #MÃ trong nhóm hoặc chat)
+    const incomingText =
+      payload?.message?.text ||
+      payload?.text ||
+      payload?.content ||
+      (typeof payload?.message === "string" ? payload.message : "");
+
+    if (typeof incomingText === "string" && incomingText.trim().toLowerCase().startsWith("/verify")) {
+      const parts = incomingText.trim().split(/\s+/);
+      const code = parts[1] || "";
+
+      return NextResponse.json({
+        success: true,
+        event: "verify_reply",
+        reply: `✅ [TCDN4 K33 Alumni Hub] Đã xác minh liên kết nhóm thành công (Mã: ${code || "Hợp lệ"})! Bot đã sẵn sàng nhận thông báo điểm danh, sinh nhật và đăng ký 15 năm từ hệ thống.`,
+        message: {
+          text: `✅ [TCDN4 K33 Alumni Hub] Đã xác minh liên kết nhóm thành công! Bot đã sẵn sàng nhận thông báo tự động từ hệ thống.`,
+        },
+      });
+    }
+
     const type = payload.type || "registration";
 
     let botMessage = "";
@@ -70,14 +111,24 @@ Thay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng pho
       botMessage = message || "Thông báo từ Ban Liên Lạc TCDN4 K33 UEH";
     }
 
-    // Gửi đến Webhook nếu có cấu hình
-    const webhookUrl = process.env.ZALO_BOT_WEBHOOK_URL;
+    // Gửi đến Webhook nếu có cấu hình (ưu tiên param gửi kèm -> biến env -> cấu hình server đã lưu)
+    const botConfig = await loadZaloBotConfig();
+    const webhookUrl = payload.webhookUrl || process.env.ZALO_BOT_WEBHOOK_URL || botConfig.webhookUrl;
+    const botToken = payload.botToken || process.env.ZALO_BOT_TOKEN || botConfig.botToken;
+
     let webhookSent = false;
+    let webhookError: string | null = null;
+
     if (webhookUrl) {
       try {
-        await fetch(webhookUrl, {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (botToken) {
+          headers["Authorization"] = `Bearer ${botToken}`;
+        }
+
+        const res = await fetch(webhookUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             type,
             title: summaryTitle,
@@ -86,9 +137,12 @@ Thay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng pho
             sentAt: new Date().toISOString(),
           }),
         });
-        webhookSent = true;
-      } catch (e) {
-        console.error("Failed to post to webhook:", e);
+        webhookSent = res.ok;
+        if (!res.ok) {
+          webhookError = `Webhook trả mã lỗi ${res.status}`;
+        }
+      } catch (e: any) {
+        webhookError = e?.message || "Lỗi kết nối webhook";
       }
     }
 
@@ -99,6 +153,8 @@ Thay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng pho
       title: summaryTitle,
       botMessage,
       webhookSent,
+      webhookError,
+      hasWebhookConfigured: Boolean(webhookUrl),
       sentAt: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }),
     });
   } catch (error: any) {

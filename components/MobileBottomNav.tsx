@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { 
   Users, 
   ImageIcon, 
@@ -14,10 +15,12 @@ import { useAuth } from "@/components/AuthProvider";
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
 export default function MobileBottomNav() {
+  const pathname = usePathname();
   const { user, openLogin, openProfile } = useAuth();
   const [activeTab, setActiveTab] = useState("directory");
 
   useEffect(() => {
+    if (pathname?.startsWith("/admin")) return;
     const handleScroll = () => {
       const scrollPos = window.scrollY + 200;
       const sections = [
@@ -48,6 +51,10 @@ export default function MobileBottomNav() {
       elem.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
 
   return (
     <>
