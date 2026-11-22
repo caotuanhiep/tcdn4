@@ -215,8 +215,10 @@ const AI_TONE_OPTIONS = [
 export default function ZaloBotSettings() {
   const toast = useToast();
 
-  // Navigation Tabs: connection | broadcast | auto | birthday | logs
-  const [activeTab, setActiveTab] = useState<"connection" | "broadcast" | "auto" | "birthday" | "logs">("connection");
+  // Navigation Tabs: broadcast | auto | birthday | logs | connection
+  const [activeTab, setActiveTab] = useState<"broadcast" | "auto" | "birthday" | "logs" | "connection">("broadcast");
+  const [isSavingAutoTemplates, setIsSavingAutoTemplates] = useState(false);
+  const [isSavingBirthdayTemplate, setIsSavingBirthdayTemplate] = useState(false);
 
   // Token & Bot Nhóm Zalo Connection
   const [botToken, setBotToken] = useState("");
@@ -489,6 +491,39 @@ export default function ZaloBotSettings() {
     setCustomChatIdInput("");
     await handleSaveGroupsToServer(updated);
     toast.success(`Đã cập nhật Chat ID cho nhóm "${editingChatIdGroup.name}"!`);
+  };
+
+  const handleSaveAutoTemplates = async () => {
+    setIsSavingAutoTemplates(true);
+    try {
+      await saveBotConfig({
+        autoCheckin,
+        autoRegistration,
+        checkinTemplate,
+        registrationTemplate,
+      });
+      toast.success("Đã lưu mẫu tin nhắn Điểm danh & Đăng ký 15 năm thành công lên máy chủ!");
+    } catch {
+      toast.error("Lỗi khi lưu cấu hình mẫu tin nhắn!");
+    } finally {
+      setIsSavingAutoTemplates(false);
+    }
+  };
+
+  const handleSaveBirthdayTemplate = async () => {
+    setIsSavingBirthdayTemplate(true);
+    try {
+      await saveBotConfig({
+        autoBirthday,
+        birthdayHour,
+        birthdayTemplate,
+      });
+      toast.success("Đã lưu cấu hình và mẫu tin nhắn sinh nhật thành công lên máy chủ!");
+    } catch {
+      toast.error("Lỗi khi lưu cấu hình sinh nhật!");
+    } finally {
+      setIsSavingBirthdayTemplate(false);
+    }
   };
 
   // Lưu toàn bộ danh sách nhóm Zalo lên máy chủ (đồng bộ ngay sang điện thoại)
@@ -779,37 +814,22 @@ export default function ZaloBotSettings() {
               <Bot size={14} className="text-ueh-orange" /> Bot Nhóm Zalo K33
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Đấu Nối Bot Nhóm Zalo & Quản Lý Nhóm
+              Quản Lý Bot Nhóm Zalo K33
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
-              Tự động hóa thông báo đến các nhóm Zalo lớp K33 (TC10, TC11, TC12, Ban Liên Lạc). Quản lý đẩy tin sự kiện, điểm danh và tích hợp AI trợ lý soạn tin dí dỏm.
+              Tự động hóa thông báo đến các nhóm Zalo lớp K33 (TC10, TC11, TC12, Ban Liên Lạc). Quản lý đăng tin sự kiện, điểm danh và kết nối AI thông minh.
             </p>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              onClick={() => handleOpenAiAssistant("broadcast")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3.5 py-2 text-xs font-bold text-ueh hover:bg-blue-100 transition-all shadow-xs"
-            >
-              <Wand2 size={14} className="text-ueh-orange" /> Trợ lý AI Viết tin
-            </button>
-            <button
-              onClick={() => setActiveTab("broadcast")}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-md shadow-blue-900/20"
-            >
-              <Plus size={15} /> + Soạn tin mới
-            </button>
           </div>
         </div>
 
-        {/* Navigation Tabs (Đã bỏ tab xem trước riêng, tích hợp trực tiếp) */}
+        {/* Navigation Tabs */}
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-5 mt-4 border-t border-slate-100">
           {[
-            { id: "connection", label: "Đấu nối Zalo & Nhóm", count: groups.length, icon: LinkIcon },
-            { id: "broadcast", label: "Đăng tin & Soạn tin", count: broadcasts.length, icon: Send },
+            { id: "broadcast", label: "Đăng tin", count: broadcasts.length, icon: Send },
             { id: "auto", label: "Điểm danh & 15 Năm", count: 2, icon: Bell },
             { id: "birthday", label: "Sinh nhật", count: birthdayMembers.length, icon: Cake },
             { id: "logs", label: "Nhật ký gửi tin", count: logs.length, icon: FileText },
+            { id: "connection", label: "Đấu nối Zalo & Nhóm", count: groups.length, icon: LinkIcon },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1228,13 +1248,13 @@ export default function ZaloBotSettings() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: ĐĂNG TIN & SOẠN TIN (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)            */}
+      {/* TAB 1: ĐĂNG TIN (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)                       */}
       {/* ========================================================================= */}
       {activeTab === "broadcast" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Cột trái: Form soạn tin & chọn nhóm */}
           <div className="lg:col-span-7 rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                   <Send size={18} className="text-ueh" /> Soạn Tin Nhắn Gửi Nhóm Zalo
@@ -1244,13 +1264,26 @@ export default function ZaloBotSettings() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleOpenAiAssistant("broadcast")}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95 transition-all"
-              >
-                <Sparkles size={13} className="text-ueh-gold" /> AI Soạn Tin
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposerTitle("");
+                    setComposerContent("");
+                    toast.info("Đã làm mới khung soạn tin!");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs"
+                >
+                  <Plus size={14} /> + Soạn tin mới
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAiAssistant("broadcast")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95 transition-all"
+                >
+                  <Sparkles size={13} className="text-ueh-gold" /> Trợ lý AI Viết tin
+                </button>
+              </div>
             </div>
 
             {/* Chọn nhóm Zalo nhận tin */}
@@ -1392,10 +1425,30 @@ export default function ZaloBotSettings() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: ĐIỂM DANH & 15 NĂM (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)            */}
+      {/* TAB 2: ĐIỂM DANH & 15 NĂM (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)            */}
       {/* ========================================================================= */}
       {activeTab === "auto" && (
         <div className="space-y-6">
+          {/* Thanh tiêu đề & Nút Lưu Cấu Hình Mẫu Tin */}
+          <div className="rounded-3xl border border-blue-200/80 bg-gradient-to-r from-blue-50/80 via-white to-sky-50/50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Bell size={18} className="text-ueh" /> Cấu Hình Mẫu Tin Điểm Danh & Đăng Ký 15 Năm
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Các mẫu tin nhắn dưới đây sẽ được Bot tự động bắn vào nhóm khi có sự kiện. Bấm nút Lưu để áp dụng.
+              </p>
+            </div>
+            <button
+              onClick={handleSaveAutoTemplates}
+              disabled={isSavingAutoTemplates}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              {isSavingAutoTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin"}</span>
+            </button>
+          </div>
+
           {/* Section 1: Thông báo Điểm danh */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
             <div className="lg:col-span-7 space-y-4">
@@ -1557,17 +1610,50 @@ export default function ZaloBotSettings() {
               )}
             </div>
           </div>
+
+          {/* Nút lưu cuối trang cho tab Điểm danh & 15 Năm */}
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleSaveAutoTemplates}
+              disabled={isSavingAutoTemplates}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
+            >
+              {isSavingAutoTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Điểm Danh & 15 Năm"}</span>
+            </button>
+          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: CHÚC MỪNG SINH NHẬT (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)           */}
+      {/* TAB 3: CHÚC MỪNG SINH NHẬT (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)           */}
       {/* ========================================================================= */}
       {activeTab === "birthday" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-7 space-y-6">
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="space-y-6">
+          {/* Thanh tiêu đề & nút Lưu mẫu tin sinh nhật */}
+          <div className="rounded-3xl border border-pink-200/80 bg-gradient-to-r from-pink-50/80 via-white to-rose-50/50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Cake size={18} className="text-pink-600" /> Cấu Hình Mẫu Tin Chúc Mừng Sinh Nhật
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Bot sẽ tự động quét danh bạ và gửi tin nhắn chúc mừng vào nhóm Zalo. Bấm nút Lưu để áp dụng.
+              </p>
+            </div>
+            <button
+              onClick={handleSaveBirthdayTemplate}
+              disabled={isSavingBirthdayTemplate}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              {isSavingBirthdayTemplate ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              <span>{isSavingBirthdayTemplate ? "Đang lưu..." : "Lưu Cấu Hình Sinh Nhật"}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="lg:col-span-7 space-y-6">
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                     <Cake size={18} className="text-pink-500" /> Tự Động Chúc Mừng Sinh Nhật
@@ -1672,7 +1758,20 @@ export default function ZaloBotSettings() {
             )}
           </div>
         </div>
-      )}
+
+        {/* Nút lưu cuối trang cho tab Sinh nhật */}
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={handleSaveBirthdayTemplate}
+            disabled={isSavingBirthdayTemplate}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
+          >
+            {isSavingBirthdayTemplate ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            <span>{isSavingBirthdayTemplate ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Sinh Nhật"}</span>
+          </button>
+        </div>
+      </div>
+    )}
 
       {/* ========================================================================= */}
       {/* TAB 5: NHẬT KÝ GỬI TIN                                                    */}
