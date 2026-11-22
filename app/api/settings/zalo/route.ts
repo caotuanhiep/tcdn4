@@ -15,6 +15,21 @@ const NO_STORE_HEADERS = {
   Expires: "0",
 };
 
+export interface ZaloGroupConfigItem {
+  id: string;
+  name: string;
+  link?: string;
+  verifyCode: string;
+  chatId?: string;
+  status: "verified" | "pending";
+  isDefault: boolean;
+  receiveCheckin: boolean;
+  receiveRegistration: boolean;
+  receiveBirthday: boolean;
+  createdAt: string;
+  verifiedAt?: string;
+}
+
 export interface ZaloBotConfig {
   botToken: string;
   webhookUrl: string;
@@ -28,7 +43,7 @@ export interface ZaloBotConfig {
   checkinTemplate?: string;
   registrationTemplate?: string;
   birthdayTemplate?: string;
-  groups?: any[];
+  groups?: ZaloGroupConfigItem[];
   updatedAt?: number;
   updatedBy?: string;
 }
@@ -120,34 +135,85 @@ function getStorageClient(req?: NextRequest): SupabaseClient {
 }
 
 export async function loadZaloBotConfig(): Promise<ZaloBotConfig> {
+  let localConfig: ZaloBotConfig | null = null;
+  let remoteConfig: ZaloBotConfig | null = null;
+
+  try {
+    if (fs.existsSync(LOCAL_CONFIG_PATH)) {
+      localConfig = JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
+    }
+  } catch {}
+
   const supabase = getStorageClient();
   try {
     const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(CONFIG_PATH);
     if (pub?.publicUrl) {
       const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
-        const parsed = JSON.parse(await res.text());
-        return { ...DEFAULT_ZALO_CONFIG, ...parsed };
+        remoteConfig = JSON.parse(await res.text());
       }
     }
   } catch {}
 
+  if (!remoteConfig) {
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET_NAME).download(CONFIG_PATH);
+      if (!error && data) {
+        remoteConfig = JSON.parse(await data.text());
+      }
+    } catch {}
+  }
+
+  let chosen = DEFAULT_ZALO_CONFIG;
+  if (localConfig && remoteConfig) {
+    const localTime = localConfig.updatedAt || 0;
+    const remoteTime = remoteConfig.updatedAt || 0;
+    chosen =
+      localTime >= remoteTime
+        ? { ...DEFAULT_ZALO_CONFIG, ...remoteConfig, ...localConfig }
+        : { ...DEFAULT_ZALO_CONFIG, ...localConfig, ...remoteConfig };
+  } else if (localConfig) {
+    chosen = { ...DEFAULT_ZALO_CONFIG, ...localConfig };
+  } else if (remoteConfig) {
+    chosen = { ...DEFAULT_ZALO_CONFIG, ...remoteConfig };
+  }
+
+  return chosen;
+}
+
+export async function saveZaloBotConfig(
+  patch: Partial<ZaloBotConfig>,
+  userEmail?: string,
+  req?: NextRequest
+): Promise<{ success: boolean; config: ZaloBotConfig; cloudSynced: boolean }> {
+  const current = await loadZaloBotConfig();
+  const updated: ZaloBotConfig = {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+    updatedBy: userEmail || current.updatedBy || "system",
+  };
+
+  const json = JSON.stringify(updated, null, 2);
+
+  let cloudOk = false;
   try {
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(CONFIG_PATH);
-    if (!error && data) {
-      const parsed = JSON.parse(await data.text());
-      return { ...DEFAULT_ZALO_CONFIG, ...parsed };
-    }
+    const supabase = getStorageClient(req);
+    const { error } = await supabase.storage.from(BUCKET_NAME).upload(CONFIG_PATH, Buffer.from(json, "utf-8"), {
+      contentType: "application/json; charset=utf-8",
+      upsert: true,
+      cacheControl: "0",
+    });
+    if (!error) cloudOk = true;
   } catch {}
 
   try {
-    if (fs.existsSync(LOCAL_CONFIG_PATH)) {
-      const parsed = JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
-      return { ...DEFAULT_ZALO_CONFIG, ...parsed };
-    }
+    const dir = path.dirname(LOCAL_CONFIG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(LOCAL_CONFIG_PATH, json, "utf-8");
   } catch {}
 
-  return DEFAULT_ZALO_CONFIG;
+  return { success: true, config: updated, cloudSynced: cloudOk };
 }
 
 // GET /api/settings/zalo - Lấy cấu hình Bot Nhóm Zalo
@@ -178,32 +244,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Dữ liệu JSON không hợp lệ" }, { status: 400 });
   }
 
-  const current = await loadZaloBotConfig();
-  const updated: ZaloBotConfig = {
-    ...current,
-    ...body,
-    updatedAt: Date.now(),
-    updatedBy: auth.user.email || auth.user.id,
-  };
-
-  const json = JSON.stringify(updated, null, 2);
-
-  let cloudOk = false;
-  try {
-    const supabase = getStorageClient(req);
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(CONFIG_PATH, Buffer.from(json, "utf-8"), {
-      contentType: "application/json; charset=utf-8",
-      upsert: true,
-      cacheControl: "0",
-    });
-    if (!error) cloudOk = true;
-  } catch {}
-
-  try {
-    const dir = path.dirname(LOCAL_CONFIG_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(LOCAL_CONFIG_PATH, json, "utf-8");
-  } catch {}
+  const { config: updated, cloudSynced: cloudOk } = await saveZaloBotConfig(
+    body,
+    auth.user.email || auth.user.id,
+    req
+  );
 
   return NextResponse.json(
     {

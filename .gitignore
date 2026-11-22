@@ -42,3 +42,5 @@ next-env.d.ts
 
 # C?u hình runtime ghi b?i API khi ch?y local (ngu?n chu?n n?m trên Supabase Storage)
 /data/bank-config.json
+/data/zalo-webhook-logs.json
+/data/zalo-bot-config.json
