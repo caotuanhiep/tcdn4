@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loadZaloBotConfig } from "@/app/api/settings/zalo/route";
 
 interface AiWriterRequest {
   topic?: string;
@@ -44,16 +45,30 @@ export async function POST(req: NextRequest) {
     const body: AiWriterRequest = await req.json();
     const { topic = "", tone = "funny", memberName, className, details, apiKey } = body;
 
-    // Nếu người dùng cung cấp Gemini API Key hoặc đã có trong ENV
-    const activeGeminiKey = apiKey || process.env.GEMINI_API_KEY;
+    // Lấy API Key từ body gửi lên, hoặc từ cấu hình lưu trên server, hoặc từ env
+    const savedConfig = await loadZaloBotConfig();
+    const activeKey =
+      apiKey ||
+      savedConfig.aiApiKey ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.CLAUDE_API_KEY ||
+      process.env.GEMINI_API_KEY;
 
-    if (activeGeminiKey) {
-      try {
-        const prompt = `Bạn là một chuyên gia truyền thông và là cựu sinh viên lớp Tài chính doanh nghiệp 4 (TCDN4), Khóa 33 (K33) Đại học Kinh tế TP.HCM (UEH).
+    const prompt = `Bạn là một chuyên gia truyền thông và là cựu sinh viên lớp Tài chính doanh nghiệp 4 (TCDN4), Khóa 33 (K33) Đại học Kinh tế TP.HCM (UEH).
 Hãy viết một mẩu tin nhắn ngắn gọn (khoảng 3 - 6 câu), dí dỏm, thân tình, có icon emoji sinh động, dùng để gửi vào Nhóm Zalo của lớp/khóa.
 Thông tin:
 - Chủ đề/Ý tưởng: "${topic || "Nhắc họp mặt 15 năm ngày 12/12/2026 tại Cơ sở B và chốt size áo"}"
-- Phong cách viết: ${tone === "funny" ? "Hài hước, dí dỏm, đậm chất sinh viên UEH" : tone === "warm" ? "Ấm áp, xúc động, hoài niệm 15 năm thanh xuân" : tone === "urgent" ? "Giục giã, hào hứng, chốt sổ gấp" : tone === "birthday" ? "Chúc mừng sinh nhật thân tình, hài hước, tuổi 36-37" : "Trang trọng, thông báo chính thức BLL"}
+- Phong cách viết: ${
+      tone === "funny"
+        ? "Hài hước, dí dỏm, đậm chất sinh viên UEH"
+        : tone === "warm"
+        ? "Ấm áp, xúc động, hoài niệm 15 năm thanh xuân"
+        : tone === "urgent"
+        ? "Giục giã, hào hứng, chốt sổ gấp"
+        : tone === "birthday"
+        ? "Chúc mừng sinh nhật thân tình, hài hước, tuổi 36-37"
+        : "Trang trọng, thông báo chính thức BLL"
+    }
 ${memberName ? `- Tên thành viên: ${memberName}` : ""}
 ${className ? `- Lớp: ${className}` : ""}
 ${details ? `- Chi tiết thêm: ${details}` : ""}
@@ -62,34 +77,77 @@ Quy tắc:
 - Không dùng từ ngữ sáo rỗng. Hãy gần gũi như đồng môn nói chuyện với nhau.
 - Chỉ trả về duy nhất nội dung tin nhắn, không thêm lời dẫn hay giải thích.`;
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeGeminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-            }),
-          }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (generated && generated.trim().length > 10) {
-            return NextResponse.json({
-              success: true,
-              content: generated.trim(),
-              provider: "gemini",
+    if (activeKey) {
+      // 1. NẾU LÀ KHÓA CLAUDE (Bắt đầu bằng sk-ant... hoặc dạng khóa thông thường)
+      const isClaudeKey = activeKey.startsWith("sk-ant") || (!activeKey.startsWith("AIza") && activeKey.startsWith("sk-"));
+      if (isClaudeKey || activeKey.startsWith("sk-ant")) {
+        try {
+          const claudeModels = ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
+          for (const model of claudeModels) {
+            const res = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": activeKey,
+                "anthropic-version": "2023-06-01",
+              },
+              body: JSON.stringify({
+                model,
+                max_tokens: 1024,
+                messages: [{ role: "user", content: prompt }],
+              }),
             });
+
+            if (res.ok) {
+              const data = await res.json();
+              const generated = data?.content?.[0]?.text;
+              if (generated && generated.trim().length > 10) {
+                return NextResponse.json({
+                  success: true,
+                  content: generated.trim(),
+                  provider: "claude",
+                  model,
+                });
+              }
+            }
           }
+        } catch (e) {
+          console.warn("Claude API call failed:", e);
         }
-      } catch (e) {
-        console.warn("Gemini API call failed, falling back to built-in synthesizer:", e);
+      }
+
+      // 2. NẾU LÀ KHÓA GEMINI (Bắt đầu bằng AIza...)
+      if (activeKey.startsWith("AIza") || (!isClaudeKey && !activeKey.startsWith("sk-ant"))) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+              }),
+            }
+          );
+
+          if (res.ok) {
+            const data = await res.json();
+            const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (generated && generated.trim().length > 10) {
+              return NextResponse.json({
+                success: true,
+                content: generated.trim(),
+                provider: "gemini",
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Gemini API call failed:", e);
+        }
       }
     }
 
-    // Fallback: Sử dụng bộ máy AI tổng hợp thông minh nội bộ K33
+    // 3. Fallback: Sử dụng bộ máy AI tổng hợp thông minh nội bộ K33
     const synthFn = SYNTHESIZERS[tone] || SYNTHESIZERS.funny;
     const variants = synthFn(topic, memberName, className);
     const chosen = variants[Math.floor(Math.random() * variants.length)];

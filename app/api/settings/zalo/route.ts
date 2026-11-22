@@ -20,6 +20,7 @@ export interface ZaloBotConfig {
   webhookUrl: string;
   botName: string;
   isTokenValid: boolean;
+  aiApiKey?: string;
   autoCheckin?: boolean;
   autoRegistration?: boolean;
   autoBirthday?: boolean;
@@ -37,6 +38,69 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
   webhookUrl: "",
   botName: "TCDN4 K33 Bot",
   isTokenValid: true,
+  aiApiKey: "",
+  groups: [
+    {
+      id: "grp-all",
+      name: "TCDN4 - Toàn Khóa K33",
+      link: "https://zalo.me/g/yodibu606",
+      verifyCode: "#TCDN4-ALL",
+      status: "verified",
+      isDefault: true,
+      receiveCheckin: true,
+      receiveRegistration: true,
+      receiveBirthday: true,
+      createdAt: "18/11/2026",
+    },
+    {
+      id: "grp-tc10",
+      name: "Lớp TC10 - K33 UEH",
+      link: "",
+      verifyCode: "#TCDN4-TC10",
+      status: "verified",
+      isDefault: false,
+      receiveCheckin: true,
+      receiveRegistration: true,
+      receiveBirthday: true,
+      createdAt: "18/11/2026",
+    },
+    {
+      id: "grp-tc11",
+      name: "Lớp TC11 - K33 UEH",
+      link: "",
+      verifyCode: "#TCDN4-TC11",
+      status: "verified",
+      isDefault: false,
+      receiveCheckin: true,
+      receiveRegistration: true,
+      receiveBirthday: true,
+      createdAt: "18/11/2026",
+    },
+    {
+      id: "grp-tc12",
+      name: "Lớp TC12 - K33 UEH",
+      link: "",
+      verifyCode: "#TCDN4-TC12",
+      status: "verified",
+      isDefault: false,
+      receiveCheckin: true,
+      receiveRegistration: true,
+      receiveBirthday: true,
+      createdAt: "18/11/2026",
+    },
+    {
+      id: "grp-bll",
+      name: "Ban Liên Lạc & Tổ Hậu Cần",
+      link: "",
+      verifyCode: "#TCDN4-BLL",
+      status: "verified",
+      isDefault: false,
+      receiveCheckin: false,
+      receiveRegistration: true,
+      receiveBirthday: false,
+      createdAt: "18/11/2026",
+    },
+  ],
 };
 
 function getStorageClient(req?: NextRequest): SupabaseClient {

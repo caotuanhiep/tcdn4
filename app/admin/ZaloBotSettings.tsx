@@ -36,7 +36,8 @@ import {
   Shield, 
   Info,
   ChevronRight,
-  Settings
+  Settings,
+  Save
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
@@ -221,7 +222,8 @@ export default function ZaloBotSettings() {
   const [botName, setBotName] = useState("TCDN4 K33 Bot");
   const [isTokenValid, setIsTokenValid] = useState(true);
   const [isCheckingToken, setIsCheckingToken] = useState(false);
-  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [isSavingGroups, setIsSavingGroups] = useState(false);
 
   // Groups Management (SMLIFE Kit Model)
   const [groups, setGroups] = useState<ZaloGroupItem[]>(INITIAL_GROUPS);
@@ -288,7 +290,7 @@ export default function ZaloBotSettings() {
         if (p.checkinTemplate) setCheckinTemplate(p.checkinTemplate);
         if (p.registrationTemplate) setRegistrationTemplate(p.registrationTemplate);
         if (p.birthdayTemplate) setBirthdayTemplate(p.birthdayTemplate);
-        if (p.geminiApiKey) setGeminiApiKey(p.geminiApiKey);
+        if (p.aiApiKey || p.claudeApiKey || p.geminiApiKey) setClaudeApiKey(p.aiApiKey || p.claudeApiKey || p.geminiApiKey);
       }
 
       const savedGroups = localStorage.getItem("tcdn4_zalo_groups");
@@ -301,14 +303,21 @@ export default function ZaloBotSettings() {
       if (savedLogs) setLogs(JSON.parse(savedLogs));
     } catch {}
 
-    // Tải cấu hình từ server (đã lưu tập trung trên Supabase Storage)
-    fetch("/api/settings/zalo")
+    // Tải cấu hình và danh sách nhóm từ server (đã lưu tập trung trên Supabase Storage)
+    fetch("/api/settings/zalo", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.success && d.config) {
           if (d.config.botToken) setBotToken(d.config.botToken);
           if (d.config.webhookUrl) setWebhookUrl(d.config.webhookUrl);
           if (d.config.botName) setBotName(d.config.botName);
+          if (d.config.aiApiKey) setClaudeApiKey(d.config.aiApiKey);
+          if (Array.isArray(d.config.groups) && d.config.groups.length > 0) {
+            setGroups(d.config.groups);
+            try {
+              localStorage.setItem("tcdn4_zalo_groups", JSON.stringify(d.config.groups));
+            } catch {}
+          }
         }
       })
       .catch(() => {});
@@ -425,8 +434,46 @@ export default function ZaloBotSettings() {
     }
   };
 
+  // Lưu toàn bộ danh sách nhóm Zalo lên máy chủ (đồng bộ ngay sang điện thoại)
+  const handleSaveGroupsToServer = async (groupsToSave?: ZaloGroupItem[]) => {
+    const list = groupsToSave || groups;
+    setIsSavingGroups(true);
+    try {
+      const res = await fetch("/api/settings/zalo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groups: list }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Lỗi lưu danh sách nhóm");
+      }
+      try {
+        localStorage.setItem("tcdn4_zalo_groups", JSON.stringify(list));
+      } catch {}
+      toast.success("Đã đồng bộ danh sách nhóm Zalo lên máy chủ! Mở trên điện thoại sẽ thấy ngay.");
+    } catch (err: any) {
+      toast.error("Không thể lưu lên máy chủ: " + (err?.message || "Lỗi mạng"));
+    } finally {
+      setIsSavingGroups(false);
+    }
+  };
+
+  // Bật/tắt phân loại nhận tin cho từng nhóm (Điểm danh / 15 Năm / Sinh nhật)
+  const handleToggleGroupPermission = async (
+    groupId: string,
+    field: "receiveCheckin" | "receiveRegistration" | "receiveBirthday"
+  ) => {
+    const updated = groups.map((g) => (g.id === groupId ? { ...g, [field]: !g[field] } : g));
+    setGroups(updated);
+    try {
+      localStorage.setItem("tcdn4_zalo_groups", JSON.stringify(updated));
+    } catch {}
+    await handleSaveGroupsToServer(updated);
+  };
+
   // Add group
-  const handleAddGroup = (e: React.FormEvent) => {
+  const handleAddGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) {
       toast.error("Vui lòng nhập tên nhóm Zalo!");
@@ -449,24 +496,20 @@ export default function ZaloBotSettings() {
 
     const updated = [...groups, newGrp];
     setGroups(updated);
-    try {
-      localStorage.setItem("tcdn4_zalo_groups", JSON.stringify(updated));
-    } catch {}
-
     setNewGroupName("");
     setNewGroupLink("");
     setIsAddGroupModalOpen(false);
-    toast.success(`Đã thêm nhóm "${newGrp.name}" thành công!`);
+
+    toast.success(`Đã thêm nhóm "${newGrp.name}"!`);
+    await handleSaveGroupsToServer(updated);
   };
 
-  const handleDeleteGroup = (id: string) => {
+  const handleDeleteGroup = async (id: string) => {
     if (confirm("Bạn có chắc chắn muốn xóa nhóm này khỏi danh sách nhận tin?")) {
       const updated = groups.filter((g) => g.id !== id);
       setGroups(updated);
-      try {
-        localStorage.setItem("tcdn4_zalo_groups", JSON.stringify(updated));
-      } catch {}
       toast.success("Đã xóa nhóm!");
+      await handleSaveGroupsToServer(updated);
     }
   };
 
@@ -499,13 +542,15 @@ export default function ZaloBotSettings() {
         body: JSON.stringify({
           topic: aiTopic.trim(),
           tone: aiTone,
-          apiKey: geminiApiKey.trim() || undefined,
+          apiKey: claudeApiKey.trim() || undefined,
         }),
       });
       const data = await res.json();
       if (data.success && data.content) {
         setAiGeneratedResult(data.content);
-        toast.success("AI đã tạo nội dung thành công!");
+        const engineLabel =
+          data.provider === "claude" ? "Claude AI" : data.provider === "gemini" ? "Gemini AI" : "K33 Engine";
+        toast.success(`Trợ lý ${engineLabel} đã tạo nội dung thành công!`);
       } else {
         toast.error("Không thể tạo nội dung, vui lòng thử lại!");
       }
@@ -857,16 +902,27 @@ export default function ZaloBotSettings() {
                   <Users size={18} className="text-ueh" /> Danh Sách Nhóm Zalo & Mã Mời Bot
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tạo nhóm Zalo cho bot nằm vào. Mỗi nhóm có 1 mã xác minh riêng để mời bot vào và nhận thông báo.
+                  Quản lý các nhóm Zalo nhận thông báo tự động. Dữ liệu được đồng bộ tức thời giữa máy tính và điện thoại.
                 </p>
               </div>
 
-              <button
-                onClick={() => setIsAddGroupModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-3.5 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-xs self-start sm:self-auto"
-              >
-                <Plus size={14} /> + Thêm Nhóm Zalo Mới
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  onClick={() => handleSaveGroupsToServer()}
+                  disabled={isSavingGroups}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-all shadow-xs"
+                  title="Lưu danh sách nhóm lên máy chủ để đồng bộ sang điện thoại"
+                >
+                  <Save size={14} />
+                  <span>{isSavingGroups ? "Đang đồng bộ..." : "Lưu Cấu Hình Nhóm"}</span>
+                </button>
+                <button
+                  onClick={() => setIsAddGroupModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-3.5 py-2 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-xs"
+                >
+                  <Plus size={14} /> + Thêm Nhóm Zalo Mới
+                </button>
+              </div>
             </div>
 
             {/* Hộp quy trình 3 bước mời Bot vào Nhóm Zalo & Khắc phục lỗi */}
@@ -944,10 +1000,43 @@ export default function ZaloBotSettings() {
                       </td>
 
                       <td className="py-3 px-3 text-center">
-                        <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${grp.receiveCheckin ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-400"}`}>Điểm danh</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${grp.receiveRegistration ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-400"}`}>15 Năm</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${grp.receiveBirthday ? "bg-pink-100 text-pink-800" : "bg-slate-100 text-slate-400"}`}>Sinh nhật</span>
+                        <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGroupPermission(grp.id, "receiveCheckin")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              grp.receiveCheckin
+                                ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                            }`}
+                            title="Bấm để bật/tắt nhận tin Điểm danh"
+                          >
+                            {grp.receiveCheckin ? "✓ Điểm danh" : "✕ Điểm danh"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGroupPermission(grp.id, "receiveRegistration")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              grp.receiveRegistration
+                                ? "bg-orange-100 text-orange-800 hover:bg-orange-200"
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                            }`}
+                            title="Bấm để bật/tắt nhận tin Đăng ký 15 Năm"
+                          >
+                            {grp.receiveRegistration ? "✓ 15 Năm" : "✕ 15 Năm"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGroupPermission(grp.id, "receiveBirthday")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              grp.receiveBirthday
+                                ? "bg-pink-100 text-pink-800 hover:bg-pink-200"
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                            }`}
+                            title="Bấm để bật/tắt nhận tin Sinh nhật"
+                          >
+                            {grp.receiveBirthday ? "✓ Sinh nhật" : "✕ Sinh nhật"}
+                          </button>
                         </div>
                       </td>
 
@@ -977,33 +1066,40 @@ export default function ZaloBotSettings() {
             </div>
           </div>
 
-          {/* Card 3: Khóa API AI (Tùy chọn nâng cao) */}
+          {/* Card 3: Cấu Hình Khóa API Claude (Anthropic AI) */}
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
             <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2 mb-1">
-              <Wand2 size={18} className="text-ueh-orange" /> Cấu Hình Khóa API AI (Tùy Chọn)
+              <Wand2 size={18} className="text-ueh-orange" /> Cấu Hình Khóa API Claude (Anthropic AI)
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Mặc định hệ thống đã tích hợp sẵn bộ máy AI K33 dí dỏm. Bạn có thể dán thêm Google Gemini API Key để kích hoạt khả năng viết siêu thông minh.
+              Mặc định hệ thống đã tích hợp sẵn bộ máy K33 dí dỏm. Dán Anthropic Claude API Key (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-mono text-purple-700 font-bold">sk-ant-...</code>) để kích hoạt trí tuệ nhân tạo Claude soạn tin nhắn sắc sảo, tự nhiên và thông minh nhất.
             </p>
 
             <div className="flex gap-2 max-w-xl">
               <input
                 type="password"
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="Dán Gemini API Key (AIzaSy...)"
+                value={claudeApiKey}
+                onChange={(e) => setClaudeApiKey(e.target.value)}
+                placeholder="Dán Anthropic Claude API Key (sk-ant-api...)"
                 className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-mono focus:border-ueh focus:outline-none"
               />
               <button
-                onClick={() => {
-                  saveBotConfig({ geminiApiKey: geminiApiKey.trim() });
-                  toast.success("Đã lưu khóa API AI!");
+                onClick={async () => {
+                  if (!claudeApiKey.trim()) {
+                    toast.error("Vui lòng nhập API Key của Claude!");
+                    return;
+                  }
+                  await saveBotConfig({ aiApiKey: claudeApiKey.trim() });
+                  toast.success("Đã lưu khóa Claude API lên máy chủ! Dùng chung cho cả máy tính & điện thoại.");
                 }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 shrink-0"
               >
                 Lưu Khóa
               </button>
             </div>
+            <p className="text-[11px] text-slate-400 mt-2">
+              Khóa API được lưu tập trung trên máy chủ, khi bạn mở trên điện thoại sẽ tự động có hiệu lực ngay mà không cần nhập lại.
+            </p>
           </div>
         </div>
       )}
