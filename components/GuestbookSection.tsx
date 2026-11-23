@@ -92,7 +92,23 @@ export default function GuestbookSection() {
       }
       if (Array.isArray(data.messages)) setMessages(data.messages);
       broadcastDataUpdate("guestbook");
-      toast.success("Đã ghi lời nhắn vào sổ lưu bút thành công!");
+
+      // Đẩy lời nhắn mới từ Sổ Lưu Bút sang nhóm Zalo
+      try {
+        void fetch("/api/zalo-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "guestbook",
+            fromDecline: false,
+            fullName: name.trim(),
+            className,
+            message: message.trim(),
+          }),
+        });
+      } catch {}
+
+      toast.success("Đã ghi lời nhắn vào sổ lưu bút và chia sẻ tới nhóm Zalo!");
       setMessage("");
     } catch {
       toast.error("Lỗi kết nối máy chủ, vui lòng thử lại!");

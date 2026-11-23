@@ -379,16 +379,34 @@ export default function ProfileModal({
       });
 
       if (guestbookMessage.trim()) {
+        const trimmedWish = guestbookMessage.trim();
         try {
           await authFetch("/api/guestbook", {
             method: "POST",
             body: JSON.stringify({
               name: fullName.trim() || "Thành viên K33",
               className,
-              message: guestbookMessage.trim(),
+              message: trimmedWish,
             }),
           });
           broadcastDataUpdate("guestbook");
+        } catch {}
+
+        // Đẩy luôn lời nhắn lưu bút của thành viên không đi được sang nhóm Zalo
+        try {
+          await fetch("/api/zalo-bot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "guestbook",
+              fromDecline: true,
+              fullName: fullName.trim() || "Thành viên K33",
+              className,
+              message: trimmedWish,
+              shirtSize: deliveryAddress.trim() ? shirtSize : "",
+              deliveryAddress: deliveryAddress.trim(),
+            }),
+          });
         } catch {}
       }
 

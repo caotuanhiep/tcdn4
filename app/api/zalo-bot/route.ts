@@ -909,7 +909,39 @@ export async function POST(request: Request) {
       }
     }
 
-    // LUỒNG 5: PHÁT LOA / SOẠN TIN TỨC THÌ (BROADCAST)
+    // LUỒNG 5: LỜI NHẮN SỔ LƯU BÚT (TỪ THÀNH VIÊN KHÔNG THAM GIA TRỰC TIẾP HOẶC GỬI TRÊN SỔ LƯU BÚT)
+    else if (type === "guestbook") {
+      const { fullName, className, message, fromDecline, shirtSize, deliveryAddress } = payload;
+      const cleanMsg = String(message || "").trim();
+      const sender = fullName || "Đồng môn K33";
+      const cls = className || "K33";
+
+      summaryTitle = `Lưu bút mới: ${sender} (${cls})`;
+
+      if (fromDecline) {
+        const shirtLine =
+          deliveryAddress && String(deliveryAddress).trim()
+            ? `\n👕 Đăng ký ship áo Polo size ${shirtSize || "L (Nam)"} về: ${String(deliveryAddress).trim()}`
+            : "";
+
+        botMessage =
+          `💌 [LỜI NHẮN TỪ PHƯƠNG XA - SỔ LƯU BÚT TCDN4]\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 ${sender} (${cls}) rất tiếc chưa thể về dự trực tiếp ngày 12/12, nhưng gửi lời nhắn thân thương tới đại gia đình K33:\n\n` +
+          `"${cleanMsg}"${shirtLine}\n\n` +
+          `❤️ Dù ở xa nhưng tình đồng môn TCDN4 vẫn luôn gần kề!\n` +
+          `👉 Xem & thả tim Sổ Lưu Bút tại: https://tcdn4.top/#guestbook`;
+      } else {
+        botMessage =
+          `💌 [LƯU BÚT MỚI TCDN4 - K33 UEH]\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 ${sender} (${cls}) vừa gửi tâm tình lên Sổ Lưu Bút 15 Năm:\n\n` +
+          `"${cleanMsg}"\n\n` +
+          `👉 Vào đọc & gửi lời chúc cùng cả lớp tại: https://tcdn4.top/#guestbook`;
+      }
+    }
+
+    // LUỒNG 6: PHÁT LOA / SOẠN TIN TỨC THÌ (BROADCAST)
     else if (type === "broadcast") {
       const { title, message } = payload;
       summaryTitle = title || "Thông báo từ Ban Liên Lạc";
@@ -941,6 +973,8 @@ export async function POST(request: Request) {
         } else if (type === "registration" && grp.receiveRegistration !== false) {
           targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
         } else if (type === "checkin" && grp.receiveCheckin !== false) {
+          targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
+        } else if (type === "guestbook" && (grp.receiveRegistration !== false || grp.receiveCheckin !== false)) {
           targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
         } else if (type === "birthday" && grp.receiveBirthday !== false) {
           targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
