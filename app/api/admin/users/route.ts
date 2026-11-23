@@ -3,6 +3,7 @@ import { getServerSupabase, requireAdmin } from "@/lib/supabase/requestAuth";
 import {
   NO_CACHE_HEADERS,
   removeRegistrationFromManifest,
+  removeZaloCheckinRecords,
   syncProfileToRegistrations,
 } from "@/lib/alumni-server";
 import type { Profile } from "@/types/database";
@@ -184,7 +185,7 @@ export async function DELETE(req: NextRequest) {
       .from("profiles")
       .delete()
       .eq("id", id)
-      .select("id")
+      .select("id, phone, full_name")
       .maybeSingle();
 
     if (error) {
@@ -205,9 +206,12 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Xóa luôn phiếu đăng ký sự kiện của thành viên này nếu có
+    // Xóa luôn phiếu đăng ký sự kiện (theo cả ID & SĐT) và dấu vết chống trùng Zalo của thành viên này
     try {
-      await removeRegistrationFromManifest(id, supabase);
+      await Promise.all([
+        removeRegistrationFromManifest(id, supabase, data.phone),
+        removeZaloCheckinRecords({ id: data.id, phone: data.phone, fullName: data.full_name }, supabase),
+      ]);
     } catch {}
 
     return NextResponse.json(

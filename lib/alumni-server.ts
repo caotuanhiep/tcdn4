@@ -361,17 +361,71 @@ export async function syncProfileToRegistrations(
 }
 
 /**
- * Xóa phiếu đăng ký khỏi manifest theo ID (khi Admin xóa thành viên hoặc xóa phiếu đăng ký).
+ * Xóa phiếu đăng ký khỏi manifest theo ID hoặc SĐT (khi Admin xóa thành viên hoặc xóa phiếu đăng ký).
  */
 export async function removeRegistrationFromManifest(
   id: string,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  phone?: string | null
 ): Promise<{ ok: boolean; error?: string; registrations: RegistrationItem[] }> {
   const manifest = await loadManifestRegistrations(client);
   const targetId = id.toLowerCase();
-  const next = manifest.filter((item) => (item.id || "").toLowerCase() !== targetId);
+  const targetPhone = cleanPhoneDigits(phone);
+
+  const next = manifest.filter((item) => {
+    if ((item.id || "").toLowerCase() === targetId) return false;
+    if (targetPhone.length >= 9 && cleanPhoneDigits(item.phone) === targetPhone) return false;
+    return true;
+  });
+
   const saved = await saveManifestRegistrations(next, client);
   return { ok: saved.ok, error: saved.error, registrations: next };
+}
+
+const ZALO_CHECKINS_PATH = "settings/zalo-checkins.json";
+
+/**
+ * Xóa dấu vết đã báo Zalo điểm danh của thành viên (dùng khi Admin xóa thành viên để tạo lại / test lại).
+ */
+export async function removeZaloCheckinRecords(
+  info: { id?: string | null; phone?: string | null; fullName?: string | null },
+  client?: SupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdmin();
+  let list: string[] = [];
+
+  try {
+    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(ZALO_CHECKINS_PATH);
+    if (pub?.publicUrl) {
+      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const parsed = JSON.parse(await res.text());
+        if (Array.isArray(parsed)) list = parsed;
+      }
+    }
+  } catch {}
+
+  if (list.length === 0) return;
+
+  const keysToRemove = new Set<string>();
+  if (info.id) keysToRemove.add(`user_${info.id}`);
+  const digits = cleanPhoneDigits(info.phone);
+  if (digits) keysToRemove.add(`phone_${digits}`);
+  const cleanName = (info.fullName || "").toLowerCase().trim();
+  if (cleanName) keysToRemove.add(`name_${cleanName}`);
+
+  const next = list.filter((k) => !keysToRemove.has(k));
+  if (next.length === list.length) return;
+
+  try {
+    await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(ZALO_CHECKINS_PATH, Buffer.from(JSON.stringify(next, null, 2), "utf-8"), {
+        contentType: "application/json; charset=utf-8",
+        upsert: true,
+        cacheControl: "0",
+      });
+  } catch {}
 }
 
 /**

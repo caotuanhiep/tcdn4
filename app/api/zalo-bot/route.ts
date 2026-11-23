@@ -10,15 +10,8 @@ const CLOUD_WEBHOOK_LOGS_PATH = "settings/zalo-webhook-logs.json";
 const CHECKINS_PATH = "settings/zalo-checkins.json";
 const LOCAL_CHECKINS_PATH = path.join(process.cwd(), "data", "zalo-checkins.json");
 
-// Đọc danh sách định danh các thành viên đã gửi thông báo điểm danh Zalo
+// Đọc danh sách định danh các thành viên đã gửi thông báo điểm danh Zalo (ưu tiên Cloud Storage)
 async function loadCheckins(): Promise<string[]> {
-  try {
-    if (fs.existsSync(LOCAL_CHECKINS_PATH)) {
-      const data = JSON.parse(fs.readFileSync(LOCAL_CHECKINS_PATH, "utf-8"));
-      if (Array.isArray(data)) return data;
-    }
-  } catch {}
-
   try {
     const supabase = getSupabaseAdmin();
     const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(CHECKINS_PATH);
@@ -28,6 +21,13 @@ async function loadCheckins(): Promise<string[]> {
         const parsed = JSON.parse(await res.text());
         if (Array.isArray(parsed)) return parsed;
       }
+    }
+  } catch {}
+
+  try {
+    if (fs.existsSync(LOCAL_CHECKINS_PATH)) {
+      const data = JSON.parse(fs.readFileSync(LOCAL_CHECKINS_PATH, "utf-8"));
+      if (Array.isArray(data)) return data;
     }
   } catch {}
 
@@ -57,7 +57,7 @@ async function markCheckedIn(identifiers: string[]): Promise<void> {
     await supabase.storage.from("alumni-media").upload(
       CHECKINS_PATH,
       Buffer.from(JSON.stringify(list, null, 2), "utf-8"),
-      { contentType: "application/json", upsert: true }
+      { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
     );
   } catch {}
 }
