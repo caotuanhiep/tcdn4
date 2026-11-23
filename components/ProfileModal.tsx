@@ -1,39 +1,29 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { 
-  User, 
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
   Camera,
-  Calendar, 
-  Briefcase, 
-  Building, 
-  MapPin, 
-  Phone, 
-  X, 
-  Check, 
+  MapPin,
+  X,
+  Check,
   Sparkles,
-  Cake,
   Heart,
   Baby,
-  Globe,
   Shirt,
   MessageSquare,
   QrCode,
-  Image as ImageIcon,
   CheckCircle2,
-  ChevronRight,
-  ShieldCheck,
-  Upload,
   Loader2,
   Copy,
   CheckCheck,
-  ArrowRight,
   UserCheck,
-  Save
+  Save,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
+import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import { DEFAULT_BANK_INFO, getBankInfo, fetchBankInfo, BankConfig } from "@/lib/bank";
 import { getAvatarInitials } from "@/lib/avatar";
 
@@ -67,7 +57,7 @@ const OVERSEAS_PRESETS = [
 
 const SHIRT_SIZES = [
   "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
-  "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)"
+  "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)",
 ];
 
 function removeVietnameseTones(str: string) {
@@ -86,98 +76,87 @@ export default function ProfileModal({
   initialTab?: "info" | "attendance";
 }) {
   const { user, profile, updateProfile } = useAuth();
+  const { registrations, refresh: refreshAlumniData } = useAlumniData();
   const toast = useToast();
-  const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
 
+  const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
   const [activeTab, setActiveTab] = useState<"info" | "attendance">(initialTab);
 
-  // Thông tin cá nhân
-  const [fullName, setFullName] = useState(profile?.full_name || "");
+  // Phiếu đăng ký hiện tại lấy trực tiếp từ nguồn dữ liệu chuẩn (DB + Cloud)
+  const myRegistration = useMemo(() => {
+    if (!user) return null;
+    const myId = user.id.toLowerCase();
+    const myPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
+    return (
+      registrations.find((r) => {
+        if (r.id && r.id.toLowerCase() === myId) return true;
+        const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+        if (myPhone.length >= 9 && rPhone === myPhone) return true;
+        return false;
+      }) || null
+    );
+  }, [registrations, user, profile?.phone]);
+
+  // Chỉ lấy tên/ảnh mặc định từ Google KHI CHƯA TỪNG CÓ HỒ SƠ TRONG DATABASE
+  const initialFullName =
+    profile?.full_name ||
+    (!profile ? ((user?.user_metadata?.full_name || user?.user_metadata?.name || "") as string) : "");
+  const initialAvatarUrl =
+    profile?.avatar_url ||
+    (!profile ? ((user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "") as string) : "");
+
+  // Form state — khởi tạo 1 lần duy nhất khi mở modal để KHÔNG BAO GIỜ bị background refresh ghi đè khi người dùng đang gõ
+  const [fullName, setFullName] = useState(initialFullName);
   const [className, setClassName] = useState(profile?.class_name || "TC10");
   const [jobTitle, setJobTitle] = useState(profile?.job_title || "");
   const [company, setCompany] = useState(profile?.company || "");
-  const [location, setLocation] = useState(profile?.location_region === "dn" ? "other" : (profile?.location_region || "hcm"));
+  const [location, setLocation] = useState(
+    profile?.location_region === "dn" ? "other" : profile?.location_region || "hcm"
+  );
   const [specificLocation, setSpecificLocation] = useState(profile?.specific_location || "");
-  const [birthday, setBirthday] = useState(profile?.birthday || "1989-11-20");
+  const [birthday, setBirthday] = useState(profile?.birthday || "");
   const [phone, setPhone] = useState(profile?.phone || "");
-  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || "");
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
   const [bio, setBio] = useState(profile?.bio || "");
-
-  // Hôn nhân & F1
   const [maritalStatus, setMaritalStatus] = useState<string>(profile?.marital_status || "married");
   const [childrenCount, setChildrenCount] = useState<number>(profile?.children_count ?? 1);
 
-  // Điểm danh Hội ngộ 15 Năm: chỉ gán giá trị nếu profile đã lưu rõ ràng
   const [attendanceStatus, setAttendanceStatus] = useState<"attending" | "not_attending" | "unregistered">(
     profile?.attendance_status === "attending"
       ? "attending"
       : profile?.attendance_status === "not_attending"
       ? "not_attending"
+      : myRegistration
+      ? "attending"
       : "unregistered"
   );
-  const [shirtSize, setShirtSize] = useState(profile?.shirt_size || "L (Nam)");
-  const [deliveryAddress, setDeliveryAddress] = useState(profile?.delivery_address || "");
-  const [guestsCount, setGuestsCount] = useState(0);
+  const [shirtSize, setShirtSize] = useState(profile?.shirt_size || myRegistration?.shirtSize || "L (Nam)");
+  const [deliveryAddress, setDeliveryAddress] = useState(
+    profile?.delivery_address || myRegistration?.address || ""
+  );
+  const [guestbookMessage, setGuestbookMessage] = useState("");
+
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Lời nhắn lưu bút nếu không tham gia trực tiếp
-  const [guestbookMessage, setGuestbookMessage] = useState("");
-
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  // Đọc thông tin phiếu đăng ký hiện tại (nếu có)
-  const [myRegistration, setMyRegistration] = useState<any>(null);
-
-  // Theo dõi xem người dùng đã tự tay chọn/sửa trong phiên mở modal này chưa
-  // (Tránh polling SePay 3s/lần hoặc sự kiện đồng bộ ghi đè mất size áo / địa chỉ đang chọn)
-  const userEditedShirtSizeRef = useRef(false);
-  const userEditedAddressRef = useRef(false);
-  const userEditedAttendanceRef = useRef(false);
-
-  // Đồng bộ state khi profile nạp từ server
+  // Theo dõi lần thanh toán chuyển từ pending -> confirmed khi đang mở QR
+  const prevRegStatusRef = useRef<string | undefined>(myRegistration?.status);
   useEffect(() => {
-    if (profile) {
-      if (profile.full_name) setFullName(profile.full_name);
-      if (profile.class_name) setClassName(profile.class_name);
-      if (profile.job_title) setJobTitle(profile.job_title);
-      if (profile.company) setCompany(profile.company);
-      if (profile.phone) setPhone(profile.phone);
-      if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
-      if (profile.birthday) setBirthday(profile.birthday);
-      if (profile.bio) setBio(profile.bio);
-      if (profile.location_region) setLocation(profile.location_region === "dn" ? "other" : profile.location_region);
-      if (profile.specific_location) setSpecificLocation(profile.specific_location);
-      if (profile.marital_status) setMaritalStatus(profile.marital_status);
-      if (profile.children_count !== undefined && profile.children_count !== null) {
-        setChildrenCount(Number(profile.children_count));
-      }
-
-      if (!userEditedAttendanceRef.current) {
-        if (profile.attendance_status === "attending") {
-          setAttendanceStatus("attending");
-        } else if (profile.attendance_status === "not_attending") {
-          setAttendanceStatus("not_attending");
-        } else {
-          setAttendanceStatus("unregistered");
-        }
-      }
-
-      if (!userEditedShirtSizeRef.current && profile.shirt_size) {
-        setShirtSize(profile.shirt_size);
-      }
-      if (!userEditedAddressRef.current && profile.delivery_address) {
-        setDeliveryAddress(profile.delivery_address);
-      }
+    if (prevRegStatusRef.current !== "confirmed" && myRegistration?.status === "confirmed" && showQrModal) {
+      toast.success("Tuyệt vời! Hệ thống SePay đã xác nhận thanh toán thành công!");
+      setShowQrModal(false);
     }
-  }, [profile]);
+    prevRegStatusRef.current = myRegistration?.status;
+  }, [myRegistration?.status, showQrModal, toast]);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Tải thông tin ngân hàng mới nhất từ server
   useEffect(() => {
     setBankInfo(getBankInfo());
     let cancelled = false;
@@ -189,111 +168,16 @@ export default function ProfileModal({
     };
   }, []);
 
-  // Đọc trạng thái đăng ký của user hiện tại & đồng bộ với localStorage (chỉ khởi tạo ban đầu, không ghi đè lựa chọn đang sửa)
+  // Chỉ polling đối soát SePay khi người dùng ĐANG MỞ mã QR và chưa xác nhận thanh toán
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("tcdn4_registrations");
-      const list = stored ? JSON.parse(stored) : [];
-      const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
-      const myReg = list.find((r: any) => {
-        if (user?.id && r.id === user.id) return true;
-        if (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
-        return false;
-      });
-      if (myReg) {
-        setMyRegistration(myReg);
-        if (!userEditedShirtSizeRef.current && myReg.shirtSize) {
-          setShirtSize(myReg.shirtSize);
-        }
-        if (!userEditedAddressRef.current && myReg.address) {
-          setDeliveryAddress(myReg.address);
-        }
-        if (!userEditedAttendanceRef.current && profile?.attendance_status !== "not_attending") {
-          setAttendanceStatus("attending");
-        }
-      }
-    } catch {}
-  }, [user?.id, profile?.phone, profile?.attendance_status]);
+    if (!showQrModal || myRegistration?.status === "confirmed") return;
+    const interval = setInterval(() => {
+      void refreshAlumniData();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [showQrModal, myRegistration?.status, refreshAlumniData]);
 
-  // Luôn tự động kiểm tra đối soát SePay trực tiếp từ Server để cập nhật tức thì
-  useEffect(() => {
-    let active = true;
-
-    async function checkServerRegistration() {
-      try {
-        const res = await fetch(`/api/registrations?t=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok || !active) return;
-        const data = await res.json();
-        const list = data?.registrations || data?.items || [];
-        if (!Array.isArray(list)) return;
-
-        const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
-
-        const serverReg = list.find((r: any) => {
-          if (user?.id && r.id === user.id) return true;
-          if (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
-          return false;
-        });
-
-        if (serverReg && active) {
-          setMyRegistration((prev: any) => {
-            // Khi trạng thái chuyển thành confirmed (SePay webhook vừa khớp lệnh)
-            if (prev?.status !== "confirmed" && serverReg.status === "confirmed") {
-              toast.success("Tuyệt vời! Hệ thống SePay đã xác nhận thanh toán thành công! 🎉");
-              setShowQrModal(false);
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new Event("tcdn4_registration_updated"));
-              }
-            }
-            return serverReg;
-          });
-          // Chỉ nạp giá trị form nếu người dùng chưa tự tay thay đổi trong phiên này
-          if (!userEditedShirtSizeRef.current && serverReg.shirtSize) {
-            setShirtSize(serverReg.shirtSize);
-          }
-          if (!userEditedAddressRef.current && serverReg.address) {
-            setDeliveryAddress(serverReg.address);
-          }
-          if (!userEditedAttendanceRef.current && profile?.attendance_status !== "not_attending") {
-            setAttendanceStatus("attending");
-          }
-
-          // Cập nhật lại localStorage để toàn app đồng bộ
-          try {
-            const stored = localStorage.getItem("tcdn4_registrations");
-            const localList: any[] = stored ? JSON.parse(stored) : [];
-            const idx = localList.findIndex((r: any) =>
-              (user?.id && r.id === user.id) ||
-              (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone)
-            );
-            if (idx >= 0) {
-              localList[idx] = { ...localList[idx], ...serverReg };
-            } else {
-              localList.unshift(serverReg);
-            }
-            localStorage.setItem("tcdn4_registrations", JSON.stringify(localList));
-          } catch {}
-        }
-      } catch (err) {
-        console.warn("Lỗi kiểm tra đối soát SePay:", err);
-      }
-    }
-
-    checkServerRegistration();
-
-    // Nếu đang mở popup VietQR hoặc trạng thái đăng ký là pending, polling mỗi 3 giây
-    let interval: NodeJS.Timeout | null = null;
-    if (showQrModal || myRegistration?.status === "pending") {
-      interval = setInterval(checkServerRegistration, 3000);
-    }
-
-    return () => {
-      active = false;
-      if (interval) clearInterval(interval);
-    };
-  }, [showQrModal, myRegistration?.status, user?.id, profile?.phone, profile?.attendance_status]);
-
-  // Xử lý upload avatar từ máy / điện thoại trực tiếp lên Supabase Storage
+  // Upload avatar trực tiếp lên Supabase Storage
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -315,33 +199,27 @@ export default function ProfileModal({
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          setAvatarUrl(ev.target?.result as string);
-          toast.success("Đã chọn ảnh đại diện mới!");
-        };
-        reader.readAsDataURL(file);
+        toast.error(`Không tải ảnh lên cloud được: ${uploadError.message}`);
       } else {
         const { data: publicData } = getSupabase()
           .storage
           .from("alumni-media")
           .getPublicUrl(filePath);
-
         setAvatarUrl(publicData.publicUrl);
-        toast.success("Tải ảnh đại diện lên thành công!");
+        toast.success("Tải ảnh đại diện lên thành công! Nhấn Lưu để cập nhật hồ sơ.");
       }
     } catch (err: any) {
-      toast.error(`Lỗi tải ảnh: ${err.message || "Vui lòng thử lại"}`);
+      toast.error(`Lỗi tải ảnh: ${err?.message || "Vui lòng thử lại"}`);
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  const cleanNameNoTones = fullName 
-    ? removeVietnameseTones(fullName.trim().toUpperCase()).replace(/[^A-Z0-9 ]/g, "") 
+  const cleanNameNoTones = fullName
+    ? removeVietnameseTones(fullName.trim().toUpperCase()).replace(/[^A-Z0-9 ]/g, "")
     : "TEN";
   const cleanPhoneDigits = phone ? phone.trim().replace(/[^0-9]/g, "") : "SDT";
-  const transferSyntax = `TCDN4 ${cleanNameNoTones} ${cleanPhoneDigits}`;
+  const transferSyntax = `${bankInfo.syntaxPrefix || "TCDN4"} ${cleanNameNoTones} ${cleanPhoneDigits}`;
   const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(transferSyntax)}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const copyToClipboard = (text: string, key: string, label: string) => {
@@ -351,41 +229,48 @@ export default function ProfileModal({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Helper gửi thông báo điểm danh thành viên mới vào Zalo Bot (chỉ gửi lần đầu tiên khi điểm danh, không spam)
+  // Gửi thông báo điểm danh Zalo Bot chỉ 1 lần duy nhất cho thành viên mới (chưa từng lưu SĐT trong DB)
   const triggerCheckinNotificationIfNeeded = () => {
-    // Nếu hồ sơ trước đó đã có số điện thoại lưu sẵn, nghĩa là thành viên này đã từng lưu hồ sơ trước đó rồi
-    const hasAlreadySavedBefore = Boolean(profile?.phone && profile.phone.trim().length > 0);
-    const checkinKey = `tcdn4_zalo_checkin_${user?.id || phone.trim()}`;
-    const alreadyNotified = Boolean(
-      hasAlreadySavedBefore ||
-      profile?.has_checked_in ||
-      (typeof window !== "undefined" && localStorage.getItem(checkinKey))
-    );
+    const hasAlreadySavedInDb = Boolean(profile?.phone && profile.phone.trim().length > 0);
+    if (hasAlreadySavedInDb) return;
 
-    if (!alreadyNotified) {
-      try {
-        fetch("/api/zalo-bot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "checkin",
-            userId: user?.id,
-            phone: phone.trim(),
-            fullName: fullName.trim(),
-            className,
-            jobTitle: jobTitle.trim(),
-            company: company.trim(),
-            location: specificLocation.trim() || (location === "hcm" ? "TP.HCM" : location === "hn" ? "Hà Nội" : "Tỉnh khác"),
-          }),
-        });
-        if (typeof window !== "undefined") {
-          localStorage.setItem(checkinKey, "true");
-        }
-      } catch {}
-    }
+    try {
+      void fetch("/api/zalo-bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "checkin",
+          userId: user?.id,
+          phone: phone.trim(),
+          fullName: fullName.trim(),
+          className,
+          jobTitle: jobTitle.trim(),
+          company: company.trim(),
+          location:
+            specificLocation.trim() ||
+            (location === "hcm" ? "TP.HCM" : location === "hn" ? "Hà Nội" : "Tỉnh khác"),
+        }),
+      });
+    } catch {}
   };
 
-  // 1. Chỉ lưu thông tin cá nhân (Tab 1) & đóng modal
+  const buildProfilePayload = () => ({
+    full_name: fullName.trim(),
+    class_name: className,
+    job_title: jobTitle.trim(),
+    company: company.trim(),
+    location_region: location,
+    specific_location:
+      location === "overseas" ? specificLocation.trim() || "Quốc tế" : specificLocation.trim(),
+    birthday: birthday || null,
+    phone: phone.trim(),
+    avatar_url: avatarUrl || null,
+    bio: bio.trim(),
+    marital_status: maritalStatus,
+    children_count: Number(childrenCount),
+  });
+
+  // 1. Lưu thông tin cá nhân (Tab 1) -> ghi đè thẳng DB gốc & đóng modal
   const handleSaveProfileOnly = async () => {
     if (!fullName.trim()) {
       toast.error("Vui lòng nhập họ và tên của bạn!");
@@ -394,38 +279,18 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
-      await updateProfile({
-        full_name: fullName.trim(),
-        class_name: className,
-        job_title: jobTitle.trim(),
-        company: company.trim(),
-        location_region: location,
-        specific_location: location === "overseas" ? (specificLocation.trim() || "Quốc tế") : specificLocation.trim(),
-        birthday: birthday,
-        phone: phone.trim(),
-        avatar_url: avatarUrl,
-        bio: bio.trim(),
-        marital_status: maritalStatus,
-        children_count: Number(childrenCount),
-        has_checked_in: true,
-      });
-
+      await updateProfile(buildProfilePayload());
       triggerCheckinNotificationIfNeeded();
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_profile_updated"));
-      }
-
-      toast.success("Cập nhật thông tin điểm danh thành công!");
+      toast.success("Đã lưu thông tin cá nhân vào hệ thống!");
       onClose();
     } catch (err: any) {
-      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+      toast.error(`Không thể lưu hồ sơ: ${err?.message || "Vui lòng thử lại"}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // 2. Lưu thông tin cá nhân & Tự động bật sang Tab 2 Đăng ký gặp mặt 15 năm (Yêu cầu bước 6 & 7)
+  // 2. Lưu thông tin cá nhân & chuyển sang Tab 2 Đăng ký gặp mặt 15 năm
   const handleSaveAndContinue = async () => {
     if (!fullName.trim()) {
       toast.error("Vui lòng nhập họ và tên của bạn!");
@@ -438,38 +303,18 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
-      await updateProfile({
-        full_name: fullName.trim(),
-        class_name: className,
-        job_title: jobTitle.trim(),
-        company: company.trim(),
-        location_region: location,
-        specific_location: location === "overseas" ? (specificLocation.trim() || "Quốc tế") : specificLocation.trim(),
-        birthday: birthday,
-        phone: phone.trim(),
-        avatar_url: avatarUrl,
-        bio: bio.trim(),
-        marital_status: maritalStatus,
-        children_count: Number(childrenCount),
-        has_checked_in: true,
-      });
-
+      await updateProfile(buildProfilePayload());
       triggerCheckinNotificationIfNeeded();
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_profile_updated"));
-      }
-
-      toast.success("Đã cập nhật thông tin điểm danh! Mời bạn đăng ký tham gia 15 năm & chọn áo");
+      toast.success("Đã lưu hồ sơ! Mời bạn cập nhật đăng ký gặp mặt 15 năm.");
       setActiveTab("attendance");
     } catch (err: any) {
-      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+      toast.error(`Không thể lưu hồ sơ: ${err?.message || "Vui lòng thử lại"}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // 3. Đăng ký tham gia sự kiện 15 năm & Nhận mã QR thanh toán (Tab 2)
+  // 3. Đăng ký / Cập nhật tham gia sự kiện 15 năm (Tab 2) -> Ghi thẳng DB gốc + Cloud manifest
   const handleRegisterAttendance = async () => {
     if (!fullName.trim() || !phone.trim()) {
       toast.error("Vui lòng hoàn tất Họ tên và Số điện thoại ở Bước 1!");
@@ -479,143 +324,80 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
-      const existingStatus = myRegistration?.status === "confirmed" ? "confirmed" : "pending";
-      const regEntry = {
-        id: user?.id || myRegistration?.id || `reg-${Date.now()}`,
-        fullName: fullName.trim(),
-        className,
-        phone: phone.trim(),
-        shirtSize,
-        address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
-        guestsCount,
-        status: existingStatus,
-        paidAmount: myRegistration?.paidAmount || bankInfo.amount,
-        createdAt: myRegistration?.createdAt || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-      };
+      const wasAlreadyAttending = Boolean(myRegistration);
 
-      // Cập nhật profile (lưu đầy đủ họ tên, SĐT, lớp đã đăng ký)
+      // Ghi đè toàn bộ thông tin cá nhân + trạng thái tham gia + size áo + địa chỉ vào bảng profiles
+      // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json trên Cloud)
       await updateProfile({
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        class_name: className,
+        ...buildProfilePayload(),
         attendance_status: "attending",
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
-        has_checked_in: true,
       });
 
-      // Lưu localStorage
-      try {
-        const stored = localStorage.getItem("tcdn4_registrations");
-        const list = stored ? JSON.parse(stored) : [];
-        const existingIdx = list.findIndex(
-          (x: any) =>
-            x.phone === phone.trim() ||
-            x.fullName === fullName.trim() ||
-            (user?.id && x.id === user.id)
-        );
-        if (existingIdx >= 0) {
-          list[existingIdx] = { ...list[existingIdx], ...regEntry };
-        } else {
-          list.unshift(regEntry);
-        }
-        localStorage.setItem("tcdn4_registrations", JSON.stringify(list));
-        setMyRegistration(regEntry);
-      } catch {}
-
-      // Gửi lên API server
-      try {
-        await fetch("/api/registrations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(regEntry),
-        });
-      } catch {}
-
-      // Bắn thông báo Zalo Bot thông báo có người đăng ký tham gia họp lớp
-      try {
-        fetch("/api/zalo-bot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "registration",
-            fullName: fullName.trim(),
-            className,
-            shirtSize,
-            phone: phone.trim(),
-            address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
-            paidAmount: bankInfo.amount,
-            guestsCount,
-          }),
-        });
-      } catch {}
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_profile_updated"));
-        window.dispatchEvent(new Event("tcdn4_registration_updated"));
+      // Chỉ gửi thông báo Zalo Bot nếu là lần đầu đăng ký tham gia
+      if (!wasAlreadyAttending) {
+        try {
+          void fetch("/api/zalo-bot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "registration",
+              fullName: fullName.trim(),
+              className,
+              shirtSize,
+              phone: phone.trim(),
+              address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
+              paidAmount: bankInfo.amount,
+              guestsCount: 0,
+            }),
+          });
+        } catch {}
       }
 
-      toast.success("Đăng ký thành công! Đang mở mã VietQR để hoàn tất chuyển khoản...");
-      setShowQrModal(true);
+      if (myRegistration?.status === "confirmed") {
+        toast.success("Đã cập nhật thông tin tham dự & size áo mới nhất!");
+        onClose();
+      } else {
+        toast.success("Đã lưu đăng ký tham gia 15 năm! Mời bạn quét mã VietQR để hoàn tất.");
+        setShowQrModal(true);
+      }
     } catch (err: any) {
-      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+      toast.error(`Không thể lưu đăng ký: ${err?.message || "Vui lòng thử lại"}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // 4. Không tham gia trực tiếp -> gửi lời nhắn nhủ vào Sổ lưu bút
+  // 4. Chọn không tham gia trực tiếp -> Lưu vào DB gốc, gỡ khỏi danh sách tham dự & lưu lời chúc Cloud
   const handleDeclineAndSendWish = async () => {
     setSaving(true);
     try {
       await updateProfile({
+        ...buildProfilePayload(),
         attendance_status: "not_attending",
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
-        has_checked_in: true,
       });
-
-      // Nếu trước đó có phiếu đăng ký trong local registrations -> gỡ bỏ để không hiện trong danh sách tham gia
-      try {
-        const stored = localStorage.getItem("tcdn4_registrations");
-        if (stored) {
-          const list = JSON.parse(stored);
-          const cleanP = (phone || "").replace(/[^0-9]/g, "");
-          const filtered = list.filter((r: any) => {
-            const matchId = user?.id && r.id === user.id;
-            const matchPhone = cleanP && cleanP.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === cleanP;
-            return !matchId && !matchPhone;
-          });
-          localStorage.setItem("tcdn4_registrations", JSON.stringify(filtered));
-        }
-        setMyRegistration(null);
-      } catch {}
 
       if (guestbookMessage.trim()) {
         try {
-          const storedGb = localStorage.getItem("tcdn4_guestbook");
-          const gbList = storedGb ? JSON.parse(storedGb) : [];
-          gbList.unshift({
-            id: `gb-${Date.now()}`,
-            name: fullName.trim(),
-            className,
-            time: "Vừa xong",
-            message: guestbookMessage.trim(),
-            likes: 1,
+          await authFetch("/api/guestbook", {
+            method: "POST",
+            body: JSON.stringify({
+              name: fullName.trim() || "Thành viên K33",
+              className,
+              message: guestbookMessage.trim(),
+            }),
           });
-          localStorage.setItem("tcdn4_guestbook", JSON.stringify(gbList));
+          broadcastDataUpdate("guestbook");
         } catch {}
       }
 
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_profile_updated"));
-        window.dispatchEvent(new Event("tcdn4_registration_updated"));
-      }
-
-      toast.success("Cảm ơn bạn! Lời nhắn nhủ đã được lưu vào Sổ Lưu Bút K33.");
+      toast.success("Đã cập nhật trạng thái vào hệ thống. Cảm ơn bạn!");
       onClose();
     } catch (err: any) {
-      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+      toast.error(`Có lỗi xảy ra: ${err?.message || "Vui lòng thử lại"}`);
     } finally {
       setSaving(false);
     }
@@ -638,7 +420,7 @@ export default function ProfileModal({
           <X size={18} />
         </button>
 
-        {/* Header Tiêu đề gọn gàng */}
+        {/* Header */}
         <div className="mb-3 pr-8">
           <div className="flex items-center gap-2">
             <h3 className="text-lg sm:text-xl font-black text-ueh tracking-tight">
@@ -653,7 +435,7 @@ export default function ProfileModal({
           </p>
         </div>
 
-        {/* 2 Tabs chuyển đổi mượt mà */}
+        {/* 2 Tabs */}
         <div className="flex rounded-xl bg-slate-100 p-1 mb-3.5">
           <button
             type="button"
@@ -686,12 +468,10 @@ export default function ProfileModal({
           </button>
         </div>
 
-        {/* ========================================================= */}
-        {/* TAB 1: THÔNG TIN CÁ NHÂN (ĐIỂM DANH)                      */}
-        {/* ========================================================= */}
+        {/* TAB 1: THÔNG TIN CÁ NHÂN */}
         {activeTab === "info" && (
           <div className="space-y-3 animate-in fade-in duration-150">
-            {/* Avatar Section: Gọn gàng, chạm vào avatar để đổi ảnh ngay */}
+            {/* Avatar Section */}
             <div className="flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200/80 bg-slate-50/70">
               <label className="relative shrink-0 cursor-pointer group" title="Chạm vào để tải ảnh từ máy / điện thoại">
                 <div className="h-16 w-16 sm:h-18 sm:w-18 overflow-hidden rounded-full ring-3 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-xl relative">
@@ -704,14 +484,12 @@ export default function ProfileModal({
                     getAvatarInitials(fullName)
                   )}
 
-                  {/* Lớp phủ đổi ảnh khi hover */}
                   <div className="absolute inset-0 bg-black/40 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
                     <Camera size={16} className="text-ueh-gold mb-0.5" />
                     <span className="text-[9px] font-bold">Đổi ảnh</span>
                   </div>
                 </div>
 
-                {/* Icon Camera góc dưới */}
                 <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full bg-ueh text-white shadow-sm border border-white">
                   <Camera size={10} className="text-ueh-gold" />
                 </span>
@@ -733,7 +511,6 @@ export default function ProfileModal({
                   Chạm ảnh để tải lên từ điện thoại / máy tính (rõ mặt để bạn bè nhận ra nhé).
                 </div>
 
-                {/* 2 Option ảnh mặc định gợi ý duy nhất */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">
                     Mặc định:
@@ -782,7 +559,7 @@ export default function ProfileModal({
                 </label>
                 <select
                   value={className}
-                  onChange={(e) => setClassName(e.target.value as any)}
+                  onChange={(e) => setClassName(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
                 >
                   <option value="TC10">Lớp TC10 - K33 UEH</option>
@@ -792,7 +569,7 @@ export default function ProfileModal({
               </div>
             </div>
 
-            {/* Số điện thoại & Ngày sinh */}
+            {/* SĐT & Ngày sinh */}
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
@@ -851,7 +628,7 @@ export default function ProfileModal({
               {location === "other" ? (
                 <div className="mt-2 pt-2 border-t border-slate-200/80">
                   <span className="text-[10px] font-bold text-ueh block mb-1">
-                    📍 Chọn nhanh tỉnh / thành phố:
+                    Chọn nhanh tỉnh / thành phố:
                   </span>
                   <div className="flex flex-wrap gap-1.5 mb-1.5">
                     {OTHER_PROVINCES_PRESETS.map((preset) => (
@@ -880,7 +657,7 @@ export default function ProfileModal({
               ) : location === "overseas" ? (
                 <div className="mt-2 pt-2 border-t border-slate-200/80">
                   <span className="text-[10px] font-bold text-ueh-orange block mb-1">
-                    🌏 Quốc gia / Thành phố sinh sống:
+                    Quốc gia / Thành phố sinh sống:
                   </span>
                   <div className="flex flex-wrap gap-1.5 mb-1.5">
                     {OVERSEAS_PRESETS.map((preset) => (
@@ -933,7 +710,7 @@ export default function ProfileModal({
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
                     }`}
                   >
-                    💍 Đã kết hôn
+                    Đã kết hôn
                   </button>
                   <button
                     type="button"
@@ -944,14 +721,14 @@ export default function ProfileModal({
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
                     }`}
                   >
-                    🌟 Độc thân vui tính
+                    Độc thân vui tính
                   </button>
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
                 <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-700 mb-1.5">
-                  <Baby size={13} className="text-emerald-600" /> Số con cái (F1 & Nhóc tì)
+                  <Baby size={13} className="text-emerald-600" /> Số con cái (F1)
                 </label>
                 <div className="grid grid-cols-4 gap-1">
                   {[0, 1, 2, 3].map((num) => (
@@ -1001,7 +778,7 @@ export default function ProfileModal({
               </div>
             </div>
 
-            {/* Tiểu sử ngắn */}
+            {/* Bio */}
             <div>
               <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                 Đôi dòng chia sẻ ngắn (Bio)
@@ -1015,15 +792,15 @@ export default function ProfileModal({
               />
             </div>
 
-            {/* Nút hành động gọn gàng */}
+            {/* Actions Tab 1 */}
             <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={handleSaveProfileOnly}
                 disabled={saving}
-                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 active:scale-98 transition-all"
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 active:scale-98 transition-all disabled:opacity-50"
               >
-                {saving ? "Đang lưu..." : "Chỉ lưu thông tin (Đóng)"}
+                {saving ? "Đang lưu..." : "Lưu thông tin & Đóng"}
               </button>
 
               <button
@@ -1043,12 +820,10 @@ export default function ProfileModal({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* TAB 2: ĐĂNG KÝ CHƯƠNG TRÌNH GẶP MẶT 15 NĂM                */}
-        {/* ========================================================= */}
+        {/* TAB 2: ĐĂNG KÝ CHƯƠNG TRÌNH GẶP MẶT 15 NĂM */}
         {activeTab === "attendance" && (
           <div className="space-y-3.5 animate-in fade-in duration-150">
-            {/* Thẻ Trạng thái Tham gia 15 Năm (Chỉ hiện trong Tab 2 khi ĐÃ đăng ký VÀ đang chọn tham gia) */}
+            {/* Trạng thái hiện tại */}
             {attendanceStatus === "attending" && myRegistration?.status === "confirmed" ? (
               <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1057,7 +832,9 @@ export default function ProfileModal({
                     ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
                   </div>
                 </div>
-                <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">100% OK</span>
+                <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">
+                  100% OK
+                </span>
               </div>
             ) : attendanceStatus === "attending" && myRegistration?.status === "pending" ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs">
@@ -1086,14 +863,11 @@ export default function ProfileModal({
             ) : attendanceStatus === "not_attending" ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-orange-300 bg-orange-50/80 px-3 py-2 text-xs text-orange-950 shadow-2xs">
                 <span className="text-[11px] font-medium text-orange-900 truncate">
-                  Trạng thái: <strong>Đã chọn không tham gia trực tiếp</strong> (Gửi lời chúc lưu bút)
+                  Trạng thái: <strong>Không tham gia trực tiếp</strong>
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    userEditedAttendanceRef.current = true;
-                    setAttendanceStatus("attending");
-                  }}
+                  onClick={() => setAttendanceStatus("attending")}
                   className="rounded-lg bg-ueh px-2.5 py-1 text-[11px] font-bold text-white hover:bg-ueh-light shrink-0"
                 >
                   Đổi ý tham gia
@@ -1113,48 +887,50 @@ export default function ProfileModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    userEditedAttendanceRef.current = true;
-                    setAttendanceStatus("attending");
-                  }}
+                  onClick={() => setAttendanceStatus("attending")}
                   className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "attending"
                       ? "bg-white border-emerald-500 shadow-xs ring-2 ring-emerald-500/20"
                       : "bg-white/80 border-slate-200 hover:bg-white"
                   }`}
                 >
-                  <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                    attendanceStatus === "attending" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"
-                  }`}>
+                  <div
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      attendanceStatus === "attending"
+                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        : "border-slate-300"
+                    }`}
+                  >
                     {attendanceStatus === "attending" && <Check size={10} strokeWidth={3} />}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900">🟢 Tôi sẽ tham gia</div>
+                    <div className="text-xs font-bold text-slate-900">Tôi sẽ tham gia</div>
                     <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng Thứ 7 ngày 12/12/2026.
+                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng 12/12/2026.
                     </div>
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    userEditedAttendanceRef.current = true;
-                    setAttendanceStatus("not_attending");
-                  }}
+                  onClick={() => setAttendanceStatus("not_attending")}
                   className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "not_attending"
                       ? "bg-white border-orange-500 shadow-xs ring-2 ring-orange-500/20"
                       : "bg-white/80 border-slate-200 hover:bg-white"
                   }`}
                 >
-                  <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                    attendanceStatus === "not_attending" ? "border-orange-500 bg-orange-500 text-white" : "border-slate-300"
-                  }`}>
+                  <div
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      attendanceStatus === "not_attending"
+                        ? "border-orange-500 bg-orange-500 text-white"
+                        : "border-slate-300"
+                    }`}
+                  >
                     {attendanceStatus === "not_attending" && <Check size={10} strokeWidth={3} />}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900">🟠 Rất tiếc không thể tham gia</div>
+                    <div className="text-xs font-bold text-slate-900">Rất tiếc không thể tham gia</div>
                     <div className="text-[11px] text-slate-500 mt-0.5">
                       Gửi lời nhắn nhủ thân thương và chúc mừng vào Sổ lưu bút K33.
                     </div>
@@ -1163,7 +939,7 @@ export default function ProfileModal({
               </div>
             </div>
 
-            {/* NẾU ĐI: CHỌN ÁO, SỐ NGƯỜI, ĐỊA CHỈ NHẬN ÁO & KINH PHÍ */}
+            {/* Nếu tham gia */}
             {attendanceStatus === "attending" && (
               <div className="space-y-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-3">
                 <div className="flex items-center justify-between">
@@ -1185,10 +961,7 @@ export default function ProfileModal({
                     <button
                       key={s}
                       type="button"
-                      onClick={() => {
-                        userEditedShirtSizeRef.current = true;
-                        setShirtSize(s);
-                      }}
+                      onClick={() => setShirtSize(s)}
                       className={`rounded-lg py-1.5 px-1 text-xs font-bold text-center border transition-all ${
                         shirtSize === s
                           ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
@@ -1207,10 +980,7 @@ export default function ProfileModal({
                   <input
                     type="text"
                     value={deliveryAddress}
-                    onChange={(e) => {
-                      userEditedAddressRef.current = true;
-                      setDeliveryAddress(e.target.value);
-                    }}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
                     placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B hoặc địa chỉ nhà..."
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
@@ -1220,8 +990,12 @@ export default function ProfileModal({
                 <div className="rounded-xl border border-emerald-300 bg-white p-2.5 sm:p-3 flex items-center justify-between shadow-2xs">
                   <div>
                     <div className="text-[10px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
-                    <div className="text-sm sm:text-base font-black text-slate-900">{bankInfo.amountText} / thành viên</div>
-                    <div className="text-[10px] text-emerald-700 font-medium">Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm</div>
+                    <div className="text-sm sm:text-base font-black text-slate-900">
+                      {bankInfo.amountText} / thành viên
+                    </div>
+                    <div className="text-[10px] text-emerald-700 font-medium">
+                      Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -1234,7 +1008,7 @@ export default function ProfileModal({
               </div>
             )}
 
-            {/* NẾU KHÔNG ĐI: GỬI LƯU BÚT */}
+            {/* Nếu không tham gia */}
             {attendanceStatus === "not_attending" && (
               <div className="space-y-3 rounded-xl border border-orange-200/80 bg-orange-50/40 p-3">
                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-orange-900 uppercase">
@@ -1256,23 +1030,19 @@ export default function ProfileModal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
                       value={shirtSize}
-                      onChange={(e) => {
-                        userEditedShirtSizeRef.current = true;
-                        setShirtSize(e.target.value);
-                      }}
+                      onChange={(e) => setShirtSize(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                     >
                       {SHIRT_SIZES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
                       ))}
                     </select>
                     <input
                       type="text"
                       value={deliveryAddress}
-                      onChange={(e) => {
-                        userEditedAddressRef.current = true;
-                        setDeliveryAddress(e.target.value);
-                      }}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
                       placeholder="Địa chỉ nhận ship áo tận nhà..."
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                     />
@@ -1281,7 +1051,7 @@ export default function ProfileModal({
               </div>
             )}
 
-            {/* Button Actions của Tab 2 */}
+            {/* Actions Tab 2 */}
             <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5">
               <button
                 type="button"
@@ -1300,33 +1070,37 @@ export default function ProfileModal({
                 >
                   {saving ? (
                     <Loader2 size={15} className="animate-spin" />
+                  ) : myRegistration?.status === "confirmed" ? (
+                    <Save size={15} className="text-ueh-gold" />
                   ) : (
                     <QrCode size={15} className="text-ueh-gold" />
                   )}
-                  <span>Lưu & Đăng ký tham gia (Nhận mã QR)</span>
+                  <span>
+                    {myRegistration?.status === "confirmed"
+                      ? "Lưu cập nhật thông tin"
+                      : "Lưu & Đăng ký tham gia (Nhận mã QR)"}
+                  </span>
                 </button>
               ) : attendanceStatus === "not_attending" ? (
                 <button
                   type="button"
                   onClick={handleDeclineAndSendWish}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                   <span>Lưu lựa chọn (Không tham gia trực tiếp)</span>
                 </button>
               ) : (
                 <div className="w-full sm:w-auto text-center py-2 px-3 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold">
-                  👆 Vui lòng bấm chọn 1 trong 2 phương án ở trên
+                  Vui lòng bấm chọn 1 trong 2 phương án ở trên
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* POPUP BẢNG THÔNG SỐ SIZE ÁO POLO                          */}
-        {/* ========================================================= */}
+        {/* POPUP BẢNG THÔNG SỐ SIZE ÁO POLO */}
         {showShirtSizePopup && (
           <div
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
@@ -1377,9 +1151,7 @@ export default function ProfileModal({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* POPUP VIETQR & SEPAY TỰ ĐỘNG XÁC MINH (BƯỚC 7)           */}
-        {/* ========================================================= */}
+        {/* POPUP VIETQR & SEPAY TỰ ĐỘNG XÁC MINH */}
         {showQrModal && (
           <div
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
@@ -1402,13 +1174,11 @@ export default function ProfileModal({
               <div className="text-base font-black text-slate-900">Mã Chuyển Khoản VietQR</div>
               <div className="text-xs text-slate-500 mb-3">Mở ứng dụng ngân hàng bất kỳ để quét mã</div>
 
-              {/* Ảnh QR Code tự động điền sẵn nội dung & số tiền */}
               <div className="mx-auto w-52 overflow-hidden rounded-2xl border-2 border-emerald-300 bg-white p-2 shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrUrl} alt="VietQR TCDN4" className="w-full h-auto rounded-lg" />
               </div>
 
-              {/* Thông tin chuyển khoản chi tiết */}
               <div className="mt-3.5 text-xs text-slate-700 space-y-2 text-left bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Ngân hàng:</span>
@@ -1466,7 +1236,6 @@ export default function ProfileModal({
                 </div>
               </div>
 
-              {/* Thông báo SePay tự động & Live Polling indicator */}
               <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-left flex items-start gap-2 shadow-2xs">
                 <span className="relative flex h-2.5 w-2.5 mt-1 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -1475,10 +1244,12 @@ export default function ProfileModal({
                 <div className="space-y-0.5">
                   <div className="font-bold text-emerald-950 flex items-center gap-1">
                     <span>Đối soát tự động qua SePay</span>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded">Trực tiếp</span>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded">
+                      Trực tiếp
+                    </span>
                   </div>
                   <div className="text-[10.5px] text-emerald-800 leading-snug">
-                    Hệ thống đang lắng nghe giao dịch 24/7 và sẽ tự động duyệt ngay khi tiền về tài khoản mà không cần gửi biên lai!
+                    Hệ thống đang lắng nghe giao dịch 24/7 và sẽ tự động duyệt ngay khi tiền về tài khoản!
                   </div>
                 </div>
               </div>
@@ -1497,7 +1268,6 @@ export default function ProfileModal({
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

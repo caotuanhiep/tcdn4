@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { authFetch, broadcastDataUpdate, DATA_UPDATED_EVENT } from "@/lib/api";
 import { getAvatarInitials } from "@/lib/avatar";
 
 interface GuestbookEntry {
@@ -48,63 +49,76 @@ export default function GuestbookSection() {
   }, [user, profile]);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("tcdn4_guestbook");
-      if (stored) {
-        setMessages(JSON.parse(stored));
-      }
-    } catch {}
+    let active = true;
+    async function loadMessages() {
+      try {
+        const res = await fetch(`/api/guestbook?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data?.success && Array.isArray(data.messages)) {
+          setMessages(data.messages);
+        }
+      } catch {}
+    }
+    void loadMessages();
+    const onUpdate = () => void loadMessages();
+    window.addEventListener(DATA_UPDATED_EVENT, onUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener(DATA_UPDATED_EVENT, onUpdate);
+    };
   }, []);
 
-  const saveMessages = (newMessages: GuestbookEntry[]) => {
-    setMessages(newMessages);
-    try {
-      localStorage.setItem("tcdn4_guestbook", JSON.stringify(newMessages));
-    } catch {}
-  };
-
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !message.trim()) {
       toast.error("Vui lòng nhập tên của bạn và nội dung lời nhắn!");
       return;
     }
 
-    const newEntry: GuestbookEntry = {
-      id: `gb-${Date.now()}`,
-      name: name.trim(),
-      className,
-      time: "Vừa xong",
-      message: message.trim(),
-      likes: 1,
-    };
-
-    const updated = [newEntry, ...messages];
-    saveMessages(updated);
-    toast.success("Đã ghi lời nhắn vào sổ lưu bút thành công!");
-
-    setName("");
-    setMessage("");
+    try {
+      const res = await authFetch("/api/guestbook", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          className,
+          message: message.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        toast.error(data?.error || "Không thể gửi lời nhắn lên hệ thống");
+        return;
+      }
+      if (Array.isArray(data.messages)) setMessages(data.messages);
+      broadcastDataUpdate("guestbook");
+      toast.success("Đã ghi lời nhắn vào sổ lưu bút thành công!");
+      setMessage("");
+    } catch {
+      toast.error("Lỗi kết nối máy chủ, vui lòng thử lại!");
+    }
   };
 
-  const handleToggleLike = (id: string) => {
+  const handleToggleLike = async (id: string) => {
     const isLiked = likedIds.includes(id);
-    const updated = messages.map((m) => {
-      if (m.id === id) {
-        return {
-          ...m,
-          likes: isLiked ? m.likes - 1 : m.likes + 1,
-        };
-      }
-      return m;
-    });
+    const delta = isLiked ? -1 : 1;
 
-    saveMessages(updated);
-    if (isLiked) {
-      setLikedIds(likedIds.filter((item) => item !== id));
-    } else {
-      setLikedIds([...likedIds, id]);
-    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, likes: Math.max(0, m.likes + delta) } : m))
+    );
+    setLikedIds((prev) => (isLiked ? prev.filter((item) => item !== id) : [...prev, id]));
+
+    try {
+      const res = await fetch("/api/guestbook", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, delta }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success && Array.isArray(data.messages)) {
+        setMessages(data.messages);
+      }
+    } catch {}
   };
 
   return (

@@ -6,11 +6,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
+import { authFetch, broadcastDataUpdate } from "@/lib/api";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 import type { Profile } from "@/types/database";
 import LoginModal from "@/components/LoginModal";
 import ProfileModal from "@/components/ProfileModal";
@@ -25,11 +28,17 @@ interface AuthContextValue {
   closeProfile: () => void;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<boolean>;
+  reloadProfile: () => Promise<Profile | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const SUPER_ADMIN_EMAIL = "caotuanhiep@gmail.com";
+const DEV_ADMIN_ID = "647fb28f-2ab7-415e-84cd-87329017a7e0";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { profiles, refresh: refreshAlumniData } = useAlumniData();
+
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,105 +46,106 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileInitialTab, setProfileInitialTab] = useState<"info" | "attendance">("info");
 
+  const loadedUserIdRef = useRef<string | null>(null);
+
+  /**
+   * Đọc hồ sơ trực tiếp từ database gốc (Supabase public.profiles).
+   * KHÔNG dùng localStorage đè lên database và KHÔNG tự ghi đè tên từ Google metadata.
+   */
+  const fetchUserProfileFromDb = useCallback(async (u: User | null): Promise<Profile | null> => {
+    if (!u) {
+      setProfile(null);
+      loadedUserIdRef.current = null;
+      return null;
+    }
+
+    const supabase = getSupabase();
+    let dbProfile: Profile | null = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", u.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        dbProfile = data as Profile;
+      }
+    } catch (err) {
+      console.warn("[AuthProvider] Lỗi đọc profiles từ Supabase:", err);
+    }
+
+    const isSuperAdmin = (u.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
+
+    if (dbProfile) {
+      const normalized: Profile = {
+        ...dbProfile,
+        role: isSuperAdmin ? "admin" : dbProfile.role || "member",
+      };
+      setProfile(normalized);
+      loadedUserIdRef.current = u.id;
+      return normalized;
+    }
+
+    // Thành viên đăng nhập lần đầu chưa có dòng nào trong bảng profiles
+    setProfile(null);
+    loadedUserIdRef.current = u.id;
+    return null;
+  }, []);
+
+  // Đồng bộ tự động khi Admin hoặc thiết bị khác cập nhật hồ sơ của user hiện tại trên DB (realtime)
   useEffect(() => {
-    const isDev =
+    if (!user?.id || profiles.length === 0) return;
+    const latestFromDb = profiles.find((p) => p.id === user.id);
+    if (!latestFromDb) return;
+
+    setProfile((prev) => {
+      const isSuperAdmin = (user.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
+      const next: Profile = {
+        ...latestFromDb,
+        // Giữ phone thật nếu latestFromDb bị ẩn (chưa kịp gắn token)
+        phone: latestFromDb.phone ?? prev?.phone ?? null,
+        role: isSuperAdmin ? "admin" : latestFromDb.role || "member",
+      };
+      if (
+        prev &&
+        prev.updated_at === next.updated_at &&
+        prev.full_name === next.full_name &&
+        prev.role === next.role &&
+        prev.attendance_status === next.attendance_status &&
+        prev.shirt_size === next.shirt_size &&
+        prev.delivery_address === next.delivery_address
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [profiles, user?.id, user?.email]);
+
+  useEffect(() => {
+    let active = true;
+
+    const isDevAdmin =
+      process.env.NODE_ENV === "development" &&
       typeof window !== "undefined" &&
       (localStorage.getItem("tcdn4_dev_mode") === "admin" ||
         document.cookie.includes("tcdn4_dev_mode=admin"));
 
-    const supabase = getSupabase();
-    let active = true;
-
-    async function loadProfile(u: User | null): Promise<Profile | null> {
-      if (!u) {
-        if (active) setProfile(null);
-        return null;
-      }
-
-      let foundProfile: Profile | null = null;
-
-      // 1. Thử tải từ API server /api/profile?id=... (ưu tiên cao nhất, hỗ trợ đồng bộ dữ liệu)
-      try {
-        const res = await fetch(`/api/profile?id=${encodeURIComponent(u.id)}`, { cache: "no-store" });
-        if (res.ok) {
-          const resJson = await res.json();
-          if (resJson?.success && resJson.profile) {
-            foundProfile = resJson.profile as Profile;
-          }
-        }
-      } catch {}
-
-      // 2. Thử tải từ Supabase DB
-      if (!foundProfile) {
-        try {
-          const { data, error } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
-          if (data && !error) {
-            foundProfile = data as Profile;
-          }
-        } catch {}
-      }
-
-      // 3. Thử tải từ localStorage
-      if (!foundProfile) {
-        try {
-          const localKey = `profile_${u.id}`;
-          const savedLocal = localStorage.getItem(localKey);
-          if (savedLocal) {
-            foundProfile = JSON.parse(savedLocal);
-          }
-        } catch {}
-      }
-
-      // 4. Fallback từ user metadata (Google OAuth)
-      const meta = u.user_metadata ?? {};
-      const fullName = (foundProfile?.full_name ?? meta.full_name ?? meta.name ?? u.email?.split("@")[0] ?? "Thành viên K33") as string;
-      const avatarUrl = (foundProfile?.avatar_url ?? meta.avatar_url ?? meta.picture ?? null) as string | null;
-
-      const isSuperAdmin = u.email === "caotuanhiep@gmail.com";
-      const userRole = isSuperAdmin ? "admin" : (foundProfile?.role || "member");
-
-      const finalProfile: Profile = foundProfile
-        ? { ...foundProfile, role: userRole }
-        : {
-            id: u.id,
-            full_name: fullName,
-            class_name: "TC10",
-            job_title: "Chuyên viên Tài chính",
-            company: "Alumni UEH",
-            location_region: "hcm",
-            avatar_url: avatarUrl,
-            birthday: "1989-11-20",
-            role: userRole,
-          };
-
-      if (active) {
-        setProfile(finalProfile);
-        try {
-          localStorage.setItem(`profile_${u.id}`, JSON.stringify(finalProfile));
-        } catch {}
-      }
-
-      return finalProfile;
-    }
-
-    if (isDev) {
+    if (isDevAdmin) {
       const devUser = {
-        id: "647fb28f-2ab7-415e-84cd-87329017a7e0",
-        email: "caotuanhiep@gmail.com",
+        id: DEV_ADMIN_ID,
+        email: SUPER_ADMIN_EMAIL,
         user_metadata: { full_name: "Hiệp Cao Tuấn" },
       } as unknown as User;
       setUser(devUser);
-      loadProfile(devUser).finally(() => active && setLoading(false));
+      fetchUserProfileFromDb(devUser)
+        .then(() => refreshAlumniData())
+        .finally(() => active && setLoading(false));
 
-      const isFreshLogin =
-        typeof window !== "undefined" &&
-        (sessionStorage.getItem("tcdn4_auto_open_profile") === "1" ||
-          sessionStorage.getItem("tcdn4_just_logged_in") === "1");
-
-      if (isFreshLogin) {
+      if (sessionStorage.getItem("tcdn4_auto_open_profile") === "1") {
         try {
           sessionStorage.removeItem("tcdn4_auto_open_profile");
-          sessionStorage.removeItem("tcdn4_just_logged_in");
         } catch {}
         setProfileInitialTab("info");
         setProfileOpen(true);
@@ -146,87 +156,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!active) return;
-      setUser(data.user);
-      loadProfile(data.user).finally(() => active && setLoading(false));
-    });
+    const supabase = getSupabase();
 
+    // Một listener onAuthStateChange duy nhất (tự phát INITIAL_SESSION ngay khi đăng ký)
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+
       const u = session?.user ?? null;
       setUser(u);
+
+      // Bỏ qua sự kiện TOKEN_REFRESHED để không nạp lại hồ sơ làm gián đoạn form đang gõ
+      if (event === "TOKEN_REFRESHED" && u && loadedUserIdRef.current === u.id) {
+        return;
+      }
+
+      if (!u) {
+        setProfile(null);
+        loadedUserIdRef.current = null;
+        setLoading(false);
+        return;
+      }
 
       const isFreshLogin =
         typeof window !== "undefined" &&
         (sessionStorage.getItem("tcdn4_auto_open_profile") === "1" ||
-          sessionStorage.getItem("tcdn4_just_logged_in") === "1" ||
           window.location.search.includes("code="));
 
-      if (u) {
-        loadProfile(u).then((p) => {
+      // Dọn ?code= trên URL CHỈ SAU KHI đã có session hợp lệ (tránh ngắt PKCE exchange)
+      if (typeof window !== "undefined" && window.location.search.includes("code=")) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("code");
+        window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ""));
+      }
+
+      fetchUserProfileFromDb(u)
+        .then((dbProf) => {
           if (!active) return;
-          // Chỉ mở tự động nếu là FRESH LOGIN từ Google VÀ thành viên CHƯA TỪNG ĐIỂM DANH / CHƯA LƯU SỐ ĐIỆN THOẠI
+
+          // Tải lại danh bạ với token đăng nhập để mở khóa SĐT & quyền Admin
+          if (event === "SIGNED_IN") {
+            void refreshAlumniData();
+          }
+
+          // Chỉ tự động bật popup điểm danh cho lần đầu (chưa có hồ sơ hoặc chưa lưu SĐT)
           if (isFreshLogin) {
             try {
               sessionStorage.removeItem("tcdn4_auto_open_profile");
-              sessionStorage.removeItem("tcdn4_just_logged_in");
             } catch {}
 
-            const hasCheckedIn = Boolean(
-              (p?.phone && p.phone.trim().length > 0) ||
-              (p as any)?.has_checked_in ||
-              (typeof window !== "undefined" && localStorage.getItem(`tcdn4_checked_in_${u.id}`))
-            );
-
-            // NẾU LÀ LẦN ĐẦU (chưa từng lưu SĐT / điểm danh) -> TỰ ĐỘNG BẬT POPUP
-            // NẾU ĐÃ LƯU HỒ SƠ RỒI -> KHÔNG BẬT NỮA
+            const hasCheckedIn = Boolean(dbProf?.phone && dbProf.phone.trim().length > 0);
             if (!hasCheckedIn) {
               setProfileInitialTab("info");
               setProfileOpen(true);
               setLoginOpen(false);
             }
           }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
         });
-      } else {
-        setProfile(null);
-      }
-
-      // Tự động dọn dẹp URL param ?code= sau khi hoàn tất đăng nhập
-      if (typeof window !== "undefined" && window.location.search.includes("code=")) {
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete("code");
-        window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ""));
-      }
     });
-
-    // Lắng nghe Supabase Realtime đa trình duyệt / đa thiết bị
-    const channel = supabase.channel("tcdn4-global-realtime")
-      .on("broadcast", { event: "profile_updated" }, () => {
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("tcdn4_profile_updated"));
-        }
-      })
-      .on("broadcast", { event: "registration_updated" }, () => {
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("tcdn4_registration_updated"));
-        }
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("tcdn4_profile_updated"));
-          window.dispatchEvent(new Event("tcdn4_registration_updated"));
-        }
-      })
-      .subscribe();
 
     return () => {
       active = false;
       sub.subscription.unsubscribe();
-      try {
-        supabase.removeChannel(channel);
-      } catch {}
     };
-  }, []);
+  }, [fetchUserProfileFromDb, refreshAlumniData]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("login") === "1") {
@@ -246,7 +241,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setProfile(null);
-  }, []);
+    loadedUserIdRef.current = null;
+    void refreshAlumniData();
+  }, [refreshAlumniData]);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
   const openProfile = useCallback((tab?: "info" | "attendance" | unknown) => {
@@ -255,99 +252,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   const closeProfile = useCallback(() => setProfileOpen(false), []);
 
+  const reloadProfile = useCallback(async () => {
+    return fetchUserProfileFromDb(user);
+  }, [fetchUserProfileFromDb, user]);
+
+  /**
+   * Ghi thẳng cập nhật hồ sơ vào database gốc qua /api/profile (upsert trên public.profiles).
+   * Nếu DB trả lỗi -> ném lỗi thật để UI báo rõ cho người dùng, KHÔNG lưu giả vào localStorage.
+   */
   const updateProfile = useCallback(
     async (updates: Partial<Profile>): Promise<boolean> => {
-      if (!user) return false;
-      const merged: Profile = {
-        ...(profile || {
-          id: user.id,
-          full_name: null,
-          class_name: null,
-          job_title: null,
-          company: null,
-          location_region: null,
-          role: "member",
-        }),
+      if (!user) {
+        throw new Error("Bạn cần đăng nhập trước khi lưu hồ sơ.");
+      }
+
+      const payload: Record<string, any> = {
+        id: user.id,
         ...updates,
       };
 
-      setProfile(merged);
+      const res = await authFetch("/api/profile", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
-      // 1. Lưu vào localStorage
-      try {
-        localStorage.setItem(`profile_${user.id}`, JSON.stringify(merged));
-        localStorage.setItem(`tcdn4_checked_in_${user.id}`, "1");
-      } catch {}
-
-      // 2. Lấy session token để gửi kèm header Authorization
-      try {
-        let token = "";
-        try {
-          const { data: sessionData } = await getSupabase().auth.getSession();
-          token = sessionData?.session?.access_token || "";
-        } catch {}
-
-        const validColumns = [
-          "id",
-          "full_name",
-          "class_name",
-          "job_title",
-          "company",
-          "location_region",
-          "specific_location",
-          "phone",
-          "avatar_url",
-          "birthday",
-          "marital_status",
-          "children_count",
-          "attendance_status",
-          "shirt_size",
-          "delivery_address",
-          "bio",
-          "role",
-        ];
-        const cleanPayload: any = {};
-        for (const k of validColumns) {
-          if ((merged as any)[k] !== undefined) {
-            cleanPayload[k] = (merged as any)[k];
-          }
-        }
-
-        // Gọi qua endpoint server /api/profile (vừa ghi Supabase DB vừa ghi disk file data/profiles.json)
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        await fetch("/api/profile", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(cleanPayload),
-        });
-
-        // Dự phòng ghi trực tiếp từ client nếu có session
-        if (!user.id.startsWith("dev-")) {
-          const supabase = getSupabase();
-          await supabase.from("profiles").upsert(cleanPayload);
-        }
-
-        // Bắn sự kiện profile_updated để toàn bộ giao diện cập nhật ngay
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("tcdn4_profile_updated"));
-          window.dispatchEvent(new Event("tcdn4_registration_updated"));
-          try {
-            getSupabase().channel("tcdn4-global-realtime").send({
-              type: "broadcast",
-              event: "profile_updated",
-              payload: { id: user.id, time: Date.now() },
-            });
-          } catch {}
-        }
-      } catch (err) {
-        console.warn("Lỗi lưu hồ sơ:", err);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data?.profile) {
+        throw new Error(data?.error || "Không thể lưu hồ sơ vào database gốc. Vui lòng thử lại.");
       }
+
+      const saved = data.profile as Profile;
+      const isSuperAdmin = (user.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
+      setProfile({
+        ...saved,
+        role: isSuperAdmin ? "admin" : saved.role || "member",
+      });
+
+      // Cập nhật tức thời toàn bộ giao diện & phát realtime sang thiết bị khác
+      await refreshAlumniData();
+      broadcastDataUpdate("profile");
 
       return true;
     },
-    [user, profile]
+    [user, refreshAlumniData]
   );
 
   const value = useMemo<AuthContextValue>(
@@ -358,16 +305,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin:
         profile?.role === "admin" ||
         profile?.role === "committee" ||
-        user?.email === "caotuanhiep@gmail.com" ||
-        user?.email?.includes("admin") ||
+        (user?.email || "").toLowerCase() === SUPER_ADMIN_EMAIL ||
+        (user?.email || "").toLowerCase().includes("admin") ||
         false,
       openLogin,
       openProfile,
       closeProfile,
       signOut,
       updateProfile,
+      reloadProfile,
     }),
-    [user, profile, loading, openLogin, openProfile, closeProfile, signOut, updateProfile]
+    [user, profile, loading, openLogin, openProfile, closeProfile, signOut, updateProfile, reloadProfile]
   );
 
   return (

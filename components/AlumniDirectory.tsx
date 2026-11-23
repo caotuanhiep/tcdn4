@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { 
   Users, 
   Search, 
@@ -8,20 +8,16 @@ import {
   Briefcase, 
   GraduationCap, 
   Globe, 
-  Filter, 
   MessageCircle, 
   Building, 
   Phone,
   X,
   ChevronDown,
   CheckCircle2,
-  Sparkles,
-  Baby,
-  Heart,
   User
 } from "lucide-react";
-import { getSupabase } from "@/lib/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getAvatarInitials } from "@/lib/avatar";
 
@@ -56,167 +52,52 @@ export default function AlumniDirectory({
   selectedRegion = "all",
   onSelectRegion,
 }: AlumniDirectoryProps) {
-  const { user, profile, openLogin, openProfile } = useAuth();
+  const { user, openLogin, openProfile } = useAuth();
+  const { profiles } = useAlumniData();
   const toast = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [viewingMember, setViewingMember] = useState<AlumniMember | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(8);
-  const [alumniList, setAlumniList] = useState<AlumniMember[]>([]);
 
-  // Tải danh bạ thực tế từ bảng profiles trên Supabase và danh sách đã đăng ký
-  useEffect(() => {
-    let active = true;
+  // Chuyển đổi trực tiếp danh sách profiles từ Database gốc (qua AlumniDataProvider)
+  const alumniList: AlumniMember[] = useMemo(() => {
+    return profiles.map((p) => {
+      const normalizedRegion: "hcm" | "hn" | "other" | "overseas" =
+        p.location_region === "hn"
+          ? "hn"
+          : p.location_region === "overseas"
+          ? "overseas"
+          : p.location_region === "dn" || p.location_region === "other"
+          ? "other"
+          : "hcm";
 
-    async function loadMembers() {
-      const combinedMembers: AlumniMember[] = [];
-      const seenNames = new Set<string>();
-      const seenIds = new Set<string | number>();
-
-      // 1. Thử tải từ API server /api/profile?all=true (đầy đủ nhất, hợp nhất DB + Local profiles)
-      try {
-        const res = await fetch("/api/profile?all=true", { cache: "no-store" });
-        if (res.ok) {
-          const resJson = await res.json();
-          if (resJson?.success && Array.isArray(resJson.profiles) && resJson.profiles.length > 0) {
-            resJson.profiles.forEach((p: any) => {
-              const memberName = p.full_name || "Thành viên K33";
-              const memberId = p.id;
-              if (memberId && seenIds.has(memberId)) return;
-              if (memberId) seenIds.add(memberId);
-
-              combinedMembers.push({
-                id: memberId,
-                name: memberName,
-                class: (p.class_name as any) || "TC10",
-                job: p.job_title || "Cựu sinh viên",
-                company: p.company || "UEH Alumni",
-                location: p.specific_location || (
-                  p.location_region === "hn" ? "Hà Nội" :
-                  (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
-                  p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
-                ),
-                region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
-                phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
-                avatar_url: p.avatar_url || "",
-                bio: p.bio || "",
-                marital_status: p.marital_status || "",
-                children_count: p.children_count || 0,
-                is_verified: true,
-                role: p.role || "member",
-              });
-              seenNames.add(memberName.toLowerCase().trim());
-            });
-          }
-        }
-      } catch {}
-
-      // 2. Dự phòng trực tiếp từ Supabase DB
-      if (combinedMembers.length === 0) {
-        try {
-          const { data, error } = await getSupabase()
-            .from("profiles")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          if (active && !error && data && data.length > 0) {
-            data.forEach((p: any) => {
-              const memberName = p.full_name || "Thành viên K33";
-              const memberId = p.id;
-              if (memberId && seenIds.has(memberId)) return;
-              if (memberId) seenIds.add(memberId);
-
-              combinedMembers.push({
-                id: memberId,
-                name: memberName,
-                class: (p.class_name as any) || "TC10",
-                job: p.job_title || "Cựu sinh viên",
-                company: p.company || "UEH Alumni",
-                location: p.specific_location || (
-                  p.location_region === "hn" ? "Hà Nội" :
-                  (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
-                  p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
-                ),
-                region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
-                phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
-                avatar_url: p.avatar_url || "",
-                bio: p.bio || "",
-                marital_status: p.marital_status || "",
-                children_count: p.children_count || 0,
-                is_verified: true,
-                role: p.role || "member",
-              });
-              seenNames.add(memberName.toLowerCase().trim());
-            });
-          }
-        } catch {}
-      }
-
-      // Đồng thời nạp danh sách cựu sinh viên đã đăng ký tham gia họp mặt 15 năm
-      try {
-        const stored = localStorage.getItem("tcdn4_registrations");
-        if (stored) {
-          const regs = JSON.parse(stored);
-          regs.forEach((r: any) => {
-            const rName = (r.fullName || "").trim();
-            const rId = r.id || `reg-${rName}`;
-            if (seenIds.has(rId)) return;
-            if (rName && !seenNames.has(rName.toLowerCase())) {
-              seenIds.add(rId);
-              const regRegion: "hcm" | "hn" | "other" | "overseas" = 
-                /Hà Nội|hn/i.test(r.address) ? "hn" :
-                /Đà Nẵng|dn|Huế|Nha Trang|Cần Thơ|Hải Phòng|Bình Dương|Đồng Nai|Vũng Tàu|Lâm Đồng|Đà Lạt|Quảng Nam|Quy Nhơn/i.test(r.address) ? "other" :
-                /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address) ? "overseas" : "hcm";
-
-              combinedMembers.push({
-                id: rId,
-                name: rName,
-                class: (r.className as any) || "TC10",
-                job: "Cựu sinh viên",
-                company: "TCDN4 K33",
-                location: r.address || "TP. Hồ Chí Minh",
-                region: regRegion,
-                phone: user ? (r.phone || "") : (r.phone ? "HIDDEN" : ""),
-                bio: `Đã đăng ký tham gia họp mặt 15 năm (Áo size: ${r.shirtSize || "L"})`,
-                is_verified: r.status === "confirmed",
-              });
-              seenNames.add(rName.toLowerCase());
-            }
-          });
-        }
-      } catch {}
-
-      // Đảm bảo thông tin của chính user hiện tại luôn hiển thị tên và thông tin mới nhất
-      if (profile?.id) {
-        const myIdx = combinedMembers.findIndex((m) => m.id === profile.id);
-        if (myIdx >= 0) {
-          if (profile.full_name) combinedMembers[myIdx].name = profile.full_name;
-          if (profile.class_name) combinedMembers[myIdx].class = profile.class_name as any;
-          if (profile.job_title) combinedMembers[myIdx].job = profile.job_title;
-          if (profile.company) combinedMembers[myIdx].company = profile.company;
-          if (profile.avatar_url) combinedMembers[myIdx].avatar_url = profile.avatar_url;
-        }
-      }
-
-      if (active) {
-        setAlumniList(combinedMembers);
-      }
-    }
-
-    loadMembers();
-
-    const handleUpdate = () => loadMembers();
-    window.addEventListener("storage", handleUpdate);
-    window.addEventListener("tcdn4_registration_updated", handleUpdate);
-    window.addEventListener("tcdn4_profile_updated", handleUpdate);
-
-    return () => {
-      active = false;
-      window.removeEventListener("storage", handleUpdate);
-      window.removeEventListener("tcdn4_registration_updated", handleUpdate);
-      window.removeEventListener("tcdn4_profile_updated", handleUpdate);
-    };
-  }, [user, profile]);
+      return {
+        id: p.id,
+        name: p.full_name || "Thành viên K33",
+        class: ((p.class_name as any) || "TC10"),
+        job: p.job_title || "Cựu sinh viên",
+        company: p.company || "UEH Alumni",
+        location:
+          p.specific_location ||
+          (normalizedRegion === "hn"
+            ? "Hà Nội"
+            : normalizedRegion === "other"
+            ? "Tỉnh khác"
+            : normalizedRegion === "overseas"
+            ? "Quốc tế"
+            : "TP. Hồ Chí Minh"),
+        region: normalizedRegion,
+        phone: user ? p.phone || "" : p.has_phone || p.phone ? "HIDDEN" : "",
+        avatar_url: p.avatar_url || "",
+        bio: p.bio || "",
+        marital_status: p.marital_status || "",
+        children_count: p.children_count || 0,
+        is_verified: true,
+        role: p.role || "member",
+      };
+    });
+  }, [profiles, user]);
 
   const handleRegionClick = (r: string) => {
     if (onSelectRegion) {

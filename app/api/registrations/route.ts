@@ -1,351 +1,314 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createServerClient } from "@supabase/ssr";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import fs from "fs";
-import path from "path";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getRequestUser,
+  getServerSupabase,
+  isAdminUser,
+  requireAdmin,
+} from "@/lib/supabase/requestAuth";
+import {
+  NO_CACHE_HEADERS,
+  type RegistrationItem,
+  cleanPhoneDigits,
+  formatShortDate,
+  loadManifestRegistrations,
+  loadMergedRegistrations,
+  removeRegistrationFromManifest,
+  saveManifestRegistrations,
+} from "@/lib/alumni-server";
 
-const BUCKET_NAME = "alumni-media";
-const REGISTRATIONS_PATH = "registrations/registrations-manifest.json";
-const LOCAL_DATA_DIR = path.join(process.cwd(), "data");
-const LOCAL_REGISTRATIONS_PATH = path.join(LOCAL_DATA_DIR, "registrations.json");
-const LOCAL_PROFILES_PATH = path.join(LOCAL_DATA_DIR, "profiles.json");
+export type { RegistrationItem };
 
-export interface RegistrationItem {
-  id: string;
-  fullName: string;
-  className: "TC10" | "TC11" | "TC12";
-  phone: string;
-  shirtSize: string;
-  address: string;
-  avatarUrl?: string;
-  guestsCount?: number;
-  status: "confirmed" | "pending";
-  paidAmount: number;
-  createdAt: string;
-  confirmedAt?: string;
-  paymentRef?: string;
-  note?: string;
-}
-
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(LOCAL_DATA_DIR)) {
-      fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
-    }
-  } catch {}
-}
-
-export function getStorageClient(req?: NextRequest): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (serviceKey) {
-    return createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-  if (req) {
-    return createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      cookies: {
-        getAll: () => req.cookies.getAll(),
-        setAll: () => {},
-      },
-    }) as unknown as SupabaseClient;
-  }
-  return getSupabaseAdmin();
-}
-
+// Giữ export tương thích ngược cho sepay-webhook & ai-database-context
 export async function loadRegistrations(client?: SupabaseClient): Promise<RegistrationItem[]> {
-  let stored: RegistrationItem[] = [];
-
-  // 1. Đọc từ Cloud Supabase Storage với cache-buster
-  try {
-    const supabase = client || getSupabaseAdmin();
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(REGISTRATIONS_PATH);
-    if (pub?.publicUrl) {
-      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (res.ok) {
-        const text = await res.text();
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) stored = parsed;
-      }
-    }
-  } catch {}
-
-  if (stored.length === 0) {
-    try {
-      const supabase = client || getSupabaseAdmin();
-      const { data, error } = await supabase.storage.from(BUCKET_NAME).download(REGISTRATIONS_PATH);
-      if (!error && data) {
-        const text = await data.text();
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) stored = parsed;
-      }
-    } catch {}
-  }
-
-  // 2. Fallback đọc từ local file
-  if (stored.length === 0) {
-    try {
-      if (fs.existsSync(LOCAL_REGISTRATIONS_PATH)) {
-        const text = fs.readFileSync(LOCAL_REGISTRATIONS_PATH, "utf-8");
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) stored = parsed;
-      }
-    } catch {}
-  }
-
-  // 3. Tự động hợp nhất thành viên từ bảng profiles và profiles.json
-  try {
-    const supabase = client || getSupabaseAdmin();
-    let allProfilesList: any[] = [];
-    try {
-      const { data: dbProfiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
-      if (Array.isArray(dbProfiles)) allProfilesList = [...dbProfiles];
-    } catch {}
-
-    try {
-      if (fs.existsSync(LOCAL_PROFILES_PATH)) {
-        const text = fs.readFileSync(LOCAL_PROFILES_PATH, "utf-8");
-        const map = JSON.parse(text);
-        for (const pid of Object.keys(map)) {
-          const idx = allProfilesList.findIndex((x) => x.id === pid);
-          if (idx >= 0) {
-            allProfilesList[idx] = { ...allProfilesList[idx], ...map[pid] };
-          } else {
-            allProfilesList.push(map[pid]);
-          }
-        }
-      }
-    } catch {}
-
-    if (allProfilesList.length > 0) {
-      let mergedList = [...stored];
-      for (const p of allProfilesList) {
-        if (!p.full_name) continue;
-
-        const phoneKey = p.phone ? p.phone.trim().toLowerCase().replace(/[^0-9]/g, "") : "";
-        const idKey = p.id ? p.id.toLowerCase() : "";
-
-        // Tìm xem đã có phiếu đăng ký nào ứng với profile này chưa
-        const existingIdx = mergedList.findIndex((item) => {
-          const itemPhone = item.phone ? item.phone.trim().toLowerCase().replace(/[^0-9]/g, "") : "";
-          const itemId = item.id ? item.id.toLowerCase() : "";
-          if (idKey && itemId && idKey === itemId) return true;
-          if (phoneKey && itemPhone && phoneKey === itemPhone) return true;
-          return false;
-        });
-
-        // NẾU NGƯỜI NÀY CHỌN KHÔNG THAM GIA -> LOẠI KHỎI DANH SÁCH THAM GIA
-        if (p.attendance_status === "not_attending") {
-          if (existingIdx >= 0) {
-            mergedList.splice(existingIdx, 1);
-          }
-          continue;
-        }
-
-        // NẾU ĐÃ CÓ PHIẾU ĐĂNG KÝ -> ĐỒNG BỘ TÊN VÀ THÔNG TIN CƠ BẢN (KHÔNG GHI ĐÈ SIZE ÁO MỚI NHẤT ĐÃ LƯU)
-        if (existingIdx >= 0) {
-          mergedList[existingIdx].fullName = p.full_name.trim();
-          mergedList[existingIdx].className = (p.class_name as any) || mergedList[existingIdx].className;
-          if (p.avatar_url) mergedList[existingIdx].avatarUrl = p.avatar_url;
-          if (!mergedList[existingIdx].shirtSize && p.shirt_size) mergedList[existingIdx].shirtSize = p.shirt_size;
-          if (!mergedList[existingIdx].address && p.delivery_address) mergedList[existingIdx].address = p.delivery_address;
-        } else if (p.attendance_status === "attending" && phoneKey.length >= 9) {
-          // THÊM MỚI NẾU THỰC SỰ CHỌN THAM GIA
-          const address =
-            p.delivery_address?.trim() ||
-            p.specific_location?.trim() ||
-            (p.location_region === "hn" ? "Hà Nội" :
-             p.location_region === "overseas" ? "Nước ngoài" :
-             "TP. Hồ Chí Minh");
-
-          mergedList.push({
-            id: p.id || `profile-${Date.now()}`,
-            fullName: p.full_name.trim(),
-            className: (p.class_name as any) || "TC10",
-            phone: p.phone?.trim() || "",
-            shirtSize: p.shirt_size || "L (Nam)",
-            address: address,
-            avatarUrl: p.avatar_url || undefined,
-            guestsCount: 0,
-            status: "pending",
-            paidAmount: 1000000,
-            createdAt: p.created_at
-              ? new Date(p.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
-              : new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-          });
-        }
-      }
-
-      return mergedList;
-    }
-  } catch (err) {
-    console.error("loadRegistrations profiles merge error:", err);
-  }
-
-  return stored;
+  return loadMergedRegistrations(client);
 }
 
-export async function saveRegistrations(items: RegistrationItem[], client?: SupabaseClient): Promise<boolean> {
-  const json = JSON.stringify(items, null, 2);
-  let localOk = false;
-  let cloudOk = false;
-
-  try {
-    ensureDataDir();
-    fs.writeFileSync(LOCAL_REGISTRATIONS_PATH, json, "utf-8");
-    localOk = true;
-  } catch {}
-
-  try {
-    const supabase = client || getSupabaseAdmin();
-    const buffer = Buffer.from(json, "utf-8");
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(
-      REGISTRATIONS_PATH,
-      buffer,
-      {
-        contentType: "application/json; charset=utf-8",
-        upsert: true,
-        cacheControl: "0",
-      }
-    );
-    if (!error) cloudOk = true;
-  } catch {}
-
-  return cloudOk || localOk;
+export async function saveRegistrations(
+  items: RegistrationItem[],
+  client?: SupabaseClient
+): Promise<boolean> {
+  const res = await saveManifestRegistrations(items, client);
+  return res.ok;
 }
 
-// GET /api/registrations - Lấy danh sách đăng ký
+// GET /api/registrations - Lấy danh sách đăng ký hợp nhất trực tiếp từ DB + Cloud manifest
 export async function GET(req: NextRequest) {
-  const supabase = getStorageClient(req);
-  const items = await loadRegistrations(supabase);
-  return NextResponse.json(
-    { success: true, registrations: items, items: items },
-    {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        Pragma: "no-cache",
-      },
-    }
-  );
+  try {
+    const supabase = getServerSupabase(req);
+    const items = await loadMergedRegistrations(supabase);
+    return NextResponse.json(
+      { success: true, registrations: items, items },
+      { headers: NO_CACHE_HEADERS }
+    );
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi tải danh sách đăng ký" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
+  }
 }
 
-// POST /api/registrations - Thêm mới đăng ký tham gia
+// POST /api/registrations - Lưu/cập nhật đăng ký tham gia 15 năm trực tiếp vào DB + Cloud manifest
 export async function POST(req: NextRequest) {
   try {
-    const supabase = getStorageClient(req);
+    const supabase = getServerSupabase(req);
+    const requestUser = await getRequestUser(req);
     const body = await req.json();
-    const { fullName, className, phone, shirtSize, address, avatarUrl, guestsCount, paidAmount, note } = body;
+    const {
+      fullName,
+      className,
+      phone,
+      shirtSize,
+      address,
+      avatarUrl,
+      guestsCount,
+      paidAmount,
+      note,
+    } = body;
 
     if (!fullName || !phone) {
-      return NextResponse.json({ success: false, error: "Thiếu họ tên hoặc số điện thoại" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Thiếu họ tên hoặc số điện thoại" },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const currentList = await loadRegistrations(supabase);
-    const cleanPhone = String(phone).replace(/[^0-9]/g, "");
-    const existingReg = currentList.find((r) => {
-      if (body.id && r.id === body.id) return true;
-      const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+    const regId = String(body.id || requestUser?.id || `reg-${Date.now()}`);
+    const cleanPhone = cleanPhoneDigits(phone);
+
+    // 1. Cập nhật bảng profiles (nguồn chân lý) nếu ID thuộc về user đã đăng nhập
+    if (requestUser && requestUser.id === regId) {
+      const { error: profErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: regId,
+            full_name: String(fullName).trim(),
+            class_name: className || "TC10",
+            phone: String(phone).trim(),
+            attendance_status: "attending",
+            shirt_size: shirtSize || "L (Nam)",
+            delivery_address: address ? String(address).trim() : "",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+
+      if (profErr) {
+        return NextResponse.json(
+          { success: false, error: `Lỗi lưu hồ sơ tham gia vào DB: ${profErr.message}` },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
+      }
+    }
+
+    // 2. Cập nhật manifest thanh toán trên Cloud Storage (bảo toàn trạng thái confirmed/SePay nếu đã có)
+    const manifest = await loadManifestRegistrations(supabase);
+    const existingReg = manifest.find((r) => {
+      if (r.id && r.id.toLowerCase() === regId.toLowerCase()) return true;
+      const rPhone = cleanPhoneDigits(r.phone);
       if (cleanPhone.length >= 9 && rPhone === cleanPhone) return true;
       return false;
     });
 
     const newReg: RegistrationItem = {
-      id: body.id || existingReg?.id || `reg-${Date.now()}`,
+      id: regId,
       fullName: String(fullName).trim(),
-      className: (className as any) || existingReg?.className || "TC10",
+      className: (className || existingReg?.className || "TC10") as "TC10" | "TC11" | "TC12",
       phone: String(phone).trim(),
       shirtSize: shirtSize || existingReg?.shirtSize || "L (Nam)",
-      address: address ? String(address).trim() : (existingReg?.address || "TP. Hồ Chí Minh"),
+      address: address ? String(address).trim() : existingReg?.address || "TP. Hồ Chí Minh",
       avatarUrl: avatarUrl || existingReg?.avatarUrl || undefined,
-      guestsCount: typeof guestsCount === "number" ? Number(guestsCount) : (existingReg?.guestsCount || 0),
-      status: existingReg?.status === "confirmed" ? "confirmed" : ((body.status as any) || "pending"),
+      guestsCount: typeof guestsCount === "number" ? Number(guestsCount) : existingReg?.guestsCount || 0,
+      status: existingReg?.status === "confirmed" ? "confirmed" : "pending",
       paidAmount: Number(paidAmount) || existingReg?.paidAmount || 1000000,
-      createdAt: existingReg?.createdAt || body.createdAt || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+      createdAt: existingReg?.createdAt || body.createdAt || formatShortDate(new Date().toISOString()),
       confirmedAt: existingReg?.confirmedAt,
       paymentRef: existingReg?.paymentRef,
-      note: note ? String(note).trim() : existingReg?.note,
+      note: note !== undefined ? String(note).trim() : existingReg?.note,
     };
 
-    const updated = [
+    const updatedManifest = [
       newReg,
-      ...currentList.filter((r) => {
-        if (r.id === newReg.id) return false;
-        const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+      ...manifest.filter((r) => {
+        if (r.id && r.id.toLowerCase() === newReg.id.toLowerCase()) return false;
+        const rPhone = cleanPhoneDigits(r.phone);
         if (cleanPhone.length >= 9 && rPhone === cleanPhone) return false;
         return true;
       }),
     ];
-    await saveRegistrations(updated, supabase);
 
-    return NextResponse.json({ success: true, registration: newReg, registrations: updated });
+    const saved = await saveManifestRegistrations(updatedManifest, supabase);
+    if (!saved.ok) {
+      return NextResponse.json(
+        { success: false, error: `Không thể lưu phiếu đăng ký lên Cloud: ${saved.error || "lỗi storage"}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const merged = await loadMergedRegistrations(supabase);
+    return NextResponse.json(
+      { success: true, registration: newReg, registrations: merged },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi máy chủ" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi máy chủ" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
-// PUT /api/registrations - Cập nhật trạng thái (Duyệt thanh toán / SePay Webhook)
+// PUT /api/registrations - Duyệt thanh toán (Admin) hoặc cập nhật phiếu đăng ký
 export async function PUT(req: NextRequest) {
   try {
-    const supabase = getStorageClient(req);
+    const auth = await requireAdmin(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const supabase = getServerSupabase(req);
     const body = await req.json();
     const { id, status, paidAmount, paymentRef, note, shirtSize, address } = body;
 
     if (!id) {
-      return NextResponse.json({ success: false, error: "Thiếu ID đăng ký" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Thiếu ID đăng ký" },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const currentList = await loadRegistrations(supabase);
-    let matched = false;
+    // Đọc danh sách hợp nhất để có thể duyệt cả những người mới lưu ở bảng profiles chưa có trong manifest
+    const mergedList = await loadMergedRegistrations(supabase);
+    const target = mergedList.find((item) => item.id === id);
+    if (!target) {
+      return NextResponse.json(
+        { success: false, error: "Không tìm thấy phiếu đăng ký" },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      );
+    }
 
-    const updated = currentList.map((item) => {
-      if (item.id === id) {
-        matched = true;
-        return {
-          ...item,
-          status: status || item.status,
-          paidAmount: typeof paidAmount === "number" ? paidAmount : item.paidAmount,
-          paymentRef: paymentRef || item.paymentRef,
-          shirtSize: shirtSize || item.shirtSize,
-          address: address !== undefined ? address : item.address,
-          confirmedAt: status === "confirmed" ? (body.confirmedAt || new Date().toISOString()) : item.confirmedAt,
-          note: note !== undefined ? note : item.note,
-        };
+    const updatedItem: RegistrationItem = {
+      ...target,
+      status: status || target.status,
+      paidAmount: typeof paidAmount === "number" ? paidAmount : target.paidAmount,
+      paymentRef: paymentRef || target.paymentRef,
+      shirtSize: shirtSize || target.shirtSize,
+      address: address !== undefined ? address : target.address,
+      confirmedAt:
+        status === "confirmed"
+          ? body.confirmedAt || new Date().toISOString()
+          : status === "pending"
+          ? undefined
+          : target.confirmedAt,
+      note: note !== undefined ? note : target.note,
+    };
+
+    const manifest = await loadManifestRegistrations(supabase);
+    const targetPhone = cleanPhoneDigits(updatedItem.phone);
+    const nextManifest = [
+      updatedItem,
+      ...manifest.filter((item) => {
+        if (item.id && item.id.toLowerCase() === id.toLowerCase()) return false;
+        const iPhone = cleanPhoneDigits(item.phone);
+        if (targetPhone.length >= 9 && iPhone === targetPhone) return false;
+        return true;
+      }),
+    ];
+
+    const saved = await saveManifestRegistrations(nextManifest, supabase);
+    if (!saved.ok) {
+      return NextResponse.json(
+        { success: false, error: `Không thể lưu lên Cloud: ${saved.error || "lỗi storage"}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // Nếu Admin cập nhật size áo/địa chỉ hoặc xác nhận tham gia -> đồng bộ vào bảng profiles
+    if (!id.startsWith("reg-") && !id.startsWith("profile-")) {
+      const profilePatch: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (shirtSize) profilePatch.shirt_size = shirtSize;
+      if (address !== undefined) profilePatch.delivery_address = address;
+      if (status === "confirmed") profilePatch.attendance_status = "attending";
+      if (Object.keys(profilePatch).length > 1) {
+        await supabase.from("profiles").update(profilePatch).eq("id", id);
       }
-      return item;
-    });
-
-    if (!matched) {
-      return NextResponse.json({ success: false, error: "Không tìm thấy phiếu đăng ký" }, { status: 404 });
     }
 
-    await saveRegistrations(updated, supabase);
-    return NextResponse.json({ success: true, registrations: updated });
+    const latest = await loadMergedRegistrations(supabase);
+    return NextResponse.json(
+      { success: true, registration: updatedItem, registrations: latest },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi máy chủ" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi máy chủ" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
-// DELETE /api/registrations - Xóa phiếu đăng ký
+// DELETE /api/registrations?id=... - Xóa phiếu đăng ký (Admin hoặc chính chủ hủy tham gia)
 export async function DELETE(req: NextRequest) {
   try {
-    const supabase = getStorageClient(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-
     if (!id) {
-      return NextResponse.json({ success: false, error: "Thiếu ID" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Thiếu ID" },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const currentList = await loadRegistrations(supabase);
-    const updated = currentList.filter((item) => item.id !== id);
-    await saveRegistrations(updated, supabase);
+    const requestUser = await getRequestUser(req);
+    const isDevAdmin =
+      process.env.NODE_ENV === "development" &&
+      req.cookies.get("tcdn4_dev_mode")?.value === "admin";
+    const callerIsAdmin = isDevAdmin || (await isAdminUser(requestUser, req));
+    const isOwner = Boolean(requestUser && requestUser.id === id);
 
-    return NextResponse.json({ success: true, registrations: updated });
+    if (!callerIsAdmin && !isOwner) {
+      return NextResponse.json(
+        { success: false, error: "Bạn không có quyền xóa phiếu đăng ký này" },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const supabase = getServerSupabase(req);
+
+    // 1. Xóa khỏi manifest trên Cloud Storage
+    const removed = await removeRegistrationFromManifest(id, supabase);
+    if (!removed.ok) {
+      return NextResponse.json(
+        { success: false, error: `Không thể xóa phiếu đăng ký trên Cloud: ${removed.error}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // 2. Đồng thời cập nhật bảng profiles thành not_attending để không bị tự động hiện lại
+    if (!id.startsWith("reg-") && !id.startsWith("profile-")) {
+      await supabase
+        .from("profiles")
+        .update({
+          attendance_status: "not_attending",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    }
+
+    const latest = await loadMergedRegistrations(supabase);
+    return NextResponse.json(
+      { success: true, registrations: latest },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi máy chủ" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi máy chủ" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }

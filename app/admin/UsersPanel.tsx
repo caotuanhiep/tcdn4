@@ -1,162 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { 
-  Loader2, 
-  ShieldCheck, 
-  UserCheck, 
-  Users, 
-  Search, 
-  Edit3, 
-  Trash2, 
-  X, 
-  Check, 
-  Plus, 
-  Phone, 
-  MapPin, 
-  Briefcase, 
-  Building,
-  HeartHandshake
+import { useCallback, useEffect, useState } from "react";
+import {
+  Loader2,
+  Users,
+  Search,
+  Edit3,
+  Trash2,
+  X,
+  Check,
+  MapPin,
 } from "lucide-react";
-import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
+import { useAlumniData } from "@/components/AlumniDataProvider";
+import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import type { Profile } from "@/types/database";
 import { getAvatarInitials } from "@/lib/avatar";
 
-const USERS_CACHE_KEY = "tcdn4_admin_users_cache";
+const SHIRT_SIZES = [
+  "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
+  "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)",
+];
 
 export default function UsersPanel() {
   const toast = useToast();
-  const [users, setUsers] = useState<Profile[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem(USERS_CACHE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem(USERS_CACHE_KEY);
-        if (cached && JSON.parse(cached).length > 0) return false;
-      } catch {}
-    }
-    return true;
-  });
+  const { lastUpdated, refresh: refreshAlumniData } = useAlumniData();
+
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
 
-  // State cho Modal Sửa thành viên
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // State cho Xóa thành viên
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
-      if (users.length === 0) setLoading(true);
-      const res = await fetch("/api/admin/users", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.users)) {
-          setUsers(data.users);
-          try {
-            localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(data.users));
-          } catch {}
-          return;
-        }
-      }
-
-      // Fallback sang getSupabase nếu chưa cấu hình endpoint
-      const { data, error } = await getSupabase()
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (!error && data) {
-        setUsers(data as Profile[]);
-        try {
-          localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(data));
-        } catch {}
+      const res = await authFetch(`/api/admin/users?t=${Date.now()}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success && Array.isArray(data.users)) {
+        setUsers(data.users);
+      } else if (!res.ok) {
+        toast.error(data?.error || "Không tải được danh bạ từ máy chủ");
       }
     } catch {
-      // Dùng fallback
+      toast.error("Lỗi kết nối máy chủ khi tải danh bạ");
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
+  // Tự động đồng bộ mỗi khi database có thay đổi realtime (qua AlumniDataProvider)
   useEffect(() => {
-    fetchUsers();
-
-    const handleLocal = () => fetchUsers();
-    window.addEventListener("tcdn4_profile_updated", handleLocal);
-
-    let channel: any = null;
-    try {
-      const supabase = getSupabase();
-      channel = supabase.channel("tcdn4-realtime-users")
-        .on("broadcast", { event: "profile_updated" }, () => {
-          fetchUsers();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-          fetchUsers();
-        })
-        .subscribe();
-    } catch {}
-
-    return () => {
-      window.removeEventListener("tcdn4_profile_updated", handleLocal);
-      if (channel) {
-        try {
-          const supabase = getSupabase();
-          supabase.removeChannel(channel);
-        } catch {}
-      }
-    };
-  }, []);
-
-  const broadcastSync = () => {
-    try {
-      const supabase = getSupabase();
-      supabase.channel("tcdn4-realtime-users").send({
-        type: "broadcast",
-        event: "profile_updated",
-        payload: { time: Date.now() },
-      });
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_profile_updated"));
-      }
-    } catch {}
-  };
+    void fetchUsers();
+  }, [fetchUsers, lastUpdated]);
 
   const handleChangeRole = async (userId: string, newRole: string) => {
     const previous = [...users];
-    const updated = users.map((u) => (u.id === userId ? { ...u, role: newRole as any } : u));
-    setUsers(updated);
-    try {
-      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updated));
-    } catch {}
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole as any } : u)));
 
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await authFetch("/api/admin/users", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: userId, role: newRole }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Lỗi lưu quyền lên máy chủ");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Lỗi lưu quyền lên database gốc");
       }
-      broadcastSync();
+      if (data.user) {
+        setUsers((prev) => prev.map((u) => (u.id === userId ? data.user : u)));
+      }
+      await refreshAlumniData();
+      broadcastDataUpdate("profile");
       toast.success(
         `Đã cập nhật vai trò thành ${
           newRole === "admin" ? "Super Admin" : newRole === "committee" ? "Ban liên lạc" : "Thành viên"
@@ -164,15 +82,15 @@ export default function UsersPanel() {
       );
     } catch (err: any) {
       setUsers(previous);
-      try {
-        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
-      } catch {}
       toast.error(`Không thể lưu vai trò: ${err?.message || "Lỗi kết nối máy chủ"}`);
     }
   };
 
   const handleOpenEdit = (user: Profile) => {
-    setEditingUser({ ...user });
+    setEditingUser({
+      ...user,
+      location_region: user.location_region === "dn" ? "other" : user.location_region || "hcm",
+    });
     setIsEditModalOpen(true);
   };
 
@@ -182,40 +100,39 @@ export default function UsersPanel() {
 
     setSavingEdit(true);
     const previous = [...users];
-    const updatedList = users.map((u) => (u.id === editingUser.id ? editingUser : u));
-    setUsers(updatedList);
-    try {
-      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updatedList));
-    } catch {}
 
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await authFetch("/api/admin/users", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingUser.id,
-          full_name: editingUser.full_name,
+          full_name: editingUser.full_name?.trim() || "",
           class_name: editingUser.class_name,
           job_title: editingUser.job_title,
           company: editingUser.company,
           location_region: editingUser.location_region,
           specific_location: editingUser.specific_location,
-          phone: editingUser.phone,
+          phone: editingUser.phone?.trim() || "",
           role: editingUser.role,
+          attendance_status: editingUser.attendance_status || null,
+          shirt_size: editingUser.shirt_size || null,
+          delivery_address: editingUser.delivery_address || "",
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Lỗi cập nhật máy chủ");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Lỗi cập nhật database gốc");
       }
-      broadcastSync();
-      toast.success("Đã cập nhật thông tin thành viên thành công trên máy chủ!");
+
+      if (data.user) {
+        setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? data.user : u)));
+      }
+      await refreshAlumniData();
+      broadcastDataUpdate("profile");
+      toast.success("Đã lưu thay đổi vào database gốc thành công!");
       setIsEditModalOpen(false);
     } catch (err: any) {
       setUsers(previous);
-      try {
-        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
-      } catch {}
       toast.error("Lỗi cập nhật: " + (err?.message || "Lỗi máy chủ"));
     } finally {
       setSavingEdit(false);
@@ -223,30 +140,24 @@ export default function UsersPanel() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa thành viên này khỏi danh bạ?")) return;
+    if (!confirm("Bạn có chắc chắn muốn xóa thành viên này khỏi danh bạ và danh sách đăng ký?")) return;
 
     const previous = [...users];
-    const remaining = users.filter((u) => u.id !== userId);
-    setUsers(remaining);
-    try {
-      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(remaining));
-    } catch {}
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
 
     try {
-      const res = await fetch(`/api/admin/users?id=${encodeURIComponent(userId)}`, {
+      const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(userId)}`, {
         method: "DELETE",
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Lỗi xóa thành viên");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Lỗi xóa thành viên");
       }
-      broadcastSync();
-      toast.success("Đã xóa thành viên khỏi danh bạ!");
+      await refreshAlumniData();
+      broadcastDataUpdate("profile");
+      toast.success("Đã xóa thành viên khỏi database gốc!");
     } catch (err: any) {
       setUsers(previous);
-      try {
-        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(previous));
-      } catch {}
       toast.error("Lỗi xóa: " + (err?.message || "Lỗi máy chủ"));
     }
   };
@@ -277,11 +188,11 @@ export default function UsersPanel() {
               Danh Bạ Cựu Sinh Viên ({users.length})
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              Xem, chỉnh sửa thông tin, cấp quyền Ban Liên Lạc hoặc xóa thành viên khỏi hệ thống.
+              Mọi thay đổi được ghi đè trực tiếp vào Database gốc (Supabase) và cập nhật tức thời trên toàn website.
             </p>
           </div>
           <button
-            onClick={fetchUsers}
+            onClick={() => void fetchUsers()}
             className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
           >
             Làm mới danh sách
@@ -360,7 +271,6 @@ export default function UsersPanel() {
               ) : (
                 filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                    {/* Họ tên */}
                     <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-ueh/10 font-bold text-ueh text-xs overflow-hidden shrink-0">
@@ -380,33 +290,38 @@ export default function UsersPanel() {
                       </div>
                     </td>
 
-                    {/* Lớp */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-ueh border border-blue-100">
                         {u.class_name || "TC10"}
                       </span>
                     </td>
 
-                    {/* Nghề & Công ty */}
                     <td className="py-3 px-3 max-w-[200px] truncate">
                       <div className="font-semibold text-slate-800 truncate">{u.job_title || "Cựu sinh viên"}</div>
                       <div className="text-[11px] text-slate-400 truncate">{u.company || "UEH Alumni"}</div>
                     </td>
 
-                    {/* Khu vực & SĐT */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div className="flex items-center gap-1 text-slate-700">
                         <MapPin size={11} className="text-rose-500" />
-                        <span>{u.specific_location || (u.location_region === "hn" ? "Hà Nội" : u.location_region === "dn" ? "Đà Nẵng" : u.location_region === "overseas" ? "Quốc tế" : "TP.HCM")}</span>
+                        <span>
+                          {u.specific_location ||
+                            (u.location_region === "hn"
+                              ? "Hà Nội"
+                              : u.location_region === "dn" || u.location_region === "other"
+                              ? "Tỉnh khác"
+                              : u.location_region === "overseas"
+                              ? "Quốc tế"
+                              : "TP.HCM")}
+                        </span>
                       </div>
                       {u.phone && (
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          📞 {u.phone}
+                          {u.phone}
                         </div>
                       )}
                     </td>
 
-                    {/* Vai trò */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <select
                         value={u.role || "member"}
@@ -425,7 +340,6 @@ export default function UsersPanel() {
                       </select>
                     </td>
 
-                    {/* Thao tác: Sửa & Xóa */}
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -469,11 +383,9 @@ export default function UsersPanel() {
               <X size={16} />
             </button>
 
-            <h3 className="text-lg font-black text-ueh mb-1">
-              Chỉnh Sửa Thông Tin Thành Viên
-            </h3>
+            <h3 className="text-lg font-black text-ueh mb-1">Chỉnh Sửa Thông Tin Thành Viên</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Cập nhật thông tin chi tiết hoặc phân quyền quản trị cho thành viên này.
+              Cập nhật trực tiếp vào bảng profiles trên Database gốc và tự động đồng bộ danh sách 15 năm.
             </p>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5">
@@ -497,7 +409,7 @@ export default function UsersPanel() {
                   </label>
                   <select
                     value={editingUser.class_name || "TC10"}
-                    onChange={(e) => setEditingUser({ ...editingUser, class_name: e.target.value as any })}
+                    onChange={(e) => setEditingUser({ ...editingUser, class_name: e.target.value })}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
                   >
                     <option value="TC10">Lớp TC10</option>
@@ -545,20 +457,20 @@ export default function UsersPanel() {
                   >
                     <option value="hcm">TP. Hồ Chí Minh</option>
                     <option value="hn">Hà Nội</option>
-                    <option value="dn">Đà Nẵng</option>
+                    <option value="other">Tỉnh khác</option>
                     <option value="overseas">Quốc tế / Nước ngoài</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
-                    Địa chỉ / Nước ngoài cụ thể
+                    Địa chỉ cụ thể
                   </label>
                   <input
                     type="text"
                     value={editingUser.specific_location || ""}
                     onChange={(e) => setEditingUser({ ...editingUser, specific_location: e.target.value })}
-                    placeholder="VD: Sydney, Úc hoặc Quận 1..."
+                    placeholder="VD: Quận 7, Đà Nẵng, Sydney..."
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
                   />
                 </div>
@@ -589,6 +501,43 @@ export default function UsersPanel() {
                     <option value="member">Thành viên</option>
                     <option value="committee">Ban liên lạc</option>
                     <option value="admin">Super Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Tham gia 15 năm
+                  </label>
+                  <select
+                    value={editingUser.attendance_status || ""}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, attendance_status: e.target.value || null })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  >
+                    <option value="">Chưa chọn</option>
+                    <option value="attending">Có tham gia</option>
+                    <option value="not_attending">Không tham gia</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Size Áo Polo
+                  </label>
+                  <select
+                    value={editingUser.shirt_size || ""}
+                    onChange={(e) => setEditingUser({ ...editingUser, shirt_size: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  >
+                    <option value="">Chưa chọn</option>
+                    {SHIRT_SIZES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

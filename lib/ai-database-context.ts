@@ -1,9 +1,10 @@
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import fs from "fs";
-import path from "path";
 import { BankConfig } from "@/lib/bank";
 import { loadBankConfigServer } from "@/lib/bank-server";
-import { loadRegistrations, RegistrationItem } from "@/app/api/registrations/route";
+import {
+  loadMergedRegistrations,
+  loadProfilesFromDb,
+  type RegistrationItem,
+} from "@/lib/alumni-server";
 import { DEFAULT_COMMITTEE_MEMBERS } from "@/lib/committee";
 
 export interface DatabaseSummary {
@@ -49,35 +50,14 @@ function normalizeForSearch(str: string) {
 }
 
 export async function getAlumniDatabaseContext(userQuery?: string): Promise<DatabaseSummary> {
-  // 1. Tải song song: Cấu hình Ngân hàng chuẩn từ Cloud, Danh sách Đăng ký 15 năm, và Danh bạ Profiles từ Supabase
-  const [{ config: bankInfo }, registrations, profiles] = await Promise.all([
+  // 1. Tải song song: Cấu hình Ngân hàng chuẩn từ Cloud, Danh bạ Profiles từ Supabase DB và Danh sách Đăng ký 15 năm
+  const [{ config: bankInfo }, profiles] = await Promise.all([
     loadBankConfigServer(),
-    loadRegistrations().catch(() => [] as RegistrationItem[]),
-    (async () => {
-      let list: any[] = [];
-      try {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase
-          .from("profiles")
-          .select(
-            "id, full_name, class_name, phone, job_title, company, location_region, specific_location, attendance_status, shirt_size, delivery_address, birthday, marital_status, children_count, bio, role"
-          )
-          .order("created_at", { ascending: false });
-        if (data && Array.isArray(data)) list = data;
-      } catch {}
-
-      if (list.length === 0) {
-        try {
-          const p = path.join(process.cwd(), "data", "profiles.json");
-          if (fs.existsSync(p)) {
-            const map = JSON.parse(fs.readFileSync(p, "utf-8"));
-            list = Object.values(map);
-          }
-        } catch {}
-      }
-      return list;
-    })(),
+    loadProfilesFromDb().catch(() => []),
   ]);
+  const registrations = await loadMergedRegistrations(undefined, profiles).catch(
+    () => [] as RegistrationItem[]
+  );
 
   // 2. Tổng hợp số liệu từ danh sách đăng ký 15 năm (nguồn chuẩn nhất cho việc tham gia & chuyển khoản)
   const confirmedRegs = registrations.filter((r) => r.status === "confirmed");

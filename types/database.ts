@@ -18,6 +18,9 @@ export interface Profile {
   shirt_size?: string | null;
   delivery_address?: string | null;
   has_checked_in?: boolean | null;
+  has_phone?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
   role: UserRole;
 }
 

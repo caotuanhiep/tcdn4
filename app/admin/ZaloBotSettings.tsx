@@ -43,6 +43,7 @@ import {
   Database
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { authFetch } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase/client";
 
 const DEFAULT_ZALO_GROUP = "https://zalo.me/g/yodibu606";
@@ -344,7 +345,7 @@ export default function ZaloBotSettings() {
     } catch {}
 
     // Tải cấu hình và danh sách nhóm từ server (đã lưu tập trung trên Supabase Storage)
-    fetch("/api/settings/zalo", { cache: "no-store" })
+    authFetch("/api/settings/zalo")
       .then((r) => r.json())
       .then((d) => {
         if (d.success && d.config) {
@@ -392,9 +393,8 @@ export default function ZaloBotSettings() {
       const updated = { ...current, ...patch };
       localStorage.setItem("tcdn4_zalo_bot_config", JSON.stringify(updated));
 
-      await fetch("/api/settings/zalo", {
+      await authFetch("/api/settings/zalo", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
     } catch {}
@@ -650,9 +650,8 @@ export default function ZaloBotSettings() {
     const list = groupsToSave || groups;
     setIsSavingGroups(true);
     try {
-      const res = await fetch("/api/settings/zalo", {
+      const res = await authFetch("/api/settings/zalo", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ groups: list }),
       });
       const data = await res.json();

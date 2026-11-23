@@ -1,36 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Briefcase, GraduationCap, Loader2, MapPin, Search } from "lucide-react";
-import { getSupabase } from "@/lib/supabase/client";
-import { useToast } from "@/components/ToastProvider";
-import type { Profile } from "@/types/database";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 import { getAvatarInitials } from "@/lib/avatar";
 
 export default function DirectoryView() {
-  const toast = useToast();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { profiles, loading } = useAlumniData();
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("");
   const [className, setClassName] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    getSupabase()
-      .from("profiles")
-      .select("*")
-      .order("full_name", { ascending: true })
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) toast.error(`Không tải được danh bạ: ${error.message}`);
-        else setProfiles((data ?? []) as Profile[]);
-        setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [toast]);
 
   const regions = useMemo(
     () => [...new Set(profiles.map((p) => p.location_region).filter((x): x is string => !!x))].sort(),

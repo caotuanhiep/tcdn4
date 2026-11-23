@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
-import { requireAdmin } from "@/lib/supabase/requestAuth";
+import { requireAdmin, getServerSupabase } from "@/lib/supabase/requestAuth";
 
 const BUCKET_NAME = "alumni-media";
 const CONFIG_PATH = "settings/zalo-bot-config.json";
@@ -137,19 +137,7 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
 };
 
 function getStorageClient(req?: NextRequest): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (serviceKey) {
-    return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  }
-  if (req) {
-    return createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} },
-    }) as unknown as SupabaseClient;
-  }
-  return createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return getServerSupabase(req);
 }
 
 export async function loadZaloBotConfig(): Promise<ZaloBotConfig> {

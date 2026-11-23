@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getSupabase } from "@/lib/supabase/client";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 
 const BANNER_SLIDES = [
   { id: 1, src: "/images/banner-3.png", alt: "TCDN4 K33 - Hội Ngộ 15 Năm (3)", caption: "Hội ngộ 15 Năm TCDN4" },
@@ -40,151 +40,8 @@ export default function Hero() {
     return () => clearInterval(interval);
   }, [isPaused]);
 
-  const [stats, setStats] = useState({
-    checkedInCount: 0,
-    attendingCount: 0,
-    singleCount: 0,
-  });
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadStats() {
-      try {
-        // 1. Tải profiles thực tế trực tiếp từ Supabase
-        const { data: dbProfiles } = await getSupabase()
-          .from("profiles")
-          .select("id, full_name, attendance_status, marital_status, phone");
-
-        // 2. Tải danh sách đăng ký sự kiện từ API hoặc localStorage
-        let regs: any[] = [];
-        try {
-          const res = await fetch("/api/registrations", { cache: "no-store" });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && Array.isArray(data.items)) {
-              regs = data.items;
-            }
-          }
-        } catch {}
-
-        if (regs.length === 0) {
-          try {
-            const stored = localStorage.getItem("tcdn4_registrations");
-            if (stored) regs = JSON.parse(stored);
-          } catch {}
-        }
-
-        const profiles = dbProfiles || [];
-        
-        // Tập hợp danh sách thành viên duy nhất (loại bỏ trùng lặp triệt để qua ID, SĐT hoặc Tên)
-        interface MemberEntry {
-          id?: string;
-          name: string;
-          phone: string;
-          attending: boolean;
-          single: boolean;
-        }
-
-        const uniqueMembers: MemberEntry[] = [];
-
-        const addOrMerge = (item: {
-          id?: string;
-          name?: string;
-          phone?: string;
-          attending: boolean;
-          single: boolean;
-        }) => {
-          const cleanId = (item.id || "").toLowerCase().trim();
-          const cleanName = (item.name || "").toLowerCase().trim();
-          const cleanPhone = (item.phone || "").replace(/[^0-9]/g, "");
-
-          if (!cleanId && !cleanName && !cleanPhone) return;
-
-          const existing = uniqueMembers.find((m) => {
-            // Match theo SĐT nếu cả 2 đều có SĐT
-            if (cleanPhone && m.phone && cleanPhone === m.phone) return true;
-            // Match theo ID nếu cả 2 đều có ID
-            if (cleanId && m.id && cleanId === m.id) return true;
-            // Chỉ match theo Tên nếu KHÔNG có xung đột về SĐT hoặc ID khác nhau
-            if (cleanName && m.name && cleanName === m.name) {
-              const phoneConflict = cleanPhone && m.phone && cleanPhone !== m.phone;
-              const idConflict = cleanId && m.id && cleanId !== m.id;
-              if (!phoneConflict && !idConflict) return true;
-            }
-            return false;
-          });
-
-          if (existing) {
-            if (item.attending) existing.attending = true;
-            if (item.single) existing.single = true;
-            if (!existing.id && cleanId) existing.id = cleanId;
-            if (!existing.phone && cleanPhone) existing.phone = cleanPhone;
-            // Cập nhật tên nếu tên mới dài hơn / rõ hơn hoặc tên cũ bị trống
-            if (cleanName && (!existing.name || cleanName.length >= existing.name.length)) {
-              existing.name = cleanName;
-            }
-          } else {
-            uniqueMembers.push({
-              id: cleanId,
-              name: cleanName,
-              phone: cleanPhone,
-              attending: item.attending,
-              single: item.single,
-            });
-          }
-        };
-
-        // 1. Ưu tiên đưa danh sách đã đăng ký tham gia (regs) vào trước
-        // để ghi nhận chính xác tên người tham gia (tránh bị tên Google Account đè)
-        regs.forEach((r: any) => {
-          addOrMerge({
-            id: r.id,
-            name: r.fullName,
-            phone: r.phone,
-            attending: true,
-            single: false,
-          });
-        });
-
-        // 2. Sau đó nạp danh sách profiles từ database để bổ sung thành viên điểm danh / độc thân
-        profiles.forEach((p: any) => {
-          addOrMerge({
-            id: p.id,
-            name: p.full_name,
-            phone: p.phone,
-            attending: p.attendance_status === "attending",
-            single: p.marital_status === "single",
-          });
-        });
-
-        const checkedInCount = uniqueMembers.length;
-        const attendingCount = uniqueMembers.filter((m) => m.attending).length;
-        const singleCount = uniqueMembers.filter((m) => m.single).length;
-
-        if (active) {
-          setStats({
-            checkedInCount,
-            attendingCount,
-            singleCount,
-          });
-        }
-      } catch (err) {
-        console.error("Lỗi tải thống kê Hero:", err);
-      }
-    }
-
-    loadStats();
-    window.addEventListener("storage", loadStats);
-    window.addEventListener("tcdn4_registration_updated", loadStats);
-    window.addEventListener("tcdn4_profile_updated", loadStats);
-    return () => {
-      active = false;
-      window.removeEventListener("storage", loadStats);
-      window.removeEventListener("tcdn4_registration_updated", loadStats);
-      window.removeEventListener("tcdn4_profile_updated", loadStats);
-    };
-  }, []);
+  // Thống kê realtime lấy trực tiếp từ nguồn dữ liệu gốc (AlumniDataProvider -> Supabase DB)
+  const { stats } = useAlumniData();
 
   const scrollTo = (id: string) => {
     const elem = document.getElementById(id);

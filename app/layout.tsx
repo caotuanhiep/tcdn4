@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
+import { AlumniDataProvider } from "@/components/AlumniDataProvider";
 import { ToastProvider } from "@/components/ToastProvider";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -104,15 +105,17 @@ export default function RootLayout({
     <html lang="vi" className={`${inter.variable} h-full antialiased`}>
       <body className={`${inter.className} font-sans flex min-h-full flex-col pb-16 md:pb-0`}>
         <ToastProvider>
-          <AuthProvider>
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <Footer />
-            {/* Lớp bảo vệ vui vẻ: Xác thực đúng thầy giáo K33 */}
-            <TeacherSecurityModal />
-            {/* Thanh menu định hướng phong cách App ở chân trang trên Mobile */}
-            <MobileBottomNav />
-          </AuthProvider>
+          <AlumniDataProvider>
+            <AuthProvider>
+              <Navbar />
+              <main className="flex-1">{children}</main>
+              <Footer />
+              {/* Lớp bảo vệ vui vẻ: Xác thực đúng thầy giáo K33 */}
+              <TeacherSecurityModal />
+              {/* Thanh menu định hướng phong cách App ở chân trang trên Mobile */}
+              <MobileBottomNav />
+            </AuthProvider>
+          </AlumniDataProvider>
         </ToastProvider>
       </body>
     </html>

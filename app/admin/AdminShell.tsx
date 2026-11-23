@@ -46,10 +46,10 @@ export default function AdminShell() {
   // Client-side guard
   useEffect(() => {
     if (!mounted) return;
-    if (!loading && (!user || (profile && !isAdmin) || (!profile && user))) {
+    if (!loading && (!user || !isAdmin)) {
       router.replace("/");
     }
-  }, [mounted, loading, user, profile, isAdmin, router]);
+  }, [mounted, loading, user, isAdmin, router]);
 
   if (!mounted || loading || !isAdmin) {
     return (

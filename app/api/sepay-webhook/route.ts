@@ -396,17 +396,11 @@ export async function POST(request: Request) {
     if (isMatched) {
       try {
         const supabase = getSupabaseAdmin();
-        const ch1 = supabase.channel("tcdn4-realtime-sync");
-        await ch1.send({
+        const ch = supabase.channel("tcdn4-realtime");
+        await ch.send({
           type: "broadcast",
-          event: "registration_updated",
-          payload: { id: matchedId, status: "confirmed", paidAmount: amountNum, time: Date.now() },
-        });
-        const ch2 = supabase.channel("tcdn4-global-realtime");
-        await ch2.send({
-          type: "broadcast",
-          event: "registration_updated",
-          payload: { id: matchedId, status: "confirmed", paidAmount: amountNum, time: Date.now() },
+          event: "data_updated",
+          payload: { reason: "registration", id: matchedId, status: "confirmed", paidAmount: amountNum, time: Date.now() },
         });
       } catch {}
     }

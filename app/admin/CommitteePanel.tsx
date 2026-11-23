@@ -15,18 +15,53 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
-import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers, saveCommitteeMembers } from "@/lib/committee";
+import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS } from "@/lib/committee";
+import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import { getAvatarInitials } from "@/lib/avatar";
 
 export default function CommitteePanel() {
   const toast = useToast();
   const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
   const [currentMember, setCurrentMember] = useState<Partial<CommitteeMember>>({});
 
   useEffect(() => {
-    setMembers(getCommitteeMembers());
+    let active = true;
+    fetch(`/api/settings/committee?t=${Date.now()}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.success && Array.isArray(data.members) && data.members.length > 0) {
+          setMembers(data.members);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const persistMembers = async (nextMembers: CommitteeMember[]): Promise<boolean> => {
+    setSaving(true);
+    try {
+      const res = await authFetch("/api/settings/committee", {
+        method: "PUT",
+        body: JSON.stringify({ members: nextMembers }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Không thể lưu danh sách Ban liên lạc lên máy chủ");
+      }
+      setMembers(nextMembers);
+      broadcastDataUpdate("committee");
+      return true;
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi lưu Ban liên lạc");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleOpenAdd = () => {
     setCurrentMember({
@@ -47,16 +82,14 @@ export default function CommitteePanel() {
     setIsEditing(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Bạn có chắc chắn muốn xóa thành viên ban liên lạc này không?")) {
-      const updated = members.filter((m) => m.id !== id);
-      setMembers(updated);
-      saveCommitteeMembers(updated);
-      toast.success("Đã xóa thành viên ban liên lạc!");
-    }
+  const handleDelete = async (id: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa thành viên ban liên lạc này không?")) return;
+    const updated = members.filter((m) => m.id !== id);
+    const ok = await persistMembers(updated);
+    if (ok) toast.success("Đã xóa thành viên ban liên lạc trên hệ thống!");
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentMember.name?.trim()) {
       toast.error("Vui lòng điền họ tên thành viên!");
@@ -65,19 +98,19 @@ export default function CommitteePanel() {
 
     const memberToSave = currentMember as CommitteeMember;
     const exists = members.some((m) => m.id === memberToSave.id);
-    let updated: CommitteeMember[];
+    const updated = exists
+      ? members.map((m) => (m.id === memberToSave.id ? memberToSave : m))
+      : [...members, memberToSave];
 
-    if (exists) {
-      updated = members.map((m) => (m.id === memberToSave.id ? memberToSave : m));
-      toast.success("Đã cập nhật thông tin thành viên ban liên lạc!");
-    } else {
-      updated = [...members, memberToSave];
-      toast.success("Đã thêm mới thành viên ban liên lạc!");
+    const ok = await persistMembers(updated);
+    if (ok) {
+      toast.success(
+        exists
+          ? "Đã cập nhật thành viên ban liên lạc lên hệ thống!"
+          : "Đã thêm mới thành viên ban liên lạc lên hệ thống!"
+      );
+      setIsEditing(false);
     }
-
-    setMembers(updated);
-    saveCommitteeMembers(updated);
-    setIsEditing(false);
   };
 
   return (
@@ -283,9 +316,10 @@ export default function CommitteePanel() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-5 py-2 text-xs font-bold text-white hover:bg-ueh-light"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-5 py-2 text-xs font-bold text-white hover:bg-ueh-light disabled:opacity-50"
                 >
-                  <Save size={14} /> Lưu thông tin
+                  <Save size={14} /> {saving ? "Đang lưu..." : "Lưu thông tin"}
                 </button>
               </div>
             </form>

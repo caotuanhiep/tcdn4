@@ -1,21 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { 
-  CheckCircle2, 
-  Clock, 
-  Search, 
-  Shirt, 
-  Download, 
-  Copy, 
-  Users, 
-  DollarSign, 
-  Check, 
-  Trash2,
-  Calendar
-} from "lucide-react";
+import { CheckCircle2, Clock, Search, Shirt, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
-import { getSupabase } from "@/lib/supabase/client";
+import { useAlumniData } from "@/components/AlumniDataProvider";
+import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import { DEFAULT_BANK_INFO, fetchBankInfo, getBankInfo, type BankConfig } from "@/lib/bank";
 
 function formatShortPaidAmount(amount?: number, fallback = 1000000): string {
@@ -40,142 +29,78 @@ function formatRegistrationDate(val?: string) {
   return val;
 }
 
-interface Registration {
-  id: string;
-  fullName: string;
-  className: "TC10" | "TC11" | "TC12";
-  phone: string;
-  shirtSize: string;
-  address: string;
-  guestsCount: number;
-  status: "confirmed" | "pending";
-  paidAmount: number;
-  createdAt: string;
-  note?: string;
-}
-
-const DEFAULT_REGS: Registration[] = [];
-
 export default function RegistrationsPanel() {
   const toast = useToast();
-  const [list, setList] = useState<Registration[]>(DEFAULT_REGS);
+  const { registrations: list, refresh } = useAlumniData();
   const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
   const [searchTerm, setSearchTerm] = useState("");
   const [classFilter, setClassFilter] = useState("all");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     setBankInfo(getBankInfo());
     fetchBankInfo().then((cfg) => setBankInfo(cfg)).catch(() => {});
-
-    try {
-      const stored = localStorage.getItem("tcdn4_registrations");
-      if (stored) {
-        setList(JSON.parse(stored));
-      }
-    } catch {}
-
-    const fetchLatest = () => {
-      fetch("/api/registrations", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.success && Array.isArray(data.registrations)) {
-            setList(data.registrations);
-            try {
-              localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
-            } catch {}
-          }
-        })
-        .catch(() => {});
-    };
-
-    fetchLatest();
-
-    // Lắng nghe sự kiện cục bộ và Realtime Supabase
-    const handleLocal = () => fetchLatest();
-    window.addEventListener("tcdn4_registration_updated", handleLocal);
-
-    let channel: any = null;
-    try {
-      const supabase = getSupabase();
-      channel = supabase.channel("tcdn4-realtime-sync")
-        .on("broadcast", { event: "registration_updated" }, () => {
-          fetchLatest();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-          fetchLatest();
-        })
-        .subscribe();
-    } catch {}
-
-    return () => {
-      window.removeEventListener("tcdn4_registration_updated", handleLocal);
-      if (channel) {
-        try {
-          const supabase = getSupabase();
-          supabase.removeChannel(channel);
-        } catch {}
-      }
-    };
   }, []);
-
-  const saveList = (data: Registration[]) => {
-    setList(data);
-    try {
-      localStorage.setItem("tcdn4_registrations", JSON.stringify(data));
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("tcdn4_registration_updated"));
-      }
-      const supabase = getSupabase();
-      supabase.channel("tcdn4-realtime-sync").send({
-        type: "broadcast",
-        event: "registration_updated",
-        payload: { time: Date.now() },
-      });
-    } catch {}
-  };
 
   const toggleStatus = async (id: string) => {
     const target = list.find((x) => x.id === id);
-    if (!target) return;
+    if (!target || busyId) return;
+
     const nextStatus = target.status === "confirmed" ? "pending" : "confirmed";
     const resolvedPaidAmount =
       nextStatus === "confirmed"
-        ? (target.paidAmount > 0 ? target.paidAmount : bankInfo.amount)
+        ? target.paidAmount > 0
+          ? target.paidAmount
+          : bankInfo.amount
         : target.paidAmount;
 
-    const updated = list.map((item) => {
-      if (item.id === id) {
-        return {
-          ...item,
-          status: nextStatus as "confirmed" | "pending",
-          paidAmount: resolvedPaidAmount,
-        };
-      }
-      return item;
-    });
-    saveList(updated);
-
+    setBusyId(id);
     try {
-      await fetch("/api/registrations", {
+      const res = await authFetch("/api/registrations", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status: nextStatus, paidAmount: resolvedPaidAmount }),
       });
-    } catch {}
-
-    toast.success("Đã cập nhật trạng thái thanh toán!");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Không lưu được trạng thái lên máy chủ");
+      }
+      await refresh();
+      broadcastDataUpdate("registration");
+      toast.success(
+        nextStatus === "confirmed"
+          ? `Đã xác nhận thu phí cho ${target.fullName}!`
+          : `Đã chuyển ${target.fullName} về trạng thái chờ duyệt.`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi cập nhật trạng thái thanh toán");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const removeReg = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa lượt đăng ký này?")) return;
-    const updated = list.filter((item) => item.id !== id);
-    saveList(updated);
+    const target = list.find((x) => x.id === id);
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa lượt đăng ký của "${target?.fullName || id}"?`)) {
+      return;
+    }
 
+    setBusyId(id);
     try {
-      await fetch(`/api/registrations?id=${id}`, { method: "DELETE" });
-    } catch {}
-
-    toast.success("Đã xóa lượt đăng ký!");
+      const res = await authFetch(`/api/registrations?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Không xóa được lượt đăng ký trên máy chủ");
+      }
+      await refresh();
+      broadcastDataUpdate("registration");
+      toast.success("Đã xóa lượt đăng ký và đồng bộ database gốc!");
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi xóa lượt đăng ký");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const copyShirtSummary = () => {
@@ -215,7 +140,7 @@ export default function RegistrationsPanel() {
             Quản lý Đăng ký 15 Năm & Size Áo
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Theo dõi danh sách tham dự, đối soát chuyển khoản và thống kê sản xuất áo lớp
+            Theo dõi danh sách tham dự, đối soát chuyển khoản trực tiếp từ database gốc (cập nhật realtime)
           </p>
         </div>
 
@@ -311,7 +236,7 @@ export default function RegistrationsPanel() {
               <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-4 py-3 font-bold text-slate-900">
                   {item.fullName}
-                  {item.guestsCount > 0 && (
+                  {(item.guestsCount || 0) > 0 && (
                     <span className="text-[10px] text-slate-400 block font-normal">
                       +{item.guestsCount} F1
                     </span>
@@ -330,8 +255,9 @@ export default function RegistrationsPanel() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <button
-                    onClick={() => toggleStatus(item.id)}
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 cursor-pointer ${
+                    onClick={() => void toggleStatus(item.id)}
+                    disabled={busyId === item.id}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 cursor-pointer disabled:opacity-50 ${
                       item.status === "confirmed"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : "bg-amber-50 text-amber-700 border border-amber-200"
@@ -350,8 +276,9 @@ export default function RegistrationsPanel() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
-                    onClick={() => removeReg(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    onClick={() => void removeReg(item.id)}
+                    disabled={busyId === item.id}
+                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <Trash2 size={14} />
                   </button>

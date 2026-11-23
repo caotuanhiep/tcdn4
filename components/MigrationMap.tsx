@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Compass, 
-  MapPin, 
-  Building2
-} from "lucide-react";
-import { getSupabase } from "@/lib/supabase/client";
+import { useState } from "react";
+import { Compass, MapPin } from "lucide-react";
+import { useAlumniData } from "@/components/AlumniDataProvider";
 
 export interface MapRegion {
-  id: string;
+  id: "hcm" | "hn" | "other" | "overseas";
   name: string;
   shortName: string;
   count: number;
@@ -23,7 +19,7 @@ const REGIONS: MapRegion[] = [
     id: "hcm",
     name: "TP. Hồ Chí Minh",
     shortName: "TP.HCM",
-    count: 68,
+    count: 0,
     x: 160,
     y: 380,
     isCenter: true,
@@ -32,15 +28,15 @@ const REGIONS: MapRegion[] = [
     id: "hn",
     name: "Hà Nội",
     shortName: "Hà Nội",
-    count: 22,
+    count: 0,
     x: 330,
     y: 80,
   },
   {
-    id: "dn",
-    name: "Đà Nẵng",
-    shortName: "Đà Nẵng",
-    count: 14,
+    id: "other",
+    name: "Tỉnh khác",
+    shortName: "Tỉnh khác",
+    count: 0,
     x: 470,
     y: 260,
   },
@@ -48,7 +44,7 @@ const REGIONS: MapRegion[] = [
     id: "overseas",
     name: "Nước ngoài",
     shortName: "Quốc tế",
-    count: 16,
+    count: 0,
     x: 750,
     y: 150,
   },
@@ -64,102 +60,16 @@ export default function MigrationMap({
   onSelectRegion,
 }: MigrationMapProps) {
   const [activeHover, setActiveHover] = useState<string | null>(null);
-  const [regionCounts, setRegionCounts] = useState<{ [key: string]: number }>({
-    hcm: 0,
-    hn: 0,
-    dn: 0,
-    overseas: 0,
-  });
+  const { stats } = useAlumniData();
 
-  useEffect(() => {
-    async function computeCounts() {
-      const counts = { hcm: 0, hn: 0, dn: 0, overseas: 0 };
-      const countedKeys = new Set<string>();
-
-      // 1. Quét từ bảng profiles trên Supabase (người dùng thật đăng ký tài khoản)
-      try {
-        const { data: profiles, error } = await getSupabase()
-          .from("profiles")
-          .select("*");
-        if (!error && profiles && profiles.length > 0) {
-          profiles.forEach((p: any) => {
-            const key = (p.full_name || p.id || "").toLowerCase().trim();
-            if (key && !countedKeys.has(key)) {
-              countedKeys.add(key);
-              const loc = (p.location_region || "").toLowerCase();
-              const specific = (p.specific_location || "").toLowerCase();
-              if (loc === "hn" || specific.includes("hà nội")) counts.hn++;
-              else if (loc === "dn" || specific.includes("đà nẵng")) counts.dn++;
-              else if (loc === "overseas" || /úc|mỹ|usa|singapore|canada|đức|pháp|nhật|hàn|australia/i.test(specific)) counts.overseas++;
-              else counts.hcm++;
-            }
-          });
-        }
-      } catch {}
-
-      // 2. Quét từ local cache profiles (admin users cache)
-      try {
-        const cached = localStorage.getItem("tcdn4_admin_users_cache");
-        if (cached) {
-          const list = JSON.parse(cached);
-          if (Array.isArray(list)) {
-            list.forEach((p: any) => {
-              const key = (p.full_name || p.id || "").toLowerCase().trim();
-              if (key && !countedKeys.has(key)) {
-                countedKeys.add(key);
-                const loc = (p.location_region || "").toLowerCase();
-                const specific = (p.specific_location || "").toLowerCase();
-                if (loc === "hn" || specific.includes("hà nội")) counts.hn++;
-                else if (loc === "dn" || specific.includes("đà nẵng")) counts.dn++;
-                else if (loc === "overseas" || /úc|mỹ|usa|singapore|canada|đức|pháp|nhật|hàn|australia/i.test(specific)) counts.overseas++;
-                else counts.hcm++;
-              }
-            });
-          }
-        }
-      } catch {}
-
-      // 3. Quét từ danh sách đăng ký tham gia sự kiện tcdn4_registrations
-      try {
-        const stored = localStorage.getItem("tcdn4_registrations");
-        const regs = stored ? JSON.parse(stored) : [];
-        if (Array.isArray(regs)) {
-          regs.forEach((r: any) => {
-            const key = (r.fullName || r.phone || r.id || "").toLowerCase().trim();
-            if (key && !countedKeys.has(key)) {
-              countedKeys.add(key);
-              const addr = r.address || "";
-              if (/Hà Nội|hn/i.test(addr)) counts.hn++;
-              else if (/Đà Nẵng|dn/i.test(addr)) counts.dn++;
-              else if (/Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(addr) || r.region === "overseas") counts.overseas++;
-              else counts.hcm++;
-            }
-          });
-        }
-      } catch {}
-
-      setRegionCounts(counts);
-    }
-
-    computeCounts();
-    window.addEventListener("storage", computeCounts);
-    window.addEventListener("tcdn4_registration_updated", computeCounts);
-    window.addEventListener("tcdn4_profile_updated", computeCounts);
-    return () => {
-      window.removeEventListener("storage", computeCounts);
-      window.removeEventListener("tcdn4_registration_updated", computeCounts);
-      window.removeEventListener("tcdn4_profile_updated", computeCounts);
-    };
-  }, []);
-
-  const hasRealData = Object.values(regionCounts).some((c) => c > 0);
+  // Số liệu khu vực lấy trực tiếp từ Database gốc (khớp 100% với Danh bạ)
   const dynamicRegions = REGIONS.map((r) => ({
     ...r,
-    count: hasRealData ? (regionCounts[r.id] ?? r.count) : r.count,
+    count: stats.regionCounts[r.id] ?? 0,
   }));
 
   const center = dynamicRegions.find((r) => r.isCenter) || dynamicRegions[0];
-  const totalCount = dynamicRegions.reduce((acc, curr) => acc + curr.count, 0);
+  const totalCount = stats.regionCounts.all;
 
   const handleRegionClick = (regionId: string) => {
     if (onSelectRegion) {
@@ -178,8 +88,8 @@ export default function MigrationMap({
       // Đường bay Hà Nội: Hướng thẳng lên phía Bắc rồi lượn sang
       mx = 180;
       my = 150;
-    } else if (to.id === "dn") {
-      // Đường bay Đà Nẵng: Đi thấp bên dưới, không giao cắt
+    } else if (to.id === "other") {
+      // Đường bay Tỉnh khác: Đi thấp bên dưới, không giao cắt
       mx = 310;
       my = 350;
     } else if (to.id === "overseas") {

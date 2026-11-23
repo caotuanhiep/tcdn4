@@ -1,30 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/supabase/requestAuth";
+import { getServerSupabase, requireAdmin } from "@/lib/supabase/requestAuth";
+import {
+  NO_CACHE_HEADERS,
+  removeRegistrationFromManifest,
+  syncProfileToRegistrations,
+} from "@/lib/alumni-server";
 import type { Profile } from "@/types/database";
 
-const NO_CACHE_HEADERS = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-  Pragma: "no-cache",
-  Expires: "0",
-};
+const ADMIN_EDITABLE_KEYS = [
+  "full_name",
+  "class_name",
+  "job_title",
+  "company",
+  "location_region",
+  "specific_location",
+  "phone",
+  "avatar_url",
+  "birthday",
+  "marital_status",
+  "children_count",
+  "attendance_status",
+  "shirt_size",
+  "delivery_address",
+  "bio",
+] as const;
 
-// GET /api/admin/users - Lấy danh sách thành viên mới nhất (bỏ qua RLS bằng service role/admin client)
+// GET /api/admin/users - Đọc toàn bộ danh bạ trực tiếp từ Supabase DB
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (!auth.ok) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status, headers: NO_CACHE_HEADERS });
+    return NextResponse.json(
+      { success: false, error: auth.error },
+      { status: auth.status, headers: NO_CACHE_HEADERS }
+    );
   }
 
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = getServerSupabase(req);
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
+      .order("updated_at", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: NO_CACHE_HEADERS });
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
     }
 
     return NextResponse.json(
@@ -39,11 +62,14 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PUT /api/admin/users - Cập nhật vai trò (role) hoặc thông tin thành viên bất kỳ
+// PUT /api/admin/users - Admin cập nhật thông tin / phân quyền trực tiếp vào DB gốc
 export async function PUT(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (!auth.ok) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status, headers: NO_CACHE_HEADERS });
+    return NextResponse.json(
+      { success: false, error: auth.error },
+      { status: auth.status, headers: NO_CACHE_HEADERS }
+    );
   }
 
   try {
@@ -71,26 +97,19 @@ export async function PUT(req: NextRequest) {
       updates.role = role;
     }
 
-    // Các trường thông tin khác nếu có gửi kèm
-    const allowedKeys = [
-      "full_name",
-      "class_name",
-      "job_title",
-      "company",
-      "location_region",
-      "specific_location",
-      "phone",
-      "avatar_url",
-      "birthday",
-    ];
-
-    for (const key of allowedKeys) {
+    for (const key of ADMIN_EDITABLE_KEYS) {
       if (otherFields[key] !== undefined) {
-        updates[key] = otherFields[key];
+        if (key === "birthday" && otherFields[key] === "") {
+          updates[key] = null;
+        } else if (key === "children_count" && otherFields[key] !== null && otherFields[key] !== "") {
+          updates[key] = Number(otherFields[key]);
+        } else {
+          updates[key] = otherFields[key];
+        }
       }
     }
 
-    const supabase = getSupabaseAdmin();
+    const supabase = getServerSupabase(req);
     const { data, error } = await supabase
       .from("profiles")
       .update(updates)
@@ -100,15 +119,33 @@ export async function PUT(req: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: `Lỗi DB: ${error.message}` },
         { status: 500, headers: NO_CACHE_HEADERS }
       );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Không thể ghi đè vào database gốc (0 dòng được cập nhật). Hãy kiểm tra RLS policy của Admin trên Supabase hoặc cấu hình SUPABASE_SERVICE_ROLE_KEY.",
+        },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // Đồng bộ tên / lớp / SĐT / size áo / trạng thái sang danh sách đăng ký 15 năm
+    try {
+      await syncProfileToRegistrations(data, supabase);
+    } catch (syncErr) {
+      console.warn("[PUT /api/admin/users] syncProfileToRegistrations warning:", syncErr);
     }
 
     return NextResponse.json(
       {
         success: true,
-        message: "Đã cập nhật thành công!",
+        message: "Đã lưu thay đổi vào database gốc thành công!",
         user: data,
       },
       { headers: NO_CACHE_HEADERS }
@@ -121,11 +158,14 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// DELETE /api/admin/users - Xóa thành viên khỏi danh bạ
+// DELETE /api/admin/users?id=... - Admin xóa thành viên khỏi DB gốc và danh sách đăng ký
 export async function DELETE(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (!auth.ok) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status, headers: NO_CACHE_HEADERS });
+    return NextResponse.json(
+      { success: false, error: auth.error },
+      { status: auth.status, headers: NO_CACHE_HEADERS }
+    );
   }
 
   try {
@@ -139,18 +179,39 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    const supabase = getServerSupabase(req);
+    const { data, error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: `Lỗi DB: ${error.message}` },
         { status: 500, headers: NO_CACHE_HEADERS }
       );
     }
 
+    if (!data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Không thể xóa thành viên trên database gốc (kiểm tra quyền RLS Admin hoặc cấu hình SUPABASE_SERVICE_ROLE_KEY).",
+        },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // Xóa luôn phiếu đăng ký sự kiện của thành viên này nếu có
+    try {
+      await removeRegistrationFromManifest(id, supabase);
+    } catch {}
+
     return NextResponse.json(
-      { success: true, message: "Đã xóa thành viên thành công!" },
+      { success: true, message: "Đã xóa thành viên khỏi database gốc thành công!" },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {

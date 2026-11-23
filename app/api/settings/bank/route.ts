@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { DEFAULT_BANK_INFO, normalizeBankConfig } from "@/lib/bank";
-import { requireAdmin, getRequestUser, isAdminUser } from "@/lib/supabase/requestAuth";
+import { requireAdmin, getRequestUser, isAdminUser, getServerSupabase } from "@/lib/supabase/requestAuth";
 
 // Cấu hình tài khoản ngân hàng được lưu tập trung trên Supabase Storage (dùng chung cho mọi thiết bị / mọi khách),
 // thay vì localStorage của riêng trình duyệt admin như trước.
@@ -19,14 +19,7 @@ const NO_STORE_HEADERS = {
 };
 
 function getStorageClient(req: NextRequest): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (serviceKey) {
-    return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  }
-  return createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} },
-  }) as unknown as SupabaseClient;
+  return getServerSupabase(req);
 }
 
 async function loadCloudConfig(supabase: SupabaseClient): Promise<any | null> {

@@ -1,113 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { loadRegistrations, saveRegistrations } from "@/app/api/registrations/route";
-import fs from "fs";
-import path from "path";
+import {
+  getRequestUser,
+  getServerSupabase,
+  isAdminUser,
+  SUPER_ADMIN_EMAIL,
+} from "@/lib/supabase/requestAuth";
+import {
+  NO_CACHE_HEADERS,
+  VALID_PROFILE_COLUMNS,
+  loadProfilesFromDb,
+  syncProfileToRegistrations,
+} from "@/lib/alumni-server";
 
-const VALID_PROFILE_COLUMNS = [
-  "id",
-  "full_name",
-  "class_name",
-  "job_title",
-  "company",
-  "location_region",
-  "specific_location",
-  "phone",
-  "avatar_url",
-  "birthday",
-  "marital_status",
-  "children_count",
-  "attendance_status",
-  "shirt_size",
-  "delivery_address",
-  "bio",
-  "role",
-];
-
-const LOCAL_DATA_DIR = path.join(process.cwd(), "data");
-const LOCAL_PROFILES_PATH = path.join(LOCAL_DATA_DIR, "profiles.json");
-const LOCAL_REGISTRATIONS_PATH = path.join(LOCAL_DATA_DIR, "registrations.json");
-
-const NO_CACHE_HEADERS = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-  Pragma: "no-cache",
-  Expires: "0",
-};
-
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(LOCAL_DATA_DIR)) {
-      fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
-    }
-  } catch {}
-}
-
-export function loadLocalProfiles(): Record<string, any> {
-  ensureDataDir();
-  try {
-    if (fs.existsSync(LOCAL_PROFILES_PATH)) {
-      const text = fs.readFileSync(LOCAL_PROFILES_PATH, "utf-8");
-      const parsed = JSON.parse(text);
-      if (typeof parsed === "object" && parsed !== null) return parsed;
-    }
-  } catch {}
-  return {};
-}
-
-export function saveLocalProfiles(map: Record<string, any>) {
-  ensureDataDir();
-  try {
-    fs.writeFileSync(LOCAL_PROFILES_PATH, JSON.stringify(map, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Lỗi lưu file local profiles.json:", err);
-  }
-}
-
-// Lấy Supabase client với Bearer Token của user (nếu có) để vượt qua RLS
-function getSupabaseWithAuth(req: NextRequest): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://tijbvigtbmecwgoacdlu.supabase.co";
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const authHeader = req.headers.get("authorization");
-
-  if (authHeader) {
-    return createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-
-  return getSupabaseAdmin();
-}
-
-// GET /api/profile?id=...&all=true
+// GET /api/profile?id=... hoặc /api/profile?all=true
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const all = searchParams.get("all") === "true";
-
-    const localMap = loadLocalProfiles();
+    const supabase = getServerSupabase(req);
 
     if (all) {
-      // Đọc toàn bộ danh sách thành viên từ Supabase DB
-      const supabase = getSupabaseAdmin();
-      let dbProfiles: any[] = [];
-      try {
-        const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-        if (Array.isArray(data)) dbProfiles = data;
-      } catch {}
-
-      // Hợp nhất với local profiles
-      const mergedMap: Record<string, any> = { ...localMap };
-      for (const p of dbProfiles) {
-        if (p.id) {
-          mergedMap[p.id] = { ...p, ...(mergedMap[p.id] || {}) };
-        }
-      }
-
+      const profiles = await loadProfilesFromDb(supabase);
       return NextResponse.json(
-        { success: true, profiles: Object.values(mergedMap) },
+        { success: true, profiles },
         { headers: NO_CACHE_HEADERS }
       );
     }
@@ -119,32 +35,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1. Kiểm tra trong Supabase DB
-    const supabase = getSupabaseWithAuth(req);
-    let profileFromDb: any = null;
-    try {
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
-      if (!error && data) profileFromDb = data;
-    } catch {}
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
 
-    // 2. Kiểm tra trong local profiles
-    const profileFromLocal = localMap[id] || null;
-
-    // Hợp nhất dữ liệu, ưu tiên dữ liệu mới hơn
-    const merged = {
-      ...(profileFromDb || {}),
-      ...(profileFromLocal || {}),
-    };
-
-    if (Object.keys(merged).length === 0) {
+    if (error) {
       return NextResponse.json(
-        { success: false, error: "Không tìm thấy hồ sơ" },
+        { success: false, error: error.message },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { success: false, error: "Không tìm thấy hồ sơ", profile: null },
         { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
 
     return NextResponse.json(
-      { success: true, profile: merged },
+      { success: true, profile: data },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {
@@ -155,93 +67,103 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/profile
+// POST /api/profile - Ghi trực tiếp & ghi đè vào bảng public.profiles trên Supabase DB
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, ...rest } = body;
+    const requestUser = await getRequestUser(req);
+    const isDevAdmin =
+      process.env.NODE_ENV === "development" &&
+      req.cookies.get("tcdn4_dev_mode")?.value === "admin";
 
-    if (!id) {
+    const targetId: string | undefined = body?.id || requestUser?.id;
+    if (!targetId) {
       return NextResponse.json(
-        { success: false, error: "Thiếu ID người dùng" },
-        { status: 400, headers: NO_CACHE_HEADERS }
+        { success: false, error: "Bạn cần đăng nhập để lưu hồ sơ" },
+        { status: 401, headers: NO_CACHE_HEADERS }
       );
     }
 
-    // Lọc chỉ giữ các trường hợp lệ trong schema bảng profiles
+    // Kiểm tra quyền: chỉ chính chủ hoặc Admin mới được cập nhật hồ sơ này
+    const callerIsAdmin = isDevAdmin || (await isAdminUser(requestUser, req));
+    if (!isDevAdmin && (!requestUser || (requestUser.id !== targetId && !callerIsAdmin))) {
+      return NextResponse.json(
+        { success: false, error: "Bạn không có quyền chỉnh sửa hồ sơ này" },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const supabase = getServerSupabase(req);
+
+    // Đọc bản ghi hiện tại trong DB (nếu đã có) để giữ nguyên role & các trường không gửi lên
+    const { data: existingRow } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", targetId)
+      .maybeSingle();
+
     const cleanUpdates: Record<string, any> = {
-      id,
+      id: targetId,
       updated_at: new Date().toISOString(),
     };
 
     for (const key of VALID_PROFILE_COLUMNS) {
-      if (rest[key] !== undefined) {
-        cleanUpdates[key] = rest[key];
+      if (key === "id" || key === "role") continue;
+      if (body[key] !== undefined) {
+        // Chuẩn hóa giá trị rỗng cho trường DATE (birthday) tránh lỗi PostgreSQL invalid input syntax for type date
+        if (key === "birthday" && body[key] === "") {
+          cleanUpdates[key] = null;
+        } else if (key === "children_count" && body[key] !== null && body[key] !== "") {
+          cleanUpdates[key] = Number(body[key]);
+        } else {
+          cleanUpdates[key] = body[key];
+        }
       }
     }
 
-    // 1. Lưu vào file local profiles.json (bảo đảm dữ liệu bền vững 100%)
-    const localMap = loadLocalProfiles();
-    const existingLocal = localMap[id] || {};
-    const mergedProfile = { ...existingLocal, ...cleanUpdates };
-    localMap[id] = mergedProfile;
-    saveLocalProfiles(localMap);
-
-    // 2. Thử lưu vào Supabase DB với Authorization token của user
-    const supabase = getSupabaseWithAuth(req);
-    try {
-      await supabase.from("profiles").upsert(cleanUpdates);
-    } catch (dbErr) {
-      console.warn("Lưu Supabase profiles cảnh báo:", dbErr);
+    // Bảo vệ role: thành viên thường không thể tự đổi role, giữ role hiện có trong DB
+    if (callerIsAdmin && body.role && ["member", "committee", "admin"].includes(body.role)) {
+      cleanUpdates.role = body.role;
+    } else if (existingRow?.role) {
+      cleanUpdates.role = existingRow.role;
+    } else if ((requestUser?.email || "").toLowerCase() === SUPER_ADMIN_EMAIL) {
+      cleanUpdates.role = "admin";
+    } else {
+      cleanUpdates.role = "member";
     }
 
-    // 3. ĐỒNG BỘ TÊN, SIZE ÁO VÀ THÔNG TIN VÀO DANH SÁCH ĐĂNG KÝ 15 NĂM (CLOUD + LOCAL)
+    const { data: savedProfile, error: saveError } = await supabase
+      .from("profiles")
+      .upsert(cleanUpdates, { onConflict: "id" })
+      .select()
+      .single();
+
+    if (saveError || !savedProfile) {
+      console.error("[POST /api/profile] Supabase upsert failed:", saveError);
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            saveError?.message ||
+            "Không thể ghi hồ sơ vào database gốc (kiểm tra quyền RLS hoặc đăng nhập lại)",
+        },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // Đồng bộ tên, lớp, size áo, địa chỉ, trạng thái tham gia sang danh sách đăng ký 15 năm
     try {
-      const regList = await loadRegistrations(supabase);
-      if (Array.isArray(regList) && regList.length > 0) {
-        let hasRegChanged = false;
-        const cleanPhone = (cleanUpdates.phone || mergedProfile.phone || "").replace(/[^0-9]/g, "");
-
-        for (let i = 0; i < regList.length; i++) {
-          const item = regList[i];
-          const itemPhone = (item.phone || "").replace(/[^0-9]/g, "");
-          const matchId = item.id && item.id.toLowerCase() === id.toLowerCase();
-          const matchPhone = cleanPhone && cleanPhone.length >= 9 && itemPhone === cleanPhone;
-
-          if (matchId || matchPhone) {
-            if (cleanUpdates.full_name) {
-              item.fullName = cleanUpdates.full_name.trim();
-            }
-            if (cleanUpdates.class_name) {
-              item.className = cleanUpdates.class_name;
-            }
-            if (cleanUpdates.avatar_url) {
-              item.avatarUrl = cleanUpdates.avatar_url;
-            }
-            if (cleanUpdates.shirt_size) {
-              item.shirtSize = cleanUpdates.shirt_size;
-            }
-            if (cleanUpdates.delivery_address) {
-              item.address = cleanUpdates.delivery_address.trim();
-            }
-            hasRegChanged = true;
-          }
-        }
-
-        if (hasRegChanged) {
-          await saveRegistrations(regList, supabase);
-        }
-      }
-    } catch (regSyncErr) {
-      console.warn("Lỗi đồng bộ registration khi đổi profile:", regSyncErr);
+      await syncProfileToRegistrations(savedProfile, supabase);
+    } catch (syncErr) {
+      console.warn("[POST /api/profile] syncProfileToRegistrations warning:", syncErr);
     }
 
     return NextResponse.json(
-      { success: true, profile: mergedProfile },
+      { success: true, profile: savedProfile },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {
-    console.error("API /api/profile exception:", err);
+    console.error("[POST /api/profile] exception:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi cập nhật hồ sơ" },
       { status: 500, headers: NO_CACHE_HEADERS }

@@ -10,9 +10,10 @@ import {
   ShieldCheck, 
   GraduationCap
 } from "lucide-react";
-import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers } from "@/lib/committee";
+import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS } from "@/lib/committee";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { DATA_UPDATED_EVENT } from "@/lib/api";
 import { getAvatarInitials } from "@/lib/avatar";
 
 export default function CommitteeSection() {
@@ -21,7 +22,25 @@ export default function CommitteeSection() {
   const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
 
   useEffect(() => {
-    setMembers(getCommitteeMembers());
+    let active = true;
+    async function loadCommittee() {
+      try {
+        const res = await fetch(`/api/settings/committee?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data?.success && Array.isArray(data.members) && data.members.length > 0) {
+          setMembers(data.members);
+        }
+      } catch {}
+    }
+
+    void loadCommittee();
+    const onUpdate = () => void loadCommittee();
+    window.addEventListener(DATA_UPDATED_EVENT, onUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener(DATA_UPDATED_EVENT, onUpdate);
+    };
   }, []);
   return (
     <section id="committee" className="scroll-mt-16 bg-gradient-to-b from-white via-slate-50/50 to-white py-14 sm:py-20">
