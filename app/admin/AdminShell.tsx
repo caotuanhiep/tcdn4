@@ -24,34 +24,29 @@ const TABS = [
 ];
 
 export default function AdminShell() {
-  const { user, loading, isAdmin, profile } = useAuth();
+  const { user, loading, isAdmin } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("registrations");
-  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set<Tab>([tab]));
-  const [mounted, setMounted] = useState(false);
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set<Tab>(["registrations"]));
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  const handleSelectTab = (nextTab: Tab) => {
+    setTab(nextTab);
     setVisitedTabs((prev) => {
-      if (prev.has(tab)) return prev;
+      if (prev.has(nextTab)) return prev;
       const next = new Set(prev);
-      next.add(tab);
+      next.add(nextTab);
       return next;
     });
-  }, [tab]);
+  };
 
   // Client-side guard
   useEffect(() => {
-    if (!mounted) return;
     if (!loading && (!user || !isAdmin)) {
       router.replace("/");
     }
-  }, [mounted, loading, user, isAdmin, router]);
+  }, [loading, user, isAdmin, router]);
 
-  if (!mounted || loading || !isAdmin) {
+  if (loading || !isAdmin) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-ueh">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -82,7 +77,7 @@ export default function AdminShell() {
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
-                onClick={() => setTab(id)}
+                onClick={() => handleSelectTab(id)}
                 className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all whitespace-nowrap md:w-full md:shrink ${
                   tab === id
                     ? "bg-ueh text-white shadow-xs"

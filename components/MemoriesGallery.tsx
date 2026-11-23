@@ -953,6 +953,8 @@ export default function MemoriesGallery() {
                       <img
                         src={alb.coverPhoto.imgSrc}
                         alt={alb.name}
+                        loading="lazy"
+                        decoding="async"
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
@@ -1051,6 +1053,8 @@ export default function MemoriesGallery() {
                           <img
                             src={item.imgSrc}
                             alt={item.title}
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
 

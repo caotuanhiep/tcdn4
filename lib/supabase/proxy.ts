@@ -61,7 +61,7 @@ export async function updateSession(request: NextRequest) {
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
-      if (profile?.role !== "admin") {
+      if (profile?.role !== "admin" && profile?.role !== "committee") {
         const url = request.nextUrl.clone();
         url.pathname = "/";
         url.search = "";

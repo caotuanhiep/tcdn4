@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadZaloBotConfig, saveZaloBotConfig, ZaloGroupConfigItem } from "@/app/api/settings/zalo/route";
 import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
@@ -107,7 +107,7 @@ function appendWebhookLog(entry: any) {
     fs.writeFileSync(WEBHOOK_LOGS_PATH, JSON.stringify(logs, null, 2), "utf-8");
   } catch {}
 
-  (async () => {
+  const persistCloudLog = async () => {
     try {
       const cloudLogs = await loadWebhookLogs();
       cloudLogs.unshift({ time: new Date().toISOString(), ...entry });
@@ -119,7 +119,13 @@ function appendWebhookLog(entry: any) {
         { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
       );
     } catch {}
-  })();
+  };
+
+  try {
+    after(persistCloudLog);
+  } catch {
+    void persistCloudLog();
+  }
 }
 
 // Hàm gửi tin nhắn chính thức qua Zalo Bot Platform API (Bot Elephant)

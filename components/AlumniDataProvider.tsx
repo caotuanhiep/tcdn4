@@ -46,6 +46,7 @@ export function AlumniDataProvider({ children }: { children: ReactNode }) {
   const inFlightRef = useRef<Promise<void> | null>(null);
   const pendingRefreshRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFetchedAtRef = useRef(0);
   const mountedRef = useRef(true);
 
   const fetchAll = useCallback(async () => {
@@ -64,7 +65,9 @@ export function AlumniDataProvider({ children }: { children: ReactNode }) {
         setProfiles(Array.isArray(data.profiles) ? data.profiles : []);
         setRegistrations(Array.isArray(data.registrations) ? data.registrations : []);
         if (data.stats) setStats(data.stats);
-        setLastUpdated(Date.now());
+        const now = Date.now();
+        lastFetchedAtRef.current = now;
+        setLastUpdated(now);
       } catch (err) {
         console.warn("[AlumniDataProvider] Lỗi tải dữ liệu:", err);
       } finally {
@@ -98,6 +101,14 @@ export function AlumniDataProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener(DATA_UPDATED_EVENT, onLocalUpdate);
 
+    // Tự làm mới nhẹ khi người dùng mở lại tab sau >30s (đảm bảo đồng bộ trên điện thoại sau khi sleep)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastFetchedAtRef.current > 30000) {
+        void fetchAll();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     // Một kết nối Supabase Realtime duy nhất cho toàn ứng dụng
     const supabase = getSupabase();
     const channel = supabase
@@ -117,6 +128,7 @@ export function AlumniDataProvider({ children }: { children: ReactNode }) {
     return () => {
       mountedRef.current = false;
       window.removeEventListener(DATA_UPDATED_EVENT, onLocalUpdate);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       try {
         supabase.removeChannel(channel);

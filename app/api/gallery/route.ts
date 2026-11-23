@@ -156,17 +156,6 @@ async function downloadCloudManifestText(supabase: SupabaseClient): Promise<stri
 // khi không kết nối được Cloud. (Trước đây ưu tiên file local -> trên Vercel file này là bản snapshot
 // cố định trong git, ghi đè không được (read-only FS) nên mọi thao tác Ghim/Xóa đều bị "mất" sau khi tải lại.)
 async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
-  let localPhotos: AlbumPhoto[] | null = null;
-  try {
-    if (fs.existsSync(LOCAL_MANIFEST_PATH)) {
-      const text = fs.readFileSync(LOCAL_MANIFEST_PATH, "utf-8");
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localPhotos = parsed;
-      }
-    }
-  } catch {}
-
   let cloudPhotos: AlbumPhoto[] | null = null;
   try {
     const supabase = client || getSupabaseAdmin();
@@ -176,7 +165,7 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
       if (Array.isArray(parsed) && parsed.length > 0) {
         cloudPhotos = parsed.map((p: any) => {
           const top = normalizeTopic(p.topic || p.category);
-          const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? (p.title?.toLowerCase().includes("tốt nghiệp") ? "Lễ tốt nghiệp" : "Lễ tốt nghiệp") : "Ảnh chung")).trim();
+          const alb = (p.album || p.subTopic || (top === "Thời sinh viên" ? "Lễ tốt nghiệp" : "Ảnh chung")).trim();
           return {
             ...p,
             topic: top,
@@ -197,9 +186,18 @@ async function loadManifest(client?: SupabaseClient): Promise<AlbumPhoto[]> {
   if (cloudPhotos && cloudPhotos.length > 0) {
     return cloudPhotos;
   }
-  if (localPhotos && localPhotos.length > 0) {
-    return localPhotos;
-  }
+
+  // Chỉ đọc file snapshot local khi không tải được từ Cloud (tránh đọc đồng bộ ~400KB mỗi request)
+  try {
+    if (fs.existsSync(LOCAL_MANIFEST_PATH)) {
+      const text = fs.readFileSync(LOCAL_MANIFEST_PATH, "utf-8");
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+
   return DEFAULT_INITIAL_PHOTOS;
 }
 

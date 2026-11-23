@@ -343,6 +343,8 @@ export default function AlumniDirectory({
                         <img
                           src={member.avatar_url}
                           alt={member.name}
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

@@ -75,6 +75,8 @@ export default function CommitteeSection() {
                     <img
                       src={member.avatarUrl}
                       alt={member.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (

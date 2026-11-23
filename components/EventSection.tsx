@@ -326,17 +326,6 @@ export default function EventSection() {
 
                 <div className="flex items-start gap-3.5">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
-                    <Users size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quy mô</div>
-                    <div className="text-sm font-bold text-slate-900">Tập thể TC10, TC11, TC12</div>
-                    <div className="text-xs text-slate-500">Kèm gia đình & F1 (tùy chọn)</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ueh shadow-2xs border border-orange-200/70">
                     <Shirt size={18} />
                   </div>
                   <div>

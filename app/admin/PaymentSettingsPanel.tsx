@@ -146,7 +146,7 @@ export default function PaymentSettingsPanel() {
       accountName: accountName.trim().toUpperCase(),
       phoneReceive: phoneReceive.trim(),
       amount: Number(amount),
-      syntaxPrefix: "TCDN4",
+      syntaxPrefix: (syntaxPrefix || "TCDN4").trim(),
       sepayApiKey: sepayApiKey.trim(),
     };
 

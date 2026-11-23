@@ -2,12 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Calendar, 
-  GraduationCap, 
   ImageIcon, 
   LayoutDashboard, 
-  LogIn, 
   LogOut, 
   Menu, 
   MessageSquare, 
@@ -18,8 +17,6 @@ import {
   UserCheck
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { useToast } from "@/components/ToastProvider";
-import ProfileModal from "@/components/ProfileModal";
 import { getAvatarInitials } from "@/lib/avatar";
 
 interface NavItem {
@@ -38,8 +35,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function Navbar() {
+  const router = useRouter();
   const { user, profile, loading, isAdmin, openLogin, openProfile, signOut } = useAuth();
-  const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -56,7 +53,7 @@ export default function Navbar() {
     function onScroll() {
       setScrolled(window.scrollY > 15);
     }
-    window.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -76,6 +73,8 @@ export default function Navbar() {
     const elem = document.getElementById(id);
     if (elem) {
       elem.scrollIntoView({ behavior: "smooth" });
+    } else {
+      router.push(`/${hash}`);
     }
   };
 
