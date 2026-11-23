@@ -34,6 +34,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS specific_location TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS marital_status TEXT DEFAULT 'married';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS children_count INT DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS attendance_status TEXT;
+ALTER TABLE public.profiles ALTER COLUMN attendance_status DROP DEFAULT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS shirt_size TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS delivery_address TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;

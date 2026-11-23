@@ -324,10 +324,6 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
-      const wasAlreadyAttending = Boolean(
-        myRegistration && profile?.attendance_status === "attending"
-      );
-
       // Ghi đè toàn bộ thông tin cá nhân + trạng thái tham gia + size áo + địa chỉ vào bảng profiles
       // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json trên Cloud)
       await updateProfile({
@@ -337,25 +333,25 @@ export default function ProfileModal({
         delivery_address: deliveryAddress.trim(),
       });
 
-      // Gửi thông báo Zalo Bot khi thành viên mới chốt đăng ký tham gia 15 năm
-      if (!wasAlreadyAttending) {
-        try {
-          await fetch("/api/zalo-bot", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "registration",
-              fullName: fullName.trim(),
-              className,
-              shirtSize,
-              phone: phone.trim(),
-              address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
-              paidAmount: bankInfo.amount,
-              guestsCount: 0,
-            }),
-          });
-        } catch {}
-      }
+      // Luôn gọi /api/zalo-bot — server tự chống trùng theo settings/zalo-registrations.json
+      // (bảo đảm lần đầu chốt Bước 2 LUÔN bắn tin, còn lần sau đổi size áo sẽ không spam)
+      try {
+        await fetch("/api/zalo-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "registration",
+            userId: user?.id,
+            fullName: fullName.trim(),
+            className,
+            shirtSize,
+            phone: phone.trim(),
+            address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
+            paidAmount: bankInfo.amount,
+            guestsCount: 0,
+          }),
+        });
+      } catch {}
 
       if (myRegistration?.status === "confirmed") {
         toast.success("Đã cập nhật thông tin tham dự & size áo mới nhất!");

@@ -9,13 +9,13 @@ import path from "path";
 const WEBHOOK_LOGS_PATH = path.join(process.cwd(), "data", "zalo-webhook-logs.json");
 const CLOUD_WEBHOOK_LOGS_PATH = "settings/zalo-webhook-logs.json";
 const CHECKINS_PATH = "settings/zalo-checkins.json";
+const REGISTRATIONS_NOTIFIED_PATH = "settings/zalo-registrations.json";
 const LOCAL_CHECKINS_PATH = path.join(process.cwd(), "data", "zalo-checkins.json");
 
-// Đọc danh sách định danh các thành viên đã gửi thông báo điểm danh Zalo (ưu tiên Cloud Storage)
-async function loadCheckins(): Promise<string[]> {
+async function loadCloudIdList(storagePath: string, localFallbackPath?: string): Promise<string[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(CHECKINS_PATH);
+    const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(storagePath);
     if (pub?.publicUrl) {
       const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
@@ -25,19 +25,24 @@ async function loadCheckins(): Promise<string[]> {
     }
   } catch {}
 
-  try {
-    if (fs.existsSync(LOCAL_CHECKINS_PATH)) {
-      const data = JSON.parse(fs.readFileSync(LOCAL_CHECKINS_PATH, "utf-8"));
-      if (Array.isArray(data)) return data;
-    }
-  } catch {}
+  if (localFallbackPath) {
+    try {
+      if (fs.existsSync(localFallbackPath)) {
+        const data = JSON.parse(fs.readFileSync(localFallbackPath, "utf-8"));
+        if (Array.isArray(data)) return data;
+      }
+    } catch {}
+  }
 
   return [];
 }
 
-// Lưu định danh thành viên đã điểm danh để không bao giờ gửi lại lần 2
-async function markCheckedIn(identifiers: string[]): Promise<void> {
-  const list = await loadCheckins();
+async function markCloudIdList(
+  storagePath: string,
+  identifiers: string[],
+  localFallbackPath?: string
+): Promise<void> {
+  const list = await loadCloudIdList(storagePath, localFallbackPath);
   let changed = false;
   for (const id of identifiers) {
     if (id && !list.includes(id)) {
@@ -47,20 +52,32 @@ async function markCheckedIn(identifiers: string[]): Promise<void> {
   }
   if (!changed) return;
 
-  try {
-    const dir = path.dirname(LOCAL_CHECKINS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(LOCAL_CHECKINS_PATH, JSON.stringify(list, null, 2), "utf-8");
-  } catch {}
+  if (localFallbackPath) {
+    try {
+      const dir = path.dirname(localFallbackPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(localFallbackPath, JSON.stringify(list, null, 2), "utf-8");
+    } catch {}
+  }
 
   try {
     const supabase = getSupabaseAdmin();
     await supabase.storage.from("alumni-media").upload(
-      CHECKINS_PATH,
+      storagePath,
       Buffer.from(JSON.stringify(list, null, 2), "utf-8"),
       { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
     );
   } catch {}
+}
+
+// Đọc danh sách định danh các thành viên đã gửi thông báo điểm danh Zalo (ưu tiên Cloud Storage)
+async function loadCheckins(): Promise<string[]> {
+  return loadCloudIdList(CHECKINS_PATH, LOCAL_CHECKINS_PATH);
+}
+
+// Lưu định danh thành viên đã điểm danh để không bao giờ gửi lại lần 2
+async function markCheckedIn(identifiers: string[]): Promise<void> {
+  return markCloudIdList(CHECKINS_PATH, identifiers, LOCAL_CHECKINS_PATH);
 }
 
 // Helper ghi nhận nhật ký webhook gần nhất (lưu cả Local + Cloud Storage để debug trên Vercel)
@@ -719,9 +736,34 @@ export async function POST(request: Request) {
     let botMessage = "";
     let summaryTitle = "";
 
-    // LUỒNG 1: ĐĂNG KÝ THAM GIA HỘI NGỘ 15 NĂM
+    // LUỒNG 1: ĐĂNG KÝ THAM GIA HỘI NGỘ 15 NĂM (CHỈ GỬI 1 LẦN / THÀNH VIÊN TRÁNH SPAM KHI ĐỔI SIZE ÁO)
     if (type === "registration") {
-      const { fullName, className, shirtSize, guestsCount } = payload;
+      const { fullName, className, shirtSize, guestsCount, userId, phone } = payload;
+
+      const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
+      const cleanName = (fullName || "").toLowerCase().trim();
+      const regKeys = [
+        userId ? `user_${userId}` : null,
+        cleanPhone ? `phone_${cleanPhone}` : null,
+        cleanName ? `name_${cleanName}` : null,
+      ].filter(Boolean) as string[];
+
+      const existingRegNotified = await loadCloudIdList(REGISTRATIONS_NOTIFIED_PATH);
+      if (regKeys.some((k) => existingRegNotified.includes(k))) {
+        appendWebhookLog({
+          event: "registration_skipped_duplicate",
+          fullName,
+          phone: cleanPhone,
+          userId,
+        });
+        return NextResponse.json({
+          ok: true,
+          skipped: true,
+          message: "Thành viên đã được gửi thông báo đăng ký 15 năm trước đó, bỏ qua để không gửi trùng.",
+        });
+      }
+
+      await markCloudIdList(REGISTRATIONS_NOTIFIED_PATH, regKeys);
 
       let totalCount = 1;
       try {

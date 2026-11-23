@@ -121,6 +121,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // QUAN TRỌNG: Bảng profiles trên Supabase có thể đang đặt DEFAULT 'attending' cho cột attendance_status.
+    // Khi thành viên lần đầu lưu Bước 1 (chưa có dòng hoặc chưa từng lưu SĐT) và chưa chọn tham gia ở Bước 2,
+    // gán rõ NULL để không bị tự đánh dấu đã đăng ký 15 năm trước khi sang Bước 2!
+    const isFirstCheckin = !existingRow || !existingRow.phone?.trim();
+    if (isFirstCheckin && body.attendance_status === undefined) {
+      cleanUpdates.attendance_status = null;
+    }
+
     // Bảo vệ role: thành viên thường không thể tự đổi role, giữ role hiện có trong DB
     if (callerIsAdmin && body.role && ["member", "committee", "admin"].includes(body.role)) {
       cleanUpdates.role = body.role;
