@@ -351,10 +351,6 @@ export default function ProfileModal({
       toast.error("Vui lòng nhập họ và tên của bạn!");
       return;
     }
-    if (!phone.trim()) {
-      toast.error("Vui lòng nhập số điện thoại / Zalo để liên hệ!");
-      return;
-    }
 
     setSaving(true);
     try {

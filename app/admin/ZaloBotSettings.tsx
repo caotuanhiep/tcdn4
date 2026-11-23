@@ -37,7 +37,8 @@ import {
   Info,
   ChevronRight,
   Settings,
-  Save
+  Save,
+  DollarSign
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
@@ -56,6 +57,7 @@ export interface ZaloGroupItem {
   receiveCheckin: boolean;
   receiveRegistration: boolean;
   receiveBirthday: boolean;
+  receivePayment?: boolean;
   createdAt: string;
 }
 
@@ -70,6 +72,7 @@ const INITIAL_GROUPS: ZaloGroupItem[] = [
     receiveCheckin: true,
     receiveRegistration: true,
     receiveBirthday: true,
+    receivePayment: false,
     createdAt: "18/11/2026",
   },
   {
@@ -82,6 +85,7 @@ const INITIAL_GROUPS: ZaloGroupItem[] = [
     receiveCheckin: true,
     receiveRegistration: true,
     receiveBirthday: true,
+    receivePayment: false,
     createdAt: "18/11/2026",
   },
   {
@@ -94,6 +98,7 @@ const INITIAL_GROUPS: ZaloGroupItem[] = [
     receiveCheckin: true,
     receiveRegistration: true,
     receiveBirthday: true,
+    receivePayment: false,
     createdAt: "18/11/2026",
   },
   {
@@ -106,6 +111,7 @@ const INITIAL_GROUPS: ZaloGroupItem[] = [
     receiveCheckin: true,
     receiveRegistration: true,
     receiveBirthday: true,
+    receivePayment: false,
     createdAt: "18/11/2026",
   },
   {
@@ -115,9 +121,10 @@ const INITIAL_GROUPS: ZaloGroupItem[] = [
     verifyCode: "#TCDN4-BLL",
     status: "verified",
     isDefault: false,
-    receiveCheckin: false,
+    receiveCheckin: true,
     receiveRegistration: true,
     receiveBirthday: false,
+    receivePayment: true,
     createdAt: "18/11/2026",
   },
 ];
@@ -250,14 +257,18 @@ export default function ZaloBotSettings() {
   const [scheduledDateTime, setScheduledDateTime] = useState("2026-12-01T08:00");
   const [isSending, setIsSending] = useState(false);
 
-  // Auto-triggers (Điểm danh & Đăng ký 15 năm)
+  // Auto-triggers (Điểm danh & Đăng ký 15 năm & Chuyển khoản)
   const [autoCheckin, setAutoCheckin] = useState(true);
   const [autoRegistration, setAutoRegistration] = useState(true);
+  const [autoPayment, setAutoPayment] = useState(true);
   const [checkinTemplate, setCheckinTemplate] = useState(
     "🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}) vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory"
   );
   const [registrationTemplate, setRegistrationTemplate] = useState(
     "🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n{ten} ({lop}) đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event"
+  );
+  const [paymentTemplate, setPaymentTemplate] = useState(
+    "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!"
   );
 
   // Sinh nhật
@@ -273,7 +284,7 @@ export default function ZaloBotSettings() {
 
   // AI Assistant Modal State
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiTargetField, setAiTargetField] = useState<"broadcast" | "checkin" | "registration" | "birthday">("broadcast");
+  const [aiTargetField, setAiTargetField] = useState<"broadcast" | "checkin" | "registration" | "birthday" | "payment">("broadcast");
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState<string>("funny");
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -294,10 +305,12 @@ export default function ZaloBotSettings() {
         if (typeof p.autoCheckin === "boolean") setAutoCheckin(p.autoCheckin);
         if (typeof p.autoRegistration === "boolean") setAutoRegistration(p.autoRegistration);
         if (typeof p.autoBirthday === "boolean") setAutoBirthday(p.autoBirthday);
+        if (typeof p.autoPayment === "boolean") setAutoPayment(p.autoPayment);
         if (p.birthdayHour) setBirthdayHour(p.birthdayHour);
         if (p.checkinTemplate) setCheckinTemplate(p.checkinTemplate);
         if (p.registrationTemplate) setRegistrationTemplate(p.registrationTemplate);
         if (p.birthdayTemplate) setBirthdayTemplate(p.birthdayTemplate);
+        if (p.paymentTemplate) setPaymentTemplate(p.paymentTemplate);
         if (p.aiApiKey || p.claudeApiKey || p.geminiApiKey) setClaudeApiKey(p.aiApiKey || p.claudeApiKey || p.geminiApiKey);
       }
 
@@ -320,6 +333,14 @@ export default function ZaloBotSettings() {
           if (d.config.webhookUrl) setWebhookUrl(d.config.webhookUrl);
           if (d.config.botName) setBotName(d.config.botName);
           if (d.config.aiApiKey) setClaudeApiKey(d.config.aiApiKey);
+          if (typeof d.config.autoCheckin === "boolean") setAutoCheckin(d.config.autoCheckin);
+          if (typeof d.config.autoRegistration === "boolean") setAutoRegistration(d.config.autoRegistration);
+          if (typeof d.config.autoBirthday === "boolean") setAutoBirthday(d.config.autoBirthday);
+          if (typeof d.config.autoPayment === "boolean") setAutoPayment(d.config.autoPayment);
+          if (d.config.checkinTemplate) setCheckinTemplate(d.config.checkinTemplate);
+          if (d.config.registrationTemplate) setRegistrationTemplate(d.config.registrationTemplate);
+          if (d.config.birthdayTemplate) setBirthdayTemplate(d.config.birthdayTemplate);
+          if (d.config.paymentTemplate) setPaymentTemplate(d.config.paymentTemplate);
           if (Array.isArray(d.config.groups) && d.config.groups.length > 0) {
             setGroups(d.config.groups);
             try {
@@ -501,8 +522,10 @@ export default function ZaloBotSettings() {
         autoRegistration,
         checkinTemplate,
         registrationTemplate,
+        autoPayment,
+        paymentTemplate,
       });
-      toast.success("Đã lưu mẫu tin nhắn Điểm danh & Đăng ký 15 năm thành công lên máy chủ!");
+      toast.success("Đã lưu mẫu tin nhắn Điểm danh, 15 Năm & Chuyển khoản thành công lên máy chủ!");
     } catch {
       toast.error("Lỗi khi lưu cấu hình mẫu tin nhắn!");
     } finally {
@@ -551,10 +574,10 @@ export default function ZaloBotSettings() {
     }
   };
 
-  // Bật/tắt phân loại nhận tin cho từng nhóm (Điểm danh / 15 Năm / Sinh nhật)
+  // Bật/tắt phân loại nhận tin cho từng nhóm (Điểm danh / 15 Năm / Sinh nhật / Chuyển khoản)
   const handleToggleGroupPermission = async (
     groupId: string,
-    field: "receiveCheckin" | "receiveRegistration" | "receiveBirthday"
+    field: "receiveCheckin" | "receiveRegistration" | "receiveBirthday" | "receivePayment"
   ) => {
     const updated = groups.map((g) => (g.id === groupId ? { ...g, [field]: !g[field] } : g));
     setGroups(updated);
@@ -613,11 +636,12 @@ export default function ZaloBotSettings() {
   };
 
   // Trigger AI assistant
-  const handleOpenAiAssistant = (field: "broadcast" | "checkin" | "registration" | "birthday") => {
+  const handleOpenAiAssistant = (field: "broadcast" | "checkin" | "registration" | "birthday" | "payment") => {
     setAiTargetField(field);
     if (field === "birthday") setAiTone("birthday");
     else if (field === "checkin") setAiTone("funny");
     else if (field === "registration") setAiTone("urgent");
+    else if (field === "payment") setAiTone("formal");
     else setAiTone("funny");
 
     setAiTopic("");
@@ -666,6 +690,9 @@ export default function ZaloBotSettings() {
     } else if (aiTargetField === "birthday") {
       setBirthdayTemplate(aiGeneratedResult);
       saveBotConfig({ birthdayTemplate: aiGeneratedResult });
+    } else if (aiTargetField === "payment") {
+      setPaymentTemplate(aiGeneratedResult);
+      saveBotConfig({ paymentTemplate: aiGeneratedResult });
     }
     setIsAiModalOpen(false);
     toast.success("Đã áp dụng nội dung AI vào khung soạn thảo!");
@@ -1180,6 +1207,18 @@ export default function ZaloBotSettings() {
                           >
                             {grp.receiveBirthday ? "✓ Sinh nhật" : "✕ Sinh nhật"}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGroupPermission(grp.id, "receivePayment")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              grp.receivePayment
+                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                            }`}
+                            title="Bấm để bật/tắt nhận thông báo chuyển khoản SePay"
+                          >
+                            {grp.receivePayment ? "✓ Chuyển khoản" : "✕ Chuyển khoản"}
+                          </button>
                         </div>
                       </td>
 
@@ -1206,6 +1245,22 @@ export default function ZaloBotSettings() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Nút lưu cấu hình nhóm & quyền nhận tin */}
+            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-xs text-slate-500">
+                💡 <span className="font-semibold text-slate-700">Mẹo:</span> Nhóm <strong>Ban Liên Lạc</strong> được bật nhận tin <strong>Chuyển khoản SePay</strong>. Bấm nút màu bên trên để bật/tắt quyền nhận tin cho từng nhóm.
+              </span>
+              <button
+                type="button"
+                onClick={() => handleSaveGroupsToServer()}
+                disabled={isSavingGroups}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-ueh-navy hover:bg-slate-800 px-4 py-2 text-xs font-bold text-white shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                {isSavingGroups ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                <span>{isSavingGroups ? "Đang đồng bộ..." : "Lưu Quyền Nhận Tin Của Các Nhóm"}</span>
+              </button>
             </div>
           </div>
 
@@ -1433,10 +1488,10 @@ export default function ZaloBotSettings() {
           <div className="rounded-3xl border border-blue-200/80 bg-gradient-to-r from-blue-50/80 via-white to-sky-50/50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Bell size={18} className="text-ueh" /> Cấu Hình Mẫu Tin Điểm Danh & Đăng Ký 15 Năm
+                <Bell size={18} className="text-ueh" /> Cấu Hình Mẫu Tin Điểm Danh, 15 Năm & Chuyển Khoản (SePay)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Các mẫu tin nhắn dưới đây sẽ được Bot tự động bắn vào nhóm khi có sự kiện. Bấm nút Lưu để áp dụng.
+                Các mẫu tin nhắn dưới đây sẽ được Bot tự động bắn vào nhóm Zalo khi có sự kiện. Bấm nút Lưu để áp dụng.
               </p>
             </div>
             <button
@@ -1611,7 +1666,108 @@ export default function ZaloBotSettings() {
             </div>
           </div>
 
-          {/* Nút lưu cuối trang cho tab Điểm danh & 15 Năm */}
+          {/* Section 3: Thông báo Xác nhận Chuyển khoản (SePay) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
+            <div className="lg:col-span-7 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <DollarSign size={18} className="text-emerald-600" /> 3. Thông Báo Xác Nhận Chuyển Khoản (SePay)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Tự động bắn tin xác nhận khi thành viên chuyển khoản qua SePay. Mặc định gửi riêng vào nhóm <strong>Ban Liên Lạc</strong> (hoặc nhóm có bật quyền &apos;Chuyển khoản&apos;).
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="relative inline-flex items-center cursor-pointer" title="Bật/Tắt tự động gửi tin nhắn khi SePay khớp thanh toán">
+                    <input
+                      type="checkbox"
+                      checked={autoPayment}
+                      onChange={(e) => {
+                        setAutoPayment(e.target.checked);
+                        saveBotConfig({ autoPayment: e.target.checked });
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAiAssistant("payment")}
+                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                  >
+                    <Wand2 size={12} /> AI Viết Lại
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Mẫu tin nhắn (Sử dụng các biến: &#123;ten&#125;, &#123;lop&#125;, &#123;so_tien&#125;, &#123;size&#125;, &#123;ngan_hang&#125;, &#123;noi_dung&#125;, &#123;thoi_gian&#125;, &#123;ma_gd&#125;)
+                </label>
+                <textarea
+                  rows={8}
+                  value={paymentTemplate}
+                  onChange={(e) => {
+                    setPaymentTemplate(e.target.value);
+                    saveBotConfig({ paymentTemplate: e.target.value });
+                  }}
+                  className="w-full rounded-2xl border border-slate-300 p-3 text-xs font-mono leading-relaxed focus:border-emerald-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span>Gợi ý mẫu:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!";
+                    setPaymentTemplate(sample);
+                    saveBotConfig({ paymentTemplate: sample });
+                  }}
+                  className="rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 font-semibold hover:bg-emerald-100 cursor-pointer"
+                >
+                  Mẫu Chuẩn BLL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = "💰 TING TING! SEPAY XÁC NHẬN ĐÓNG GÓP HỘI NGỘ 15 NĂM\n━━━━━━━━━━━━━━━━━━━━\n👤 Người chuyển: {ten} ({lop})\n💵 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📌 Mã GD: {ma_gd}\n⏰ Lúc: {thoi_gian}\n━━━━━━━━━━━━━━━━━━━━\n👏 BLL đã tự động khóa slot tham dự cho bạn!";
+                    setPaymentTemplate(sample);
+                    saveBotConfig({ paymentTemplate: sample });
+                  }}
+                  className="rounded-lg bg-slate-100 px-2 py-0.5 font-semibold hover:bg-slate-200 cursor-pointer"
+                >
+                  Mẫu Ngắn Gọn
+                </button>
+              </div>
+
+              <div className="rounded-xl bg-blue-50/70 border border-blue-200 p-3 text-xs text-blue-900 leading-relaxed">
+                🎯 <strong>Cơ chế định tuyến Zalo:</strong> Khi SePay gửi webhook báo thanh toán thành công, hệ thống sẽ lọc nhóm Zalo nào có quyền <code>✓ Chuyển khoản</code> (mặc định là nhóm Ban Liên Lạc) để gửi tin. Các nhóm khác sẽ không bị làm phiền.
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 flex flex-col items-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 self-start px-1">
+                Xem trước tin nhắn Xác nhận chuyển khoản (Ví dụ mẫu)
+              </span>
+              {renderZaloPreview(
+                "",
+                paymentTemplate
+                  .replace("{ten}", "Cao Tuấn Hiệp")
+                  .replace("{lop}", "TC12")
+                  .replace("{so_tien}", "1.000.000")
+                  .replace("{size}", "XL (Nam)")
+                  .replace("{ngan_hang}", "MBBank")
+                  .replace("{noi_dung}", "TCDN4 CAO TUAN HIEP 0972555211")
+                  .replace("{thoi_gian}", "14:30 23/11/2026")
+                  .replace("{ma_gd}", "FT261123987654")
+              )}
+            </div>
+          </div>
+
+          {/* Nút lưu cuối trang cho tab Mẫu tin tự động */}
           <div className="flex justify-end pt-2">
             <button
               onClick={handleSaveAutoTemplates}
@@ -1619,7 +1775,7 @@ export default function ZaloBotSettings() {
               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
             >
               {isSavingAutoTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Điểm Danh & 15 Năm"}</span>
+              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Điểm Danh, 15 Năm & Chuyển Khoản"}</span>
             </button>
           </div>
         </div>

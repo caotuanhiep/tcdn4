@@ -3,7 +3,7 @@ import { loadZaloBotConfig } from "@/app/api/settings/zalo/route";
 
 interface AiWriterRequest {
   topic?: string;
-  tone?: "funny" | "warm" | "urgent" | "formal" | "birthday" | "checkin" | "registration";
+  tone?: "funny" | "warm" | "urgent" | "formal" | "birthday" | "checkin" | "registration" | "payment";
   memberName?: string;
   className?: string;
   details?: string;
@@ -37,6 +37,10 @@ const SYNTHESIZERS: Record<string, (topic: string, name?: string, cls?: string) 
   ],
   registration: (topic, name, cls) => [
     `🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n${name || "Một bạn"}${cls ? ` (${cls})` : ""} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo kỷ niệm!\n${topic ? `${topic}\n` : ""}🍻 Danh sách anh em lên thuyền sẵn sàng cụng ly ngày 12/12 đang tăng lên từng giờ.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`,
+  ],
+  payment: (topic, name, cls) => [
+    `🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: ${name || "{ten}"} (${cls || "{lop}"})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`,
+    `💰 TING TING! SEPAY XÁC NHẬN KHOẢN ĐÓNG GÓP HỘI NGỘ 15 NĂM\n━━━━━━━━━━━━━━━━━━━━\n👤 Người chuyển: ${name || "{ten}"} (${cls || "{lop}"})\n💵 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Nhận qua: {ngan_hang}\n📌 Mã giao dịch: {ma_gd}\n⏰ Lúc: {thoi_gian}\n━━━━━━━━━━━━━━━━━━━━\n👏 BLL đã ghi nhận vị trí của bạn trong danh sách hội ngộ ngày 12/12!`
   ],
 };
 

@@ -645,10 +645,20 @@ export async function POST(request: Request) {
       summaryTitle = `Đăng ký 15 năm: ${fullName} (${className || "K33"})`;
       const guestsText = guestsCount > 0 ? ` (dắt theo +${guestsCount} người nhà)` : "";
 
-      botMessage = `🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n` +
-        `👤 ${fullName || "Đồng môn K33"} (${className || "TC10"})${guestsText} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size ${shirtSize || "L"}!\n` +
-        `🍻 Đã có ${totalCount} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n` +
-        `👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`;
+      if (botConfig.registrationTemplate && botConfig.registrationTemplate.trim().length > 0) {
+        botMessage = botConfig.registrationTemplate
+          .replace(/\{ten\}/g, fullName || "Đồng môn K33")
+          .replace(/\{lop\}/g, className || "TC10")
+          .replace(/\{size\}/g, shirtSize || "L (Nam)")
+          .replace(/\{tong_so\}/g, String(totalCount))
+          .replace(/\{dia_chi\}/g, payload.address || "Tại Cơ sở B")
+          .replace(/\{nguoi_nha\}/g, guestsText);
+      } else {
+        botMessage = `🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n` +
+          `👤 ${fullName || "Đồng môn K33"} (${className || "TC10"})${guestsText} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size ${shirtSize || "L"}!\n` +
+          `🍻 Đã có ${totalCount} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n` +
+          `👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`;
+      }
     }
 
     // LUỒNG 2: THÔNG BÁO ĐIỂM DANH MỚI (CHỈ GỬI LẦN ĐẦU TIÊN KHI ĐIỂM DANH)
@@ -688,9 +698,18 @@ export async function POST(request: Request) {
       const jobInfo = jobTitle ? ` đang làm ${jobTitle}${company ? ` tại ${company}` : ""}` : "";
       const locInfo = location ? ` ở ${location}` : "";
 
-      botMessage = `🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\n` +
-        `Sau 15 năm 'mất tích', cựu sinh viên ${fullName || "Một bạn"} (${className || "TC10"})${jobInfo}${locInfo} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n` +
-        `👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory`;
+      if (botConfig.checkinTemplate && botConfig.checkinTemplate.trim().length > 0) {
+        botMessage = botConfig.checkinTemplate
+          .replace(/\{ten\}/g, fullName || "Một bạn")
+          .replace(/\{lop\}/g, className || "TC10")
+          .replace(/\{nghe_nghiep\}/g, jobInfo)
+          .replace(/\{cong_ty\}/g, company || "")
+          .replace(/\{khu_vuc\}/g, locInfo);
+      } else {
+        botMessage = `🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\n` +
+          `Sau 15 năm 'mất tích', cựu sinh viên ${fullName || "Một bạn"} (${className || "TC10"})${jobInfo}${locInfo} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n` +
+          `👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory`;
+      }
     }
 
     // LUỒNG 3: CHÚC MỪNG SINH NHẬT
@@ -700,6 +719,10 @@ export async function POST(request: Request) {
 
       if (customWish) {
         botMessage = customWish;
+      } else if (botConfig.birthdayTemplate && botConfig.birthdayTemplate.trim().length > 0) {
+        botMessage = botConfig.birthdayTemplate
+          .replace(/\{ten\}/g, name || "Bạn")
+          .replace(/\{lop\}/g, className || "TC10");
       } else {
         botMessage = `🎂 ALO ALO CẢ NHÀ ƠI!\n` +
           `Hôm nay là sinh nhật của bạn ${name} (${className || "TC10"})! 🎉\n` +
@@ -708,7 +731,38 @@ export async function POST(request: Request) {
       }
     }
 
-    // LUỒNG 4: PHÁT LOA / SOẠN TIN TỨC THÌ (BROADCAST)
+    // LUỒNG 4: THÔNG BÁO XÁC NHẬN CHUYỂN KHOẢN (SEPAY)
+    else if (type === "payment" || type === "sepay_payment_confirmed") {
+      const { fullName, className, paidAmount, shirtSize, bankGateway, content, transactionDate, referenceCode } = payload;
+      summaryTitle = `Chuyển khoản thành công: ${fullName || "Thành viên"} (+${Number(paidAmount || 0).toLocaleString("vi-VN")} đ)`;
+
+      if (botConfig.paymentTemplate && botConfig.paymentTemplate.trim().length > 0) {
+        botMessage = botConfig.paymentTemplate
+          .replace(/\{ten\}/g, fullName || "Thành viên K33")
+          .replace(/\{lop\}/g, className || "TC4")
+          .replace(/\{so_tien\}/g, Number(paidAmount || 0).toLocaleString("vi-VN"))
+          .replace(/\{size\}/g, shirtSize || "L (Nam)")
+          .replace(/\{ngan_hang\}/g, bankGateway || "Tài khoản lớp")
+          .replace(/\{noi_dung\}/g, content || "Chuyển khoản")
+          .replace(/\{thoi_gian\}/g, transactionDate || new Date().toLocaleString("vi-VN"))
+          .replace(/\{ma_gd\}/g, referenceCode || "N/A");
+      } else {
+        botMessage = `🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 Thành viên: ${fullName || "Thành viên K33"} (${className || "TC4"})\n` +
+          `💰 Số tiền: +${Number(paidAmount || 0).toLocaleString("vi-VN")} VNĐ\n` +
+          `👕 Size áo Polo: ${shirtSize || "L (Nam)"}\n` +
+          `🏦 Ngân hàng: ${bankGateway || "Tài khoản lớp"}\n` +
+          `📝 Nội dung: ${content || "TCDN4 Chuyển khoản"}\n` +
+          `⏰ Thời gian: ${transactionDate || new Date().toLocaleString("vi-VN")}\n` +
+          `🔢 Mã GD: ${referenceCode || "N/A"}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n` +
+          `🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`;
+      }
+    }
+
+    // LUỒNG 5: PHÁT LOA / SOẠN TIN TỨC THÌ (BROADCAST)
     else if (type === "broadcast") {
       const { title, message } = payload;
       summaryTitle = title || "Thông báo từ Ban Liên Lạc";
@@ -732,7 +786,12 @@ export async function POST(request: Request) {
       for (const grp of currentGroups) {
         if (!grp.chatId) continue;
 
-        if (type === "registration" && grp.receiveRegistration !== false) {
+        if (type === "payment" || type === "sepay_payment_confirmed") {
+          // Gửi tới các nhóm có bật nhận tin chuyển khoản (hoặc nhóm Ban Liên Lạc)
+          if (grp.receivePayment || grp.id === "grp-bll" || (grp.verifyCode && grp.verifyCode.includes("BLL"))) {
+            targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
+          }
+        } else if (type === "registration" && grp.receiveRegistration !== false) {
           targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
         } else if (type === "checkin" && grp.receiveCheckin !== false) {
           targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });

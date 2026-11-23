@@ -242,11 +242,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Try persisting to Supabase (bỏ qua nếu là dev-mock user để không báo lỗi UUID 400)
       try {
         if (!user.id.startsWith("dev-")) {
-          const supabase = getSupabase();
-          await supabase.from("profiles").upsert(merged);
+          const validColumns = [
+            "id",
+            "full_name",
+            "class_name",
+            "job_title",
+            "company",
+            "location_region",
+            "specific_location",
+            "phone",
+            "avatar_url",
+            "birthday",
+            "marital_status",
+            "children_count",
+            "attendance_status",
+            "shirt_size",
+            "delivery_address",
+            "bio",
+            "role",
+          ];
+          const cleanPayload: any = {};
+          for (const k of validColumns) {
+            if ((merged as any)[k] !== undefined) {
+              cleanPayload[k] = (merged as any)[k];
+            }
+          }
+
+          // Gọi qua endpoint server /api/profile để đảm bảo cập nhật 100% bằng quyền Service Role
+          const res = await fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(cleanPayload),
+          });
+
+          if (!res.ok) {
+            const supabase = getSupabase();
+            await supabase.from("profiles").upsert(cleanPayload);
+          }
         }
-      } catch {
-        // Table might need column schema migration
+      } catch (err) {
+        console.warn("Lỗi lưu hồ sơ Supabase:", err);
       }
 
       return true;
