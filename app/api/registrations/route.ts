@@ -9,6 +9,7 @@ const BUCKET_NAME = "alumni-media";
 const REGISTRATIONS_PATH = "registrations/registrations-manifest.json";
 const LOCAL_DATA_DIR = path.join(process.cwd(), "data");
 const LOCAL_REGISTRATIONS_PATH = path.join(LOCAL_DATA_DIR, "registrations.json");
+const LOCAL_PROFILES_PATH = path.join(LOCAL_DATA_DIR, "profiles.json");
 
 export interface RegistrationItem {
   id: string;
@@ -94,40 +95,66 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
     } catch {}
   }
 
-  // 3. Tự động hợp nhất thành viên đã điểm danh từ bảng profiles trong Supabase
+  // 3. Tự động hợp nhất thành viên từ bảng profiles và profiles.json
   try {
     const supabase = client || getSupabaseAdmin();
-    const { data: dbProfiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
+    let allProfilesList: any[] = [];
+    try {
+      const { data: dbProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
+      if (Array.isArray(dbProfiles)) allProfilesList = [...dbProfiles];
+    } catch {}
 
-    if (dbProfiles && dbProfiles.length > 0) {
-      const mergedList = [...stored];
-      for (const p of dbProfiles) {
+    try {
+      if (fs.existsSync(LOCAL_PROFILES_PATH)) {
+        const text = fs.readFileSync(LOCAL_PROFILES_PATH, "utf-8");
+        const map = JSON.parse(text);
+        for (const pid of Object.keys(map)) {
+          const idx = allProfilesList.findIndex((x) => x.id === pid);
+          if (idx >= 0) {
+            allProfilesList[idx] = { ...allProfilesList[idx], ...map[pid] };
+          } else {
+            allProfilesList.push(map[pid]);
+          }
+        }
+      }
+    } catch {}
+
+    if (allProfilesList.length > 0) {
+      let mergedList = [...stored];
+      for (const p of allProfilesList) {
         if (!p.full_name) continue;
-        // Chỉ thêm vào danh sách đăng ký nếu profile thực sự chọn tham gia (attending) và đã có số điện thoại liên hệ
-        if (p.attendance_status !== "attending" || !p.phone || p.phone.trim().length === 0) continue;
 
-        const phoneKey = p.phone ? p.phone.trim().toLowerCase() : "";
-        const nameKey = p.full_name.trim().toLowerCase();
+        const phoneKey = p.phone ? p.phone.trim().toLowerCase().replace(/[^0-9]/g, "") : "";
         const idKey = p.id ? p.id.toLowerCase() : "";
 
-        const alreadyExists = mergedList.some((item) => {
-          const itemPhone = item.phone ? item.phone.trim().toLowerCase() : "";
+        // Tìm xem đã có phiếu đăng ký nào ứng với profile này chưa
+        const existingIdx = mergedList.findIndex((item) => {
+          const itemPhone = item.phone ? item.phone.trim().toLowerCase().replace(/[^0-9]/g, "") : "";
           const itemId = item.id ? item.id.toLowerCase() : "";
-          const itemName = item.fullName ? item.fullName.trim().toLowerCase() : "";
-
-          if (phoneKey && itemPhone && phoneKey === itemPhone) return true;
           if (idKey && itemId && idKey === itemId) return true;
-          if (nameKey && itemName && nameKey === itemName) {
-            const phoneConflict = phoneKey && itemPhone && phoneKey !== itemPhone;
-            const idConflict = idKey && itemId && idKey !== itemId;
-            if (!phoneConflict && !idConflict) return true;
-          }
+          if (phoneKey && itemPhone && phoneKey === itemPhone) return true;
           return false;
         });
 
-        if (!alreadyExists) {
+        // NẾU NGƯỜI NÀY CHỌN KHÔNG THAM GIA -> LOẠI KHỎI DANH SÁCH THAM GIA
+        if (p.attendance_status === "not_attending") {
+          if (existingIdx >= 0) {
+            mergedList.splice(existingIdx, 1);
+          }
+          continue;
+        }
+
+        // NẾU ĐÃ CÓ PHIẾU ĐĂNG KÝ -> ĐỒNG BỘ TÊN VÀ THÔNG TIN MỚI NHẤT (YÊU CẦU 4)
+        if (existingIdx >= 0) {
+          mergedList[existingIdx].fullName = p.full_name.trim();
+          mergedList[existingIdx].className = (p.class_name as any) || mergedList[existingIdx].className;
+          if (p.avatar_url) mergedList[existingIdx].avatarUrl = p.avatar_url;
+          if (p.shirt_size) mergedList[existingIdx].shirtSize = p.shirt_size;
+          if (p.delivery_address) mergedList[existingIdx].address = p.delivery_address;
+        } else if (p.attendance_status === "attending" && phoneKey.length >= 9) {
+          // THÊM MỚI NẾU THỰC SỰ CHỌN THAM GIA
           const address =
             p.delivery_address?.trim() ||
             p.specific_location?.trim() ||

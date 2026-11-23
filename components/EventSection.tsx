@@ -163,10 +163,11 @@ export default function EventSection() {
             });
 
             if (existing) {
-              // Bổ sung avatar từ profile nếu danh sách đăng ký chưa có avatar
-              if (!existing.avatarUrl && p.avatar_url) {
-                existing.avatarUrl = p.avatar_url;
-              }
+              // Luôn cập nhật họ tên mới nhất và thông tin từ profile (Yêu cầu 4)
+              existing.fullName = p.full_name.trim();
+              if (p.class_name) existing.className = (p.class_name as any);
+              if (p.avatar_url) existing.avatarUrl = p.avatar_url;
+              if (p.shirt_size) existing.shirtSize = p.shirt_size;
             } else {
               combined.push({
                 id: p.id,
@@ -186,6 +187,22 @@ export default function EventSection() {
         }
       } catch {}
 
+      // Đảm bảo phiếu đăng ký của chính user hiện tại luôn hiển thị Họ tên đã update (Yêu cầu 4)
+      if (profile?.id) {
+        const myRegIdx = combined.findIndex((r) => {
+          const matchId = r.id && String(r.id).toLowerCase() === String(profile.id).toLowerCase();
+          const pPhone = profile.phone ? profile.phone.replace(/[^0-9]/g, "") : "";
+          const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+          const matchPhone = pPhone && pPhone.length >= 9 && rPhone === pPhone;
+          return matchId || matchPhone;
+        });
+        if (myRegIdx >= 0) {
+          if (profile.full_name) combined[myRegIdx].fullName = profile.full_name.trim();
+          if (profile.class_name) combined[myRegIdx].className = (profile.class_name as any);
+          if (profile.avatar_url) combined[myRegIdx].avatarUrl = profile.avatar_url;
+        }
+      }
+
       if (!cancelled && combined.length > 0) {
         setRegistrations(combined);
         try {
@@ -201,12 +218,14 @@ export default function EventSection() {
     };
 
     window.addEventListener("tcdn4_registration_updated", handleUpdate);
+    window.addEventListener("tcdn4_profile_updated", handleUpdate);
 
     return () => {
       cancelled = true;
       window.removeEventListener("tcdn4_registration_updated", handleUpdate);
+      window.removeEventListener("tcdn4_profile_updated", handleUpdate);
     };
-  }, []);
+  }, [profile]);
 
   const saveRegistrations = (newList: Registration[], addedItem?: Registration) => {
     setRegistrations(newList);

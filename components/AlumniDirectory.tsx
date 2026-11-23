@@ -73,43 +73,84 @@ export default function AlumniDirectory({
       const seenNames = new Set<string>();
       const seenIds = new Set<string | number>();
 
+      // 1. Thử tải từ API server /api/profile?all=true (đầy đủ nhất, hợp nhất DB + Local profiles)
       try {
-        const { data, error } = await getSupabase()
-          .from("profiles")
-          .select("*")
-          .order("created_at", { ascending: false });
+        const res = await fetch("/api/profile?all=true", { cache: "no-store" });
+        if (res.ok) {
+          const resJson = await res.json();
+          if (resJson?.success && Array.isArray(resJson.profiles) && resJson.profiles.length > 0) {
+            resJson.profiles.forEach((p: any) => {
+              const memberName = p.full_name || "Thành viên K33";
+              const memberId = p.id;
+              if (memberId && seenIds.has(memberId)) return;
+              if (memberId) seenIds.add(memberId);
 
-        if (active && !error && data && data.length > 0) {
-          data.forEach((p: any) => {
-            const memberName = p.full_name || "Thành viên K33";
-            const memberId = p.id;
-            if (memberId && seenIds.has(memberId)) return;
-            if (memberId) seenIds.add(memberId);
-
-            combinedMembers.push({
-              id: memberId,
-              name: memberName,
-              class: (p.class_name as any) || "TC10",
-              job: p.job_title || "Cựu sinh viên",
-              company: p.company || "UEH Alumni",
-              location: p.specific_location || (
-                p.location_region === "hn" ? "Hà Nội" :
-                (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
-                p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
-              ),
-              region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
-              phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
-              avatar_url: p.avatar_url || "",
-              bio: p.bio || "",
-              marital_status: p.marital_status || "",
-              children_count: p.children_count || 0,
-              is_verified: true,
-              role: p.role || "member",
+              combinedMembers.push({
+                id: memberId,
+                name: memberName,
+                class: (p.class_name as any) || "TC10",
+                job: p.job_title || "Cựu sinh viên",
+                company: p.company || "UEH Alumni",
+                location: p.specific_location || (
+                  p.location_region === "hn" ? "Hà Nội" :
+                  (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
+                  p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
+                ),
+                region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
+                phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
+                avatar_url: p.avatar_url || "",
+                bio: p.bio || "",
+                marital_status: p.marital_status || "",
+                children_count: p.children_count || 0,
+                is_verified: true,
+                role: p.role || "member",
+              });
+              seenNames.add(memberName.toLowerCase().trim());
             });
-            seenNames.add(memberName.toLowerCase().trim());
-          });
+          }
         }
       } catch {}
+
+      // 2. Dự phòng trực tiếp từ Supabase DB
+      if (combinedMembers.length === 0) {
+        try {
+          const { data, error } = await getSupabase()
+            .from("profiles")
+            .select("*")
+            .order("created_at", { ascending: false });
+
+          if (active && !error && data && data.length > 0) {
+            data.forEach((p: any) => {
+              const memberName = p.full_name || "Thành viên K33";
+              const memberId = p.id;
+              if (memberId && seenIds.has(memberId)) return;
+              if (memberId) seenIds.add(memberId);
+
+              combinedMembers.push({
+                id: memberId,
+                name: memberName,
+                class: (p.class_name as any) || "TC10",
+                job: p.job_title || "Cựu sinh viên",
+                company: p.company || "UEH Alumni",
+                location: p.specific_location || (
+                  p.location_region === "hn" ? "Hà Nội" :
+                  (p.location_region === "dn" || p.location_region === "other") ? "Tỉnh khác" :
+                  p.location_region === "overseas" ? "Quốc tế" : "TP. Hồ Chí Minh"
+                ),
+                region: (p.location_region === "dn" ? "other" : (p.location_region as any)) || "hcm",
+                phone: user ? (p.phone || "") : (p.phone ? "HIDDEN" : ""),
+                avatar_url: p.avatar_url || "",
+                bio: p.bio || "",
+                marital_status: p.marital_status || "",
+                children_count: p.children_count || 0,
+                is_verified: true,
+                role: p.role || "member",
+              });
+              seenNames.add(memberName.toLowerCase().trim());
+            });
+          }
+        } catch {}
+      }
 
       // Đồng thời nạp danh sách cựu sinh viên đã đăng ký tham gia họp mặt 15 năm
       try {
@@ -144,6 +185,18 @@ export default function AlumniDirectory({
           });
         }
       } catch {}
+
+      // Đảm bảo thông tin của chính user hiện tại luôn hiển thị tên và thông tin mới nhất
+      if (profile?.id) {
+        const myIdx = combinedMembers.findIndex((m) => m.id === profile.id);
+        if (myIdx >= 0) {
+          if (profile.full_name) combinedMembers[myIdx].name = profile.full_name;
+          if (profile.class_name) combinedMembers[myIdx].class = profile.class_name as any;
+          if (profile.job_title) combinedMembers[myIdx].job = profile.job_title;
+          if (profile.company) combinedMembers[myIdx].company = profile.company;
+          if (profile.avatar_url) combinedMembers[myIdx].avatar_url = profile.avatar_url;
+        }
+      }
 
       if (active) {
         setAlumniList(combinedMembers);

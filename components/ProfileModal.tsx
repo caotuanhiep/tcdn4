@@ -28,7 +28,8 @@ import {
   Copy,
   CheckCheck,
   ArrowRight,
-  UserCheck
+  UserCheck,
+  Save
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
@@ -133,17 +134,31 @@ export default function ProfileModal({
   // Đồng bộ state khi profile nạp từ server
   useEffect(() => {
     if (profile) {
-      if (profile.full_name && !fullName) setFullName(profile.full_name);
-      if (profile.class_name && !className) setClassName(profile.class_name);
-      if (profile.job_title && !jobTitle) setJobTitle(profile.job_title);
-      if (profile.company && !company) setCompany(profile.company);
-      if (profile.phone && !phone) setPhone(profile.phone);
-      if (profile.avatar_url && !avatarUrl) setAvatarUrl(profile.avatar_url);
-      if (profile.birthday && !birthday) setBirthday(profile.birthday);
-      if (profile.bio && !bio) setBio(profile.bio);
-      if (profile.attendance_status === "attending") setAttendanceStatus("attending");
-      else if (profile.attendance_status === "not_attending") setAttendanceStatus("not_attending");
-      if (profile.shirt_size && !shirtSize) setShirtSize(profile.shirt_size);
+      if (profile.full_name) setFullName(profile.full_name);
+      if (profile.class_name) setClassName(profile.class_name);
+      if (profile.job_title) setJobTitle(profile.job_title);
+      if (profile.company) setCompany(profile.company);
+      if (profile.phone) setPhone(profile.phone);
+      if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
+      if (profile.birthday) setBirthday(profile.birthday);
+      if (profile.bio) setBio(profile.bio);
+      if (profile.location_region) setLocation(profile.location_region === "dn" ? "other" : profile.location_region);
+      if (profile.specific_location) setSpecificLocation(profile.specific_location);
+      if (profile.marital_status) setMaritalStatus(profile.marital_status);
+      if (profile.children_count !== undefined && profile.children_count !== null) {
+        setChildrenCount(Number(profile.children_count));
+      }
+
+      if (profile.attendance_status === "attending") {
+        setAttendanceStatus("attending");
+      } else if (profile.attendance_status === "not_attending") {
+        setAttendanceStatus("not_attending");
+      } else {
+        setAttendanceStatus("unregistered");
+      }
+
+      if (profile.shirt_size) setShirtSize(profile.shirt_size);
+      if (profile.delivery_address) setDeliveryAddress(profile.delivery_address);
     }
   }, [profile]);
 
@@ -177,7 +192,9 @@ export default function ProfileModal({
         setMyRegistration(myReg);
         if (myReg.shirtSize) setShirtSize(myReg.shirtSize);
         if (myReg.address) setDeliveryAddress(myReg.address);
-        setAttendanceStatus("attending");
+        if (profile?.attendance_status !== "not_attending") {
+          setAttendanceStatus("attending");
+        }
       }
     } catch {}
   }, [user, profile, phone, fullName]);
@@ -216,7 +233,9 @@ export default function ProfileModal({
           });
           if (serverReg.shirtSize) setShirtSize(serverReg.shirtSize);
           if (serverReg.address) setDeliveryAddress(serverReg.address);
-          setAttendanceStatus("attending");
+          if (profile?.attendance_status !== "not_attending") {
+            setAttendanceStatus("attending");
+          }
 
           // Cập nhật lại localStorage để toàn app đồng bộ
           try {
@@ -533,6 +552,22 @@ export default function ProfileModal({
         delivery_address: deliveryAddress.trim(),
         has_checked_in: true,
       });
+
+      // Nếu trước đó có phiếu đăng ký trong local registrations -> gỡ bỏ để không hiện trong danh sách tham gia
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        if (stored) {
+          const list = JSON.parse(stored);
+          const cleanP = (phone || "").replace(/[^0-9]/g, "");
+          const filtered = list.filter((r: any) => {
+            const matchId = user?.id && r.id === user.id;
+            const matchPhone = cleanP && cleanP.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === cleanP;
+            return !matchId && !matchPhone;
+          });
+          localStorage.setItem("tcdn4_registrations", JSON.stringify(filtered));
+        }
+        setMyRegistration(null);
+      } catch {}
 
       if (guestbookMessage.trim()) {
         try {
@@ -991,8 +1026,8 @@ export default function ProfileModal({
         {/* ========================================================= */}
         {activeTab === "attendance" && (
           <div className="space-y-3.5 animate-in fade-in duration-150">
-            {/* Thẻ Trạng thái Tham gia 15 Năm (Chỉ hiện trong Tab 2 khi ĐÃ đăng ký) */}
-            {myRegistration?.status === "confirmed" ? (
+            {/* Thẻ Trạng thái Tham gia 15 Năm (Chỉ hiện trong Tab 2 khi ĐÃ đăng ký VÀ đang chọn tham gia) */}
+            {attendanceStatus === "attending" && myRegistration?.status === "confirmed" ? (
               <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
@@ -1002,7 +1037,7 @@ export default function ProfileModal({
                 </div>
                 <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">100% OK</span>
               </div>
-            ) : myRegistration?.status === "pending" ? (
+            ) : attendanceStatus === "attending" && myRegistration?.status === "pending" ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
@@ -1027,8 +1062,10 @@ export default function ProfileModal({
                 </button>
               </div>
             ) : attendanceStatus === "not_attending" ? (
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                <span className="text-[11px] font-medium text-slate-600 truncate">Trạng thái: Đã gửi lời chúc (Không tham gia)</span>
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-orange-300 bg-orange-50/80 px-3 py-2 text-xs text-orange-950 shadow-2xs">
+                <span className="text-[11px] font-medium text-orange-900 truncate">
+                  Trạng thái: <strong>Đã chọn không tham gia trực tiếp</strong> (Gửi lời chúc lưu bút)
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1218,33 +1255,29 @@ export default function ProfileModal({
                   type="button"
                   onClick={handleRegisterAttendance}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 active:scale-98 transition-all"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 active:scale-98 transition-all cursor-pointer"
                 >
                   {saving ? (
                     <Loader2 size={15} className="animate-spin" />
                   ) : (
                     <QrCode size={15} className="text-ueh-gold" />
                   )}
-                  <span>Đăng ký tham gia & Nhận mã QR</span>
+                  <span>Lưu & Đăng ký tham gia (Nhận mã QR)</span>
                 </button>
               ) : attendanceStatus === "not_attending" ? (
                 <button
                   type="button"
                   onClick={handleDeclineAndSendWish}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer"
                 >
-                  <MessageSquare size={15} />
-                  <span>Gửi lời nhắn nhủ & Lời chúc</span>
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  <span>Lưu lựa chọn (Không tham gia trực tiếp)</span>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setAttendanceStatus("attending")}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-ueh active:scale-98 transition-all"
-                >
-                  <span>Chọn đăng ký tham gia →</span>
-                </button>
+                <div className="w-full sm:w-auto text-center py-2 px-3 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold">
+                  👆 Vui lòng bấm chọn 1 trong 2 phương án ở trên
+                </div>
               )}
             </div>
           </div>
