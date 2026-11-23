@@ -109,10 +109,12 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
       if (isClaude && !targetModel.includes("gemini")) {
         const candidateModels = [
           targetModel,
+          "claude-sonnet-4-20250514",
           "claude-3-7-sonnet-20250219",
           "claude-3-5-sonnet-20241022",
           "claude-3-5-haiku-20241022",
-        ].filter((v, i, a) => a.indexOf(v) === i);
+          "claude-3-haiku-20240307",
+        ].filter((v, i, a) => v && v.startsWith("claude") && a.indexOf(v) === i);
 
         for (const m of candidateModels) {
           try {
@@ -190,12 +192,15 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
       }
     }
 
-    // 3. Fallback thông minh: Sử dụng dữ liệu database thực tế K33
+    // 3. Fallback thông minh: Sử dụng dữ liệu database & cấu hình thực tế K33
     if (tone === "chat") {
       const qLower = topic.toLowerCase();
       let answer = "";
-      if (qLower.includes("đăng ký") || qLower.includes("tham gia") || qLower.includes("bao nhiêu")) {
-        answer = `📊 Hiện tại trên hệ thống tcdn4.top đã có ${dbContext.totalAttending} thành viên chính thức xác nhận tham dự Hội ngộ 15 Năm (trên tổng số ${dbContext.totalProfiles} thành viên đã điểm danh). Danh sách gồm: ${dbContext.attendingNames.slice(0, 10).join(", ")}${dbContext.attendingNames.length > 10 ? ` và ${dbContext.attendingNames.length - 10} bạn khác` : ""} 🎉!`;
+      if (/(bao nhiêu\s*(người|bạn|slot|thành viên)|mấy\s*(người|bạn)|ai\s*(đã\s*)?(tham gia|đi|đăng ký|chốt|đóng tiền|chuyển khoản)|danh sách\s*(tham gia|đăng ký|đóng tiền|chuyển khoản)|đăng ký rồi|đã đóng tiền|đã chuyển khoản)/.test(qLower)) {
+        answer = `📊 Hiện tại trên hệ thống tcdn4.top đã có ${dbContext.totalAttending} thành viên đăng ký tham dự Hội ngộ 15 Năm (${dbContext.totalConfirmed} bạn đã chuyển khoản xác nhận • ${dbContext.totalPending} bạn chờ CK • Tổng quỹ: ${dbContext.totalCollectedAmount.toLocaleString("vi-VN")} VNĐ) trên tổng số ${dbContext.totalProfiles} thành viên đã điểm danh.\nDanh sách: ${dbContext.attendingNames.slice(0, 10).join(", ")}${dbContext.attendingNames.length > 10 ? ` và ${dbContext.attendingNames.length - 10} bạn khác` : ""} 🎉!`;
+      } else if (/số tài khoản|tài khoản|\bstk\b|chuyển khoản|cách thức|kinh phí|đóng quỹ|tiền quỹ|ngân hàng|vietqr|\bqr\b|giá vé|mức phí|cú pháp/.test(qLower)) {
+        const b = dbContext.bankInfo;
+        answer = `💳 Thông tin chuyển khoản Hội ngộ 15 Năm TCDN4:\n• Ngân hàng: ${b.bankName}\n• Số tài khoản: ${b.accountNumber}\n• Chủ tài khoản: ${b.accountName}\n• Mức phí: ${b.amountText} / người\n• Cú pháp: ${b.syntaxPrefix} [Họ và Tên] [SĐT]\n👉 Đăng ký & quét mã VietQR tự động đối soát SePay tại: https://tcdn4.top/#event`;
       } else if (qLower.includes("hà nội") || qLower.includes("hn")) {
         answer = dbContext.hnMembers.length > 0
           ? `📍 Đồng môn K33 tại Hà Nội hiện có: ${dbContext.hnMembers.join(", ")} 🗼!`
@@ -210,8 +215,10 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
         answer = dbContext.birthdayMembersThisMonth.length > 0
           ? `🎂 Danh sách sinh nhật tháng này gồm: ${dbContext.birthdayMembersThisMonth.join(", ")} 🎉!`
           : `🎂 Tháng này chưa có bạn nào ghi nhận sinh nhật trên hệ thống.`;
+      } else if (dbContext.matchedMembers.length > 0) {
+        answer = `🔍 Thông tin thành viên từ danh bạ tcdn4.top:\n${dbContext.matchedMembers.slice(0, 8).join("\n")}`;
       } else {
-        answer = `🤖 Trợ lý K33 xin chào! Dữ liệu hiện tại: Có ${dbContext.totalProfiles} bạn đã điểm danh (${dbContext.tc10Count} TC10, ${dbContext.tc11Count} TC11, ${dbContext.tc12Count} TC12), ${dbContext.totalAttending} bạn đã đăng ký tham gia họp mặt ngày 12/12/2026 tại Cơ sở B UEH! Bạn có thể nhập Claude API Key để trò chuyện tự nhiên hơn nữa nhé! ✨`;
+        answer = `🤖 Trợ lý K33 xin chào! Dữ liệu hiện tại: Có ${dbContext.totalProfiles} bạn đã điểm danh (${dbContext.tc10Count} TC10, ${dbContext.tc11Count} TC11, ${dbContext.tc12Count} TC12), ${dbContext.totalAttending} bạn đã đăng ký tham gia (${dbContext.totalConfirmed} bạn đã chuyển khoản) họp mặt ngày 12/12/2026 tại Cơ sở B UEH! ✨`;
       }
 
       return NextResponse.json({

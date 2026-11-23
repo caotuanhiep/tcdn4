@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadZaloBotConfig, saveZaloBotConfig, ZaloGroupConfigItem } from "@/app/api/settings/zalo/route";
-import { DEFAULT_BANK_INFO, normalizeBankConfig } from "@/lib/bank";
 import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
 import fs from "fs";
 import path from "path";
 
 const WEBHOOK_LOGS_PATH = path.join(process.cwd(), "data", "zalo-webhook-logs.json");
+const CLOUD_WEBHOOK_LOGS_PATH = "settings/zalo-webhook-logs.json";
 const CHECKINS_PATH = "settings/zalo-checkins.json";
 const LOCAL_CHECKINS_PATH = path.join(process.cwd(), "data", "zalo-checkins.json");
 
@@ -62,8 +62,30 @@ async function markCheckedIn(identifiers: string[]): Promise<void> {
   } catch {}
 }
 
-// Helper ghi nhận nhật ký webhook gần nhất để debug khi cần
+// Helper ghi nhận nhật ký webhook gần nhất (lưu cả Local + Cloud Storage để debug trên Vercel)
+async function loadWebhookLogs(): Promise<any[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(CLOUD_WEBHOOK_LOGS_PATH);
+    if (pub?.publicUrl) {
+      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const parsed = JSON.parse(await res.text());
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch {}
+  try {
+    if (fs.existsSync(WEBHOOK_LOGS_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(WEBHOOK_LOGS_PATH, "utf-8"));
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
 function appendWebhookLog(entry: any) {
+  // Fire-and-forget lưu local ngay + lưu Cloud ngầm
   try {
     const dir = path.dirname(WEBHOOK_LOGS_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -80,9 +102,23 @@ function appendWebhookLog(entry: any) {
       time: new Date().toISOString(),
       ...entry,
     });
-    if (logs.length > 30) logs = logs.slice(0, 30);
+    if (logs.length > 25) logs = logs.slice(0, 25);
     fs.writeFileSync(WEBHOOK_LOGS_PATH, JSON.stringify(logs, null, 2), "utf-8");
   } catch {}
+
+  (async () => {
+    try {
+      const cloudLogs = await loadWebhookLogs();
+      cloudLogs.unshift({ time: new Date().toISOString(), ...entry });
+      const trimmed = cloudLogs.slice(0, 20);
+      const supabase = getSupabaseAdmin();
+      await supabase.storage.from("alumni-media").upload(
+        CLOUD_WEBHOOK_LOGS_PATH,
+        Buffer.from(JSON.stringify(trimmed, null, 2), "utf-8"),
+        { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
+      );
+    } catch {}
+  })();
 }
 
 // Hàm gửi tin nhắn chính thức qua Zalo Bot Platform API (Bot Elephant)
@@ -181,143 +217,217 @@ async function handleAlumniAiQuery(
   chatId: string,
   botToken: string,
   aiApiKey?: string
-): Promise<{ ok: boolean; replyText?: string }> {
-  const cleanQuery = rawQuery
-    .replace(/@Bot\s*Elephant/gi, "")
-    .replace(/@Bot/gi, "")
-    .replace(/@bot\.[A-Za-z0-9]+/gi, "")
-    .replace(/^bot\s*(ơi|oi)?/i, "")
-    .trim();
-
-  // 1. LẤY THÔNG TIN TÀI KHOẢN NGÂN HÀNG
-  let bankInfo = DEFAULT_BANK_INFO;
-  try {
-    const bankConfigPath = path.join(process.cwd(), "data", "bank-config.json");
-    if (fs.existsSync(bankConfigPath)) {
-      bankInfo = normalizeBankConfig(JSON.parse(fs.readFileSync(bankConfigPath, "utf-8")));
-    }
-  } catch {}
-
-  // 2. TRUY VẤN CƠ SỞ DỮ LIỆU TỔNG HỢP VÀ DỮ LIỆU THỰC TẾ
+): Promise<{ ok: boolean; replyText?: string; usedProvider?: string; usedModel?: string }> {
   const botConfig = await loadZaloBotConfig();
+  const escapedBotName = (botConfig.botName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  let cleanQuery = rawQuery
+    .replace(/@Bot\s*Elephant/gi, "")
+    .replace(/@Bot\s*TCDN4[^\s]*/gi, "")
+    .replace(/@TCDN4[^\s]*/gi, "")
+    .replace(/@Bot/gi, "")
+    .replace(/@bot\.[A-Za-z0-9_]+/gi, "")
+    .replace(/^bot\s*(ơi|oi|elephant|ai)?[,:\s]*/i, "");
+
+  if (escapedBotName) {
+    cleanQuery = cleanQuery.replace(new RegExp(`@?${escapedBotName}`, "gi"), "");
+  }
+  cleanQuery = cleanQuery.trim();
+
+  // 1. TRUY VẤN TOÀN BỘ DỮ LIỆU THỰC TẾ TỪ DATABASE SUPABASE + CẤU HÌNH ADMIN (NGÂN HÀNG, ĐĂNG KÝ, DANH BẠ, BLL)
   const dbSummary = await getAlumniDatabaseContext(cleanQuery);
+  const bankInfo = dbSummary.bankInfo;
   const systemContext = dbSummary.rawTextContext;
   const selectedModel = botConfig.aiModel || "claude-3-5-sonnet-20241022";
-  const activeKey = aiApiKey || botConfig.aiApiKey;
+  const activeKey = aiApiKey || botConfig.aiApiKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || process.env.GEMINI_API_KEY;
+
+  const systemPrompt = `Bạn là Bot AI K33 của Hội cựu sinh viên Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
+Nhiệm vụ: Trả lời câu hỏi của thành viên trong nhóm chat Zalo một cách CHÍNH XÁC 100%, thân tình, dí dỏm, hào sảng và đậm chất sinh viên UEH.
+
+Quy tắc BẮT BUỘC:
+- MỌI số liệu (Ngân hàng, Số tài khoản, Chủ tài khoản, Số tiền đóng góp, Cú pháp chuyển khoản, Số lượng đã đăng ký, Danh sách đã chuyển khoản / chờ chuyển khoản, Tổng quỹ, Khu vực TP.HCM / Hà Nội / Tỉnh khác / Nước ngoài, Thông tin từng thành viên, Ban Liên Lạc, Sinh nhật...) PHẢI lấy ĐÚNG TUYỆT ĐỐI từ phần DỮ LIỆU THỰC TẾ ĐƯỢC CUNG CẤP bên dưới. Tuyệt đối KHÔNG bịa đặt hoặc tự suy đoán số tài khoản hay số liệu khác.
+- Khi được hỏi về số tài khoản, cách thức chuyển khoản, đóng quỹ, mức phí: ghi rõ Ngân hàng, Số tài khoản, Chủ tài khoản, Số tiền (${bankInfo.amountText}), Cú pháp chuyển khoản, và hướng dẫn quét VietQR tại https://tcdn4.top/#event (SePay tự động xác nhận).
+- Khi được hỏi về số người đăng ký / đã đóng tiền: báo chính xác số lượng đã đăng ký, số người đã chuyển khoản xác nhận, số người chờ chuyển khoản, và liệt kê tên các bạn.
+- Khi được hỏi về khu vực sinh sống (Hà Nội, TP.HCM, Tỉnh khác, Nước ngoài...): liệt kê chi tiết các bạn ở khu vực đó.
+- Khi được hỏi về thông tin của một thành viên cụ thể: tra cứu và trả lời rõ lớp, nghề nghiệp/công ty, khu vực, tình trạng đăng ký & chuyển khoản.
+- Trả lời ngắn gọn, súc tích, dễ đọc trên điện thoại Zalo (dùng gạch đầu dòng gọn gàng và emoji sinh động), không dùng cú pháp Markdown phức tạp như **bold** quá nhiều.
+- Xưng hô 'mình / bạn' hoặc 'em / anh chị', vui vẻ hóm hỉnh.`;
 
   let replyText = "";
+  let usedProvider = "builtin-db";
+  let usedModel = "k33-live-db";
 
-  // 3. GỌI CLAUDE AI HOẶC GEMINI NẾU CÓ KHÓA API
+  // 2. GỌI CLAUDE AI HOẶC GEMINI VỚI DANH SÁCH MODEL DỰ PHÒNG TỰ ĐỘNG
   if (activeKey) {
-    if (selectedModel.startsWith("claude") || activeKey.startsWith("sk-ant") || activeKey.startsWith("sk-")) {
-      try {
-        const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": activeKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            max_tokens: 800,
-            system: `Bạn là Bot AI K33 của Hội cựu sinh viên Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
-Nhiệm vụ: Trả lời câu hỏi của thành viên trong nhóm Zalo một cách chính xác, thân tình, dí dỏm, hào sảng và đậm chất sinh viên UEH.
-Quy tắc quan trọng:
-- Sử dụng đúng thông tin trong phần DỮ LIỆU THỰC TẾ ĐƯỢC CUNG CẤP (Danh sách người tham gia, khu vực TP.HCM, Hà Nội, tỉnh khác, nước ngoài, size áo, ngân hàng...). Tuyệt đối không bịa đặt số tài khoản hay ngày giờ khác.
-- Khi được hỏi về khu vực sinh sống (Có những ai ở Hà Nội, TP.HCM, Tỉnh khác, Nước ngoài/Xuất ngoại...), hãy liệt kê chi tiết các bạn ở khu vực đó một cách vui vẻ.
-- Khi được hỏi về số lượng người tham gia, hãy báo chính xác số lượng đã xác nhận và một số bạn tiêu biểu.
-- Khi được hỏi về thông tin ai đó, hãy tra cứu đối chiếu trong danh sách thành viên để phản hồi đúng lớp, công ty, nghề nghiệp và tình trạng tham gia.
-- Trả lời ngắn gọn từ 2 - 5 câu, định dạng dễ đọc trên màn hình điện thoại, có emoji sinh động.
-- Xưng hô 'mình / bạn' hoặc 'em / anh chị', giữ tinh thần hào hứng hướng tới ngày hội ngộ 12/12.
-- Luôn kèm link https://tcdn4.top/#event hoặc https://tcdn4.top/#directory khi phù hợp.`,
-            messages: [
-              {
-                role: "user",
-                content: `${systemContext}\n\nCâu hỏi của thành viên trong nhóm Zalo: "${cleanQuery}"`,
-              },
-            ],
-          }),
-        });
+    const isClaudeKey = activeKey.startsWith("sk-ant") || (!activeKey.startsWith("AIza") && activeKey.startsWith("sk-"));
+    const preferClaude = isClaudeKey && !selectedModel.startsWith("gemini");
 
-        const claudeData = await claudeRes.json().catch(() => null);
-        if (claudeData?.content?.[0]?.text) {
-          replyText = claudeData.content[0].text.trim();
-        }
-      } catch {}
-    } else if (selectedModel.startsWith("gemini") || activeKey.startsWith("AIza")) {
-      try {
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
-          {
+    if (preferClaude) {
+      const claudeCandidates = [
+        selectedModel,
+        "claude-sonnet-4-20250514",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-3-haiku-20240307",
+      ].filter((v, i, a) => v && v.startsWith("claude") && a.indexOf(v) === i);
+
+      for (const m of claudeCandidates) {
+        try {
+          const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": activeKey,
+              "anthropic-version": "2023-06-01",
+            },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: `${systemContext}\n\nCâu hỏi: "${cleanQuery}"` }] }],
+              model: m,
+              max_tokens: 900,
+              system: systemPrompt,
+              messages: [
+                {
+                  role: "user",
+                  content: `${systemContext}\n\nCâu hỏi của thành viên trong nhóm Zalo: "${cleanQuery || rawQuery}"`,
+                },
+              ],
             }),
+          });
+
+          if (claudeRes.ok) {
+            const claudeData = await claudeRes.json().catch(() => null);
+            const text = claudeData?.content?.[0]?.text;
+            if (text && text.trim().length > 5) {
+              replyText = text.trim();
+              usedProvider = "claude";
+              usedModel = m;
+              break;
+            }
           }
-        );
-        if (geminiRes.ok) {
-          const gemData = await geminiRes.json();
-          const text = gemData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) replyText = text.trim();
-        }
-      } catch {}
+        } catch {}
+      }
+    }
+
+    if (!replyText && (activeKey.startsWith("AIza") || selectedModel.startsWith("gemini"))) {
+      const geminiCandidates = [
+        selectedModel.startsWith("gemini") ? selectedModel : "gemini-2.0-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+      ].filter((v, i, a) => a.indexOf(v) === i);
+
+      for (const gm of geminiCandidates) {
+        try {
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${gm}:generateContent?key=${activeKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `${systemPrompt}\n\n${systemContext}\n\nCâu hỏi của thành viên trong nhóm Zalo: "${cleanQuery || rawQuery}"`,
+                      },
+                    ],
+                  },
+                ],
+              }),
+            }
+          );
+          if (geminiRes.ok) {
+            const gemData = await geminiRes.json().catch(() => null);
+            const text = gemData?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && text.trim().length > 5) {
+              replyText = text.trim();
+              usedProvider = "gemini";
+              usedModel = gm;
+              break;
+            }
+          }
+        } catch {}
+      }
     }
   }
 
-  // 5. BỘ TẠO CÂU TRẢ LỜI DỰ PHÒNG THÔNG MINH (KHI CHƯA GẮN CLAUDE HOẶC LỖI MẠNG)
+  // 3. BỘ TRẢ LỜI TRỰC TIẾP TỪ DATABASE & SETTINGS (DỰ PHÒNG CHUẨN 100% KHI KHÔNG DÙNG/LỖI CLAUDE)
   if (!replyText) {
-    const qLower = cleanQuery.toLowerCase();
+    const qLower = (cleanQuery || rawQuery).toLowerCase();
 
-    // Hỏi về thời gian, địa điểm, lịch trình
-    if (/ở đâu|khi nào|mấy giờ|địa điểm|thời gian|lịch trình|ngay nao|ngày nào/.test(qLower)) {
+    // Ưu tiên 1: Hỏi về số lượng người đăng ký / ai đã đóng tiền / danh sách tham gia
+    if (/(bao nhiêu\s*(người|bạn|slot|thành viên)|mấy\s*(người|bạn)|ai\s*(đã\s*)?(tham gia|đi|đăng ký|chốt|đóng tiền|chuyển khoản)|danh sách\s*(tham gia|đăng ký|đóng tiền|chuyển khoản)|đăng ký rồi|đã đóng tiền|đã chuyển khoản)/.test(qLower)) {
+      const confirmedPreview = dbSummary.confirmedNames.slice(0, 8).join("\n• ");
+      const pendingPreview = dbSummary.pendingNames.slice(0, 8).join("\n• ");
       replyText =
-        `🎉 [TCDN4 K33 HUB] Lịch hẹn 15 năm diễn ra vào:\n` +
+        `📊 [THỐNG KÊ HỘI NGỘ 15 NĂM - REALTIME]\n` +
+        `👥 Đã điểm danh danh bạ: ${dbSummary.totalProfiles} bạn (TC10: ${dbSummary.tc10Count}, TC11: ${dbSummary.tc11Count}, TC12: ${dbSummary.tc12Count})\n` +
+        `🔥 Đã đăng ký tham dự 15 năm: ${dbSummary.totalAttending} bạn\n` +
+        `✅ Đã chuyển khoản xác nhận: ${dbSummary.totalConfirmed} bạn (${dbSummary.totalCollectedAmount.toLocaleString("vi-VN")} VNĐ)\n` +
+        `${confirmedPreview ? `• ${confirmedPreview}\n` : ""}` +
+        `⏳ Chờ chuyển khoản: ${dbSummary.totalPending} bạn\n` +
+        `${pendingPreview ? `• ${pendingPreview}\n` : ""}` +
+        `👉 Đăng ký & xem danh sách trực tiếp: https://tcdn4.top/#event`;
+    }
+    // Ưu tiên 2: Hỏi về số tài khoản, cách thức chuyển khoản, kinh phí, tiền quỹ, vé, mã QR
+    else if (/số tài khoản|tài khoản|\bstk\b|chuyển khoản|cách thức|kinh phí|đóng quỹ|tiền quỹ|quỹ lớp|ngân hàng|vietqr|\bqr\b|bao nhiêu tiền|giá vé|mức phí|cú pháp/.test(qLower)) {
+      replyText =
+        `💳 [THÔNG TIN CHUYỂN KHOẢN HỘI NGỘ 15 NĂM TCDN4]\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🏦 Ngân hàng: ${bankInfo.bankName}\n` +
+        `🔢 Số tài khoản: ${bankInfo.accountNumber}\n` +
+        `👤 Chủ tài khoản: ${bankInfo.accountName}\n` +
+        `💰 Mức kinh phí: ${bankInfo.amountText} / thành viên\n` +
+        `📝 Cú pháp CK: ${bankInfo.syntaxPrefix} [Họ và Tên] [SĐT]\n` +
+        `   (VD: ${bankInfo.syntaxPrefix} CAO TUAN HIEP 0972555211)\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ Cách thức: Vào https://tcdn4.top/#event đăng ký chọn size áo và quét mã VietQR. Hệ thống SePay tự động đối soát & xác nhận ngay sau khi chuyển khoản thành công! 🎉`;
+    }
+    // Ưu tiên 3: Hỏi về Ban Liên Lạc
+    else if (/ban liên lạc|\bbll\b|liên hệ ai|trưởng ban|phó ban|hỗ trợ/.test(qLower)) {
+      replyText =
+        `🏛️ [BAN LIÊN LẠC TCDN4 - K33 UEH]\n` +
+        `${dbSummary.committeeList.join("\n")}\n\n` +
+        `👉 Xem chi tiết tại: https://tcdn4.top`;
+    }
+    // Ưu tiên 4: Hỏi về thời gian, địa điểm, lịch trình
+    else if (/khi nào|mấy giờ|địa điểm|thời gian|lịch trình|ngay nao|ngày nào|tổ chức ở đâu|họp ở đâu/.test(qLower)) {
+      replyText =
+        `🎉 [LỊCH HẸN 15 NĂM TCDN4 - K33 UEH]\n` +
         `⏰ Thời gian: Thứ Bảy, 12/12/2026 (Bắt đầu từ 08:30 sáng)\n` +
         `📍 Địa điểm: Giảng đường Cơ sở B, ĐH Kinh tế TP.HCM (279 Nguyễn Tri Phương, Q.10)\n` +
-        `🍻 Lịch trình: 08:30 đón tiếp nhận áo & chụp ảnh; 09:30 lễ kỷ niệm; 11:30 tiệc trưa cụng ly!\n` +
-        `👉 Chi tiết xem tại: https://tcdn4.top/#event`;
-    }
-    // Hỏi về số tài khoản, kinh phí, tiền quỹ
-    else if (/tài khoản|stk|tiền|kinh phí|đóng|chuyển khoản|quỹ|ngân hàng/.test(qLower)) {
-      replyText =
-        `💳 [THÔNG TIN ĐÓNG QUÝ HỘI KHÓA 15 NĂM]\n` +
-        `• Ngân hàng: ${bankInfo.bankName}\n` +
-        `• Số tài khoản: ${bankInfo.accountNumber}\n` +
-        `• Chủ tài khoản: ${bankInfo.accountName}\n` +
-        `• Mức phí: ${bankInfo.amountText} / người\n` +
-        `• Cú pháp: ${bankInfo.syntaxPrefix} [Họ Tên] [Lớp]\n` +
-        `👉 Quét mã QR thanh toán nhanh tại: https://tcdn4.top/#event`;
-    }
-    // Hỏi về số lượng người đăng ký
-    else if (/bao nhiêu|ai tham gia|ai đi|danh sách|đăng ký rồi|ai chốt/.test(qLower)) {
-      const attendeesSample = dbSummary.attendingNames.slice(0, 8).join(", ") || "nhiều anh em TC10, TC11, TC12";
-      replyText =
-        `🔥 Đã có ${dbSummary.totalAttending || 35} đồng môn K33 chính thức chốt slot họp mặt 15 năm tại Cơ sở B!\n` +
-        `🍻 Đã có: ${attendeesSample}... lên thuyền sẵn sàng.\n` +
-        `👉 Ai chưa đăng ký thì vào chốt size áo ngay nhé kẻo hết bàn: https://tcdn4.top/#event`;
+        `🍻 Lịch trình: 08:30 đón tiếp nhận áo Polo & chụp ảnh; 09:30 Lễ kỷ niệm; 11:30 Đại tiệc trưa hội ngộ!\n` +
+        `👉 Chi tiết & đăng ký: https://tcdn4.top/#event`;
     }
     // Hỏi về khu vực sinh sống (Hà Nội, TP.HCM, nước ngoài, tỉnh khác)
-    else if (/hà nội|hn|hcm|sài gòn|khu vực|ở đâu|nước ngoài|ngoại|tỉnh/.test(qLower)) {
-      if (/hà nội|hn/.test(qLower)) {
-        replyText = dbSummary.hnMembers.length > 0
-          ? `📍 Đồng môn K33 tại Hà Nội hiện có: ${dbSummary.hnMembers.join(", ")} 🗼!\n👉 Kết nối tại: https://tcdn4.top/#directory`
-          : `📍 Hiện tại chưa có bạn nào cập nhật sinh sống ở Hà Nội. Cả nhà nhắc anh em vào tcdn4.top điểm danh nhé!`;
-      } else if (/nước ngoài|ngoại/.test(qLower)) {
-        replyText = dbSummary.overseasMembers.length > 0
-          ? `✈️ Đồng môn đang ở Nước ngoài: ${dbSummary.overseasMembers.join(", ")}!\n👉 Kết nối tại: https://tcdn4.top/#directory`
-          : `✈️ Hiện chưa có bạn nào lưu hồ sơ ở Nước ngoài.`;
+    else if (/hà nội|\bhn\b|hcm|hồ chí minh|sài gòn|khu vực|nước ngoài|xuất ngoại|tỉnh khác|ở đâu/.test(qLower)) {
+      if (/hà nội|\bhn\b/.test(qLower)) {
+        replyText =
+          dbSummary.hnMembers.length > 0
+            ? `📍 Đồng môn K33 tại Hà Nội hiện có (${dbSummary.hnMembers.length} bạn): ${dbSummary.hnMembers.join(", ")} 🗼!\n👉 Danh bạ: https://tcdn4.top/#directory`
+            : `📍 Hiện chưa có bạn nào cập nhật đang sinh sống ở Hà Nội. Cả nhà nhắc anh em vào https://tcdn4.top điểm danh nhé!`;
+      } else if (/nước ngoài|xuất ngoại/.test(qLower)) {
+        replyText =
+          dbSummary.overseasMembers.length > 0
+            ? `✈️ Đồng môn đang ở Nước ngoài (${dbSummary.overseasMembers.length} bạn): ${dbSummary.overseasMembers.join(", ")}!\n👉 Danh bạ: https://tcdn4.top/#directory`
+            : `✈️ Hiện chưa có bạn nào cập nhật hồ sơ ở Nước ngoài trên danh bạ.`;
       } else {
-        replyText = `📍 Thống kê đồng môn theo khu vực:\n• TP.HCM: ${dbSummary.hcmMembers.length} bạn (${dbSummary.hcmMembers.slice(0, 10).join(", ")}...)\n• Hà Nội: ${dbSummary.hnMembers.length} bạn\n• Nước ngoài: ${dbSummary.overseasMembers.length} bạn\n• Tỉnh khác: ${dbSummary.otherMembers.length} bạn\n👉 Chi tiết danh bạ: https://tcdn4.top/#directory`;
+        replyText =
+          `📍 [PHÂN BỔ ĐỒNG MÔN TCDN4 THEO KHU VỰC]\n` +
+          `• TP.HCM (${dbSummary.hcmMembers.length} bạn): ${dbSummary.hcmMembers.slice(0, 12).join(", ") || "Chưa có"}\n` +
+          `• Hà Nội (${dbSummary.hnMembers.length} bạn): ${dbSummary.hnMembers.join(", ") || "Chưa có"}\n` +
+          `• Nước ngoài (${dbSummary.overseasMembers.length} bạn): ${dbSummary.overseasMembers.join(", ") || "Chưa có"}\n` +
+          `• Tỉnh khác (${dbSummary.otherMembers.length} bạn): ${dbSummary.otherMembers.slice(0, 10).join(", ") || "Chưa có"}\n` +
+          `👉 Xem bản đồ & danh bạ: https://tcdn4.top/#directory`;
       }
     }
     // Hỏi về size áo Polo
-    else if (/size|áo|áo polo|chọn size/.test(qLower)) {
+    else if (/size|áo polo|chọn áo|bảng áo|đặt áo/.test(qLower)) {
       replyText =
-        `👕 Bảng size áo Polo kỷ niệm 15 năm TCDN4:\n` +
-        `• Size S: Dưới 55kg\n• Size M: 55 - 65kg\n• Size L: 65 - 72kg\n• Size XL: 72 - 80kg\n• Size XXL: 80 - 88kg\n• Size 3XL: Trên 88kg\n` +
-        `👉 Vào đăng ký và chốt size ngay tại: https://tcdn4.top/#event`;
+        `👕 [BẢNG SIZE ÁO POLO KỶ NIỆM 15 NĂM TCDN4]\n` +
+        `• Nam: S (<55kg) • M (55-64kg) • L (65-73kg) • XL (74-82kg) • 2XL (82-90kg) • 3XL (>90kg)\n` +
+        `• Nữ: S (<48kg) • M (48-54kg) • L (55-62kg) • XL (>62kg)\n` +
+        `📊 Thống kê áo đã chọn: ${dbSummary.shirtSizeSummary}\n` +
+        `👉 Vào chốt size áo ngay tại: https://tcdn4.top/#event`;
     }
     // Hỏi về sinh nhật
     else if (/sinh\s*nh[aậ]t/.test(qLower)) {
@@ -325,24 +435,31 @@ Quy tắc quan trọng:
         replyText =
           `🎂 Danh sách đồng môn sinh nhật tháng ${new Date().getMonth() + 1} này:\n` +
           dbSummary.birthdayMembersThisMonth.map((b: string) => `• ${b}`).join("\n") +
-          `\n👉 Cả nhà cùng gửi lời chúc mừng sinh nhật tại: https://tcdn4.top`;
+          `\n👉 Cả nhà cùng vào chúc mừng tại: https://tcdn4.top`;
       } else {
-        replyText = `🎂 Tháng này chưa có bạn nào sinh nhật. Bạn có thể cập nhật ngày sinh tại: https://tcdn4.top`;
+        replyText = `🎂 Tháng ${new Date().getMonth() + 1} này chưa có bạn nào ghi nhận sinh nhật trên danh bạ. Cập nhật ngày sinh tại: https://tcdn4.top`;
       }
+    }
+    // Tra cứu thông tin thành viên cụ thể (tìm thấy trong database)
+    else if (dbSummary.matchedMembers.length > 0) {
+      replyText =
+        `🔍 [THÔNG TIN ĐỒNG MÔN TỪ DANH BẠ TCDN4]\n` +
+        `${dbSummary.matchedMembers.slice(0, 8).join("\n")}\n\n` +
+        `👉 Xem đầy đủ tại danh bạ: https://tcdn4.top/#directory`;
     }
     // Chào hỏi chung hoặc câu hỏi khác
     else {
       replyText =
         `🤖 [TCDN4 K33 Alumni Hub Bot] Chào bạn!\n` +
-        `Mình là trợ lý AI tự động của Hội cựu sinh viên TCDN4 K33 UEH.\n` +
-        `Bạn có thể hỏi mình về: lịch họp lớp 12/12, số tài khoản đóng tiền quỹ, số người đã đăng ký, tra cứu size áo hoặc tìm bạn bè cùng lớp nhé! 🍻\n` +
-        `👉 Website họp khóa: https://tcdn4.top/#event`;
+        `Mình đã kết nối trực tiếp cơ sở dữ liệu tcdn4.top (${dbSummary.totalProfiles} bạn điểm danh • ${dbSummary.totalAttending} bạn đăng ký 15 năm • ${dbSummary.totalConfirmed} bạn đã CK).\n` +
+        `Bạn có thể hỏi mình bất cứ điều gì về: số tài khoản & cách chuyển khoản, lịch họp lớp 12/12, ai đã đăng ký/đóng tiền, ai ở Hà Nội/TP.HCM/nước ngoài, bảng size áo, Ban Liên Lạc, hoặc tìm bạn bè cùng khóa nhé! 🍻\n` +
+        `👉 Website: https://tcdn4.top/#event`;
     }
   }
 
   // Gửi tin nhắn trả lời qua Zalo Bot Platform API
   const sendRes = await sendZaloBotMessage(botToken, chatId, replyText);
-  return { ok: sendRes.ok, replyText };
+  return { ok: sendRes.ok, replyText, usedProvider, usedModel };
 }
 
 export async function GET(request: Request) {
@@ -368,6 +485,9 @@ export async function GET(request: Request) {
     } catch {}
   }
 
+  const includeLogs = searchParams.get("logs") === "1";
+  const recentLogs = includeLogs ? await loadWebhookLogs() : undefined;
+
   return NextResponse.json({
     status: "ok",
     service: "TCDN4 Zalo Bot Webhook Endpoint",
@@ -383,6 +503,7 @@ export async function GET(request: Request) {
       chatId: g.chatId || null,
       status: g.status,
     })),
+    ...(includeLogs ? { recentLogs } : {}),
   });
 }
 
@@ -408,14 +529,22 @@ export async function POST(request: Request) {
     const incomingText = extractIncomingText(payload);
     const incomingChatId = extractChatId(payload);
 
+    // Xác định xem đây là sự kiện Webhook từ Zalo gửi về (không có payload.type nội bộ của website)
+    const isWebsiteInternalCall = Boolean(payload?.type);
+    const msgObj = payload?.result?.message || payload?.message || payload?.data?.message || null;
+    const isFromBot = Boolean(msgObj?.from?.is_bot || payload?.from?.is_bot || payload?.sender?.is_bot);
+
+    if (!isWebsiteInternalCall && isFromBot) {
+      return NextResponse.json({ ok: true, ignored: "bot_self_message" });
+    }
+
     // =========================================================================
     // 1. XỬ LÝ KHI CÓ TIN NHẮN TỪ ZALO GỬI VỀ WEBHOOK (XÁC MINH NHÓM, CÂU HỎI AI)
     // =========================================================================
-    if (incomingText) {
+    if (!isWebsiteInternalCall && incomingText) {
+      // CHỈ nhận diện lệnh xác minh nhóm khi có cú pháp /verify hoặc mã #TCDN4- (tránh nhầm câu hỏi "ai đã xác nhận tham gia?")
       const isVerify =
-        /verify/i.test(incomingText) ||
-        /xác\s*nhận/i.test(incomingText) ||
-        /kết\s*nối/i.test(incomingText) ||
+        /\/verify/i.test(incomingText) ||
         /#TCDN4-/i.test(incomingText);
 
       // CÂU LỆNH XÁC MINH NHÓM: /verify #MÃ_NHÓM (hoặc @Bot Elephant /verify #MÃ)
@@ -513,14 +642,31 @@ export async function POST(request: Request) {
         });
       }
 
-      // TRẢ LỜI CÂU HỎI TRỰC TIẾP TỪ THÀNH VIÊN (TRỢ LÝ AI HỎI ĐÁP)
+      // TRẢ LỜI CÂU HỎI TRỰC TIẾP TỪ THÀNH VIÊN TRONG NHÓM CHAT HOẶC CHAT RIÊNG (TRỢ LÝ AI + DATABASE)
       if (incomingChatId) {
+        const chatType = msgObj?.chat?.type || payload?.chat?.type || "";
+        const isPrivateChat = String(chatType).toLowerCase() === "private";
+        const hasPayloadMention =
+          (Array.isArray(msgObj?.mentions) && msgObj.mentions.length > 0) ||
+          (Array.isArray(msgObj?.entities) && msgObj.entities.some((e: any) => e?.type === "mention" || e?.type === "bot_command"));
+        const escapedBotName = (botConfig.botName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const mentionsBotByName = escapedBotName ? new RegExp(escapedBotName, "i").test(incomingText) : false;
+
         const isBotAddressed =
+          isPrivateChat ||
+          hasPayloadMention ||
+          mentionsBotByName ||
           /@Bot/i.test(incomingText) ||
-          /bot\s*(ơi|oi|ai|elephant)/i.test(incomingText) ||
-          /^(alo|xin chao|chao bot|hoi bot)/i.test(incomingText) ||
-          /^\/(help|start|ping|info)/i.test(incomingText) ||
-          /(họp lớp|15 năm|12\/12|đăng ký|tiền quỹ|kinh phí|stk|số tài khoản|ngân hàng|size áo|áo polo|ai tham gia|ai đi|sinh nhật|tìm bạn|tìm anh|tìm chị|danh bạ)/i.test(incomingText);
+          /@bot\./i.test(incomingText) ||
+          /@TCDN4/i.test(incomingText) ||
+          /bot\s*(ơi|oi|ai|elephant|tcdn4)/i.test(incomingText) ||
+          /trợ\s*lý/i.test(incomingText) ||
+          /^(alo|xin ch[aà]o|ch[aà]o bot|h[oỏ]i bot)/i.test(incomingText) ||
+          /^\/(help|start|ping|info|stk|bank|list|event)/i.test(incomingText) ||
+          /\?/.test(incomingText) ||
+          /(họp lớp|họp mặt|hội ngộ|15 năm|12\/12|đăng ký|tham gia|tiền quỹ|kinh phí|đóng tiền|chuyển khoản|cách thức|giá vé|mức phí|\bstk\b|số tài khoản|tài khoản|ngân hàng|vietqr|\bqr\b|size áo|áo polo|bảng size|ai tham gia|ai đi|ai đóng|đã đóng|bao nhiêu|mấy người|sinh nhật|tìm bạn|tìm anh|tìm chị|thông tin|danh bạ|danh sách|khu vực|hà nội|tp\.?hcm|sài gòn|nước ngoài|xuất ngoại|ban liên lạc|\bbll\b|địa điểm|ở đâu|mấy giờ|khi nào|lịch trình|tc10|tc11|tc12)/i.test(
+            incomingText
+          );
 
         if (isBotAddressed) {
           const aiResult = await handleAlumniAiQuery(
@@ -534,16 +680,33 @@ export async function POST(request: Request) {
             event: "ai_query_replied",
             query: incomingText,
             chatId: incomingChatId,
-            aiResult,
+            usedProvider: aiResult.usedProvider,
+            usedModel: aiResult.usedModel,
+            ok: aiResult.ok,
           });
 
           return NextResponse.json({
             ok: true,
             status: "ai_replied",
+            provider: aiResult.usedProvider,
+            model: aiResult.usedModel,
             reply: aiResult.replyText,
           });
         }
+
+        // Tin nhắn chat thông thường trong nhóm không liên quan -> bỏ qua, KHÔNG rơi xuống luồng đăng ký!
+        return NextResponse.json({
+          ok: true,
+          status: "ignored_unrelated_group_message",
+        });
       }
+
+      return NextResponse.json({ ok: true, status: "ignored_no_chat_id" });
+    }
+
+    // Nếu là webhook event từ Zalo nhưng không có text (sticker, ảnh, sự kiện hệ thống...) -> trả 200 OK
+    if (!isWebsiteInternalCall) {
+      return NextResponse.json({ ok: true, status: "ignored_non_text_webhook" });
     }
 
     // =========================================================================

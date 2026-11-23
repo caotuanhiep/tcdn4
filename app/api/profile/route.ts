@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { loadRegistrations, saveRegistrations } from "@/app/api/registrations/route";
 import fs from "fs";
 import path from "path";
 
@@ -194,41 +195,41 @@ export async function POST(req: NextRequest) {
       console.warn("Lưu Supabase profiles cảnh báo:", dbErr);
     }
 
-    // 3. ĐỒNG BỘ TÊN VÀ THÔNG TIN VÀO DANH SÁCH ĐĂNG KÝ 15 NĂM (Yêu cầu 4)
+    // 3. ĐỒNG BỘ TÊN, SIZE ÁO VÀ THÔNG TIN VÀO DANH SÁCH ĐĂNG KÝ 15 NĂM (CLOUD + LOCAL)
     try {
-      if (fs.existsSync(LOCAL_REGISTRATIONS_PATH)) {
-        const regText = fs.readFileSync(LOCAL_REGISTRATIONS_PATH, "utf-8");
-        const regList = JSON.parse(regText);
-        if (Array.isArray(regList)) {
-          let hasRegChanged = false;
-          const cleanPhone = (cleanUpdates.phone || "").replace(/[^0-9]/g, "");
+      const regList = await loadRegistrations(supabase);
+      if (Array.isArray(regList) && regList.length > 0) {
+        let hasRegChanged = false;
+        const cleanPhone = (cleanUpdates.phone || mergedProfile.phone || "").replace(/[^0-9]/g, "");
 
-          for (let i = 0; i < regList.length; i++) {
-            const item = regList[i];
-            const itemPhone = (item.phone || "").replace(/[^0-9]/g, "");
-            const matchId = item.id && item.id.toLowerCase() === id.toLowerCase();
-            const matchPhone = cleanPhone && cleanPhone.length >= 9 && itemPhone === cleanPhone;
+        for (let i = 0; i < regList.length; i++) {
+          const item = regList[i];
+          const itemPhone = (item.phone || "").replace(/[^0-9]/g, "");
+          const matchId = item.id && item.id.toLowerCase() === id.toLowerCase();
+          const matchPhone = cleanPhone && cleanPhone.length >= 9 && itemPhone === cleanPhone;
 
-            if (matchId || matchPhone) {
-              if (cleanUpdates.full_name) {
-                item.fullName = cleanUpdates.full_name.trim();
-              }
-              if (cleanUpdates.class_name) {
-                item.className = cleanUpdates.class_name;
-              }
-              if (cleanUpdates.avatar_url) {
-                item.avatarUrl = cleanUpdates.avatar_url;
-              }
-              if (cleanUpdates.shirt_size) {
-                item.shirtSize = cleanUpdates.shirt_size;
-              }
-              hasRegChanged = true;
+          if (matchId || matchPhone) {
+            if (cleanUpdates.full_name) {
+              item.fullName = cleanUpdates.full_name.trim();
             }
+            if (cleanUpdates.class_name) {
+              item.className = cleanUpdates.class_name;
+            }
+            if (cleanUpdates.avatar_url) {
+              item.avatarUrl = cleanUpdates.avatar_url;
+            }
+            if (cleanUpdates.shirt_size) {
+              item.shirtSize = cleanUpdates.shirt_size;
+            }
+            if (cleanUpdates.delivery_address) {
+              item.address = cleanUpdates.delivery_address.trim();
+            }
+            hasRegChanged = true;
           }
+        }
 
-          if (hasRegChanged) {
-            fs.writeFileSync(LOCAL_REGISTRATIONS_PATH, JSON.stringify(regList, null, 2), "utf-8");
-          }
+        if (hasRegChanged) {
+          await saveRegistrations(regList, supabase);
         }
       }
     } catch (regSyncErr) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   User, 
   Camera,
@@ -131,6 +131,12 @@ export default function ProfileModal({
   // Đọc thông tin phiếu đăng ký hiện tại (nếu có)
   const [myRegistration, setMyRegistration] = useState<any>(null);
 
+  // Theo dõi xem người dùng đã tự tay chọn/sửa trong phiên mở modal này chưa
+  // (Tránh polling SePay 3s/lần hoặc sự kiện đồng bộ ghi đè mất size áo / địa chỉ đang chọn)
+  const userEditedShirtSizeRef = useRef(false);
+  const userEditedAddressRef = useRef(false);
+  const userEditedAttendanceRef = useRef(false);
+
   // Đồng bộ state khi profile nạp từ server
   useEffect(() => {
     if (profile) {
@@ -149,16 +155,22 @@ export default function ProfileModal({
         setChildrenCount(Number(profile.children_count));
       }
 
-      if (profile.attendance_status === "attending") {
-        setAttendanceStatus("attending");
-      } else if (profile.attendance_status === "not_attending") {
-        setAttendanceStatus("not_attending");
-      } else {
-        setAttendanceStatus("unregistered");
+      if (!userEditedAttendanceRef.current) {
+        if (profile.attendance_status === "attending") {
+          setAttendanceStatus("attending");
+        } else if (profile.attendance_status === "not_attending") {
+          setAttendanceStatus("not_attending");
+        } else {
+          setAttendanceStatus("unregistered");
+        }
       }
 
-      if (profile.shirt_size) setShirtSize(profile.shirt_size);
-      if (profile.delivery_address) setDeliveryAddress(profile.delivery_address);
+      if (!userEditedShirtSizeRef.current && profile.shirt_size) {
+        setShirtSize(profile.shirt_size);
+      }
+      if (!userEditedAddressRef.current && profile.delivery_address) {
+        setDeliveryAddress(profile.delivery_address);
+      }
     }
   }, [profile]);
 
@@ -177,12 +189,12 @@ export default function ProfileModal({
     };
   }, []);
 
-  // Đọc trạng thái đăng ký của user hiện tại & đồng bộ với localStorage
+  // Đọc trạng thái đăng ký của user hiện tại & đồng bộ với localStorage (chỉ khởi tạo ban đầu, không ghi đè lựa chọn đang sửa)
   useEffect(() => {
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
       const list = stored ? JSON.parse(stored) : [];
-      const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
+      const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
       const myReg = list.find((r: any) => {
         if (user?.id && r.id === user.id) return true;
         if (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
@@ -190,14 +202,18 @@ export default function ProfileModal({
       });
       if (myReg) {
         setMyRegistration(myReg);
-        if (myReg.shirtSize) setShirtSize(myReg.shirtSize);
-        if (myReg.address) setDeliveryAddress(myReg.address);
-        if (profile?.attendance_status !== "not_attending") {
+        if (!userEditedShirtSizeRef.current && myReg.shirtSize) {
+          setShirtSize(myReg.shirtSize);
+        }
+        if (!userEditedAddressRef.current && myReg.address) {
+          setDeliveryAddress(myReg.address);
+        }
+        if (!userEditedAttendanceRef.current && profile?.attendance_status !== "not_attending") {
           setAttendanceStatus("attending");
         }
       }
     } catch {}
-  }, [user, profile, phone, fullName]);
+  }, [user?.id, profile?.phone, profile?.attendance_status]);
 
   // Luôn tự động kiểm tra đối soát SePay trực tiếp từ Server để cập nhật tức thì
   useEffect(() => {
@@ -211,7 +227,7 @@ export default function ProfileModal({
         const list = data?.registrations || data?.items || [];
         if (!Array.isArray(list)) return;
 
-        const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
+        const userPhone = (profile?.phone || "").replace(/[^0-9]/g, "");
 
         const serverReg = list.find((r: any) => {
           if (user?.id && r.id === user.id) return true;
@@ -231,9 +247,14 @@ export default function ProfileModal({
             }
             return serverReg;
           });
-          if (serverReg.shirtSize) setShirtSize(serverReg.shirtSize);
-          if (serverReg.address) setDeliveryAddress(serverReg.address);
-          if (profile?.attendance_status !== "not_attending") {
+          // Chỉ nạp giá trị form nếu người dùng chưa tự tay thay đổi trong phiên này
+          if (!userEditedShirtSizeRef.current && serverReg.shirtSize) {
+            setShirtSize(serverReg.shirtSize);
+          }
+          if (!userEditedAddressRef.current && serverReg.address) {
+            setDeliveryAddress(serverReg.address);
+          }
+          if (!userEditedAttendanceRef.current && profile?.attendance_status !== "not_attending") {
             setAttendanceStatus("attending");
           }
 
@@ -270,7 +291,7 @@ export default function ProfileModal({
       active = false;
       if (interval) clearInterval(interval);
     };
-  }, [showQrModal, myRegistration?.status, phone, fullName, user?.id, profile?.phone, profile?.full_name]);
+  }, [showQrModal, myRegistration?.status, user?.id, profile?.phone, profile?.attendance_status]);
 
   // Xử lý upload avatar từ máy / điện thoại trực tiếp lên Supabase Storage
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -458,17 +479,18 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
+      const existingStatus = myRegistration?.status === "confirmed" ? "confirmed" : "pending";
       const regEntry = {
-        id: user?.id || `reg-${Date.now()}`,
+        id: user?.id || myRegistration?.id || `reg-${Date.now()}`,
         fullName: fullName.trim(),
         className,
         phone: phone.trim(),
         shirtSize,
         address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
         guestsCount,
-        status: "pending",
-        paidAmount: bankInfo.amount,
-        createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+        status: existingStatus,
+        paidAmount: myRegistration?.paidAmount || bankInfo.amount,
+        createdAt: myRegistration?.createdAt || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
       };
 
       // Cập nhật profile (lưu đầy đủ họ tên, SĐT, lớp đã đăng ký)
@@ -1069,6 +1091,7 @@ export default function ProfileModal({
                 <button
                   type="button"
                   onClick={() => {
+                    userEditedAttendanceRef.current = true;
                     setAttendanceStatus("attending");
                   }}
                   className="rounded-lg bg-ueh px-2.5 py-1 text-[11px] font-bold text-white hover:bg-ueh-light shrink-0"
@@ -1090,7 +1113,10 @@ export default function ProfileModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setAttendanceStatus("attending")}
+                  onClick={() => {
+                    userEditedAttendanceRef.current = true;
+                    setAttendanceStatus("attending");
+                  }}
                   className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "attending"
                       ? "bg-white border-emerald-500 shadow-xs ring-2 ring-emerald-500/20"
@@ -1112,7 +1138,10 @@ export default function ProfileModal({
 
                 <button
                   type="button"
-                  onClick={() => setAttendanceStatus("not_attending")}
+                  onClick={() => {
+                    userEditedAttendanceRef.current = true;
+                    setAttendanceStatus("not_attending");
+                  }}
                   className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "not_attending"
                       ? "bg-white border-orange-500 shadow-xs ring-2 ring-orange-500/20"
@@ -1156,7 +1185,10 @@ export default function ProfileModal({
                     <button
                       key={s}
                       type="button"
-                      onClick={() => setShirtSize(s)}
+                      onClick={() => {
+                        userEditedShirtSizeRef.current = true;
+                        setShirtSize(s);
+                      }}
                       className={`rounded-lg py-1.5 px-1 text-xs font-bold text-center border transition-all ${
                         shirtSize === s
                           ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
@@ -1175,7 +1207,10 @@ export default function ProfileModal({
                   <input
                     type="text"
                     value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    onChange={(e) => {
+                      userEditedAddressRef.current = true;
+                      setDeliveryAddress(e.target.value);
+                    }}
                     placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B hoặc địa chỉ nhà..."
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
@@ -1221,7 +1256,10 @@ export default function ProfileModal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
                       value={shirtSize}
-                      onChange={(e) => setShirtSize(e.target.value)}
+                      onChange={(e) => {
+                        userEditedShirtSizeRef.current = true;
+                        setShirtSize(e.target.value);
+                      }}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                     >
                       {SHIRT_SIZES.map((s) => (
@@ -1231,7 +1269,10 @@ export default function ProfileModal({
                     <input
                       type="text"
                       value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      onChange={(e) => {
+                        userEditedAddressRef.current = true;
+                        setDeliveryAddress(e.target.value);
+                      }}
                       placeholder="Địa chỉ nhận ship áo tận nhà..."
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                     />

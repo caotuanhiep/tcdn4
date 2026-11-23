@@ -51,6 +51,24 @@ export default function PaymentSettingsPanel() {
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [testingSepay, setTestingSepay] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [sepayLogs, setSepayLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  const loadSepayLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const res = await fetch(`/api/sepay-webhook?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.recentLogs)) {
+          setSepayLogs(data.recentLogs);
+        }
+      }
+    } catch {}
+    finally {
+      setLoadingLogs(false);
+    }
+  };
 
   const webhookUrl = typeof window !== "undefined" 
     ? `${window.location.origin}/api/sepay-webhook` 
@@ -102,6 +120,7 @@ export default function PaymentSettingsPanel() {
     };
 
     loadServerConfig();
+    loadSepayLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -238,6 +257,7 @@ export default function PaymentSettingsPanel() {
       if (res.ok && data?.success) {
         setTestResult(`✓ Giao dịch thử nghiệm thành công! ${data.message || "Đã nhận webhook"}`);
         toast.success("Đã gửi thử nghiệm Webhook SePay thành công!");
+        loadSepayLogs();
       } else {
         setTestResult(`⚠ Phản hồi: ${data?.error || data?.message || "Thử nghiệm thất bại"}`);
         toast.error("Thử nghiệm Webhook thất bại!");
@@ -559,12 +579,68 @@ export default function PaymentSettingsPanel() {
                 <strong>SePay nhận giao dịch:</strong> SePay bắt biến động số dư ngân hàng theo thời gian thực và đẩy gói tin Webhook về máy chủ.
               </li>
               <li>
-                <strong>Tự động khớp lệnh:</strong> Hệ thống tìm phiếu đăng ký tương ứng, tự động đổi trạng thái sang <strong>"Đã thanh toán (confirmed)"</strong>.
+                <strong>Tự động khớp lệnh:</strong> Hệ thống tìm phiếu đăng ký tương ứng (khớp SĐT, 4-6 số cuối hoặc họ tên kể cả đảo thứ tự), tự động đổi trạng thái sang <strong>"Đã thanh toán (confirmed)"</strong>.
               </li>
               <li>
-                <strong>Thông báo tức thì:</strong> Tự động gửi thông báo xác nhận thanh toán thành công vào nhóm Zalo lớp để chào mừng đồng môn!
+                <strong>Thông báo tức thì:</strong> Tự động gửi thông báo xác nhận thanh toán thành công vào nhóm Zalo Ban Liên Lạc để chào mừng đồng môn!
               </li>
             </ol>
+
+            {/* Nhật ký tín hiệu SePay gần nhất */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase text-slate-700">
+                  Nhật ký tín hiệu SePay ({sepayLogs.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={loadSepayLogs}
+                  disabled={loadingLogs}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                >
+                  <RefreshCw size={11} className={loadingLogs ? "animate-spin" : ""} /> Làm mới
+                </button>
+              </div>
+              {sepayLogs.length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">
+                  Chưa ghi nhận tín hiệu Webhook nào từ SePay. Bấm &quot;Gửi thử nghiệm&quot; hoặc chuyển khoản thử để kiểm tra.
+                </p>
+              ) : (
+                <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                  {sepayLogs.slice(0, 8).map((log, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-xl border p-2 text-[10px] leading-snug ${
+                        log.status === "matched"
+                          ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                          : log.status === "unauthorized" || log.status === "error"
+                          ? "bg-rose-50/70 border-rose-200 text-rose-900"
+                          : "bg-amber-50/70 border-amber-200 text-amber-900"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold">
+                        <span>
+                          {log.status === "matched"
+                            ? `✓ Khớp: ${log.matchedMember || "Thành viên"}`
+                            : log.status === "unauthorized"
+                            ? "✗ Sai API Key SePay"
+                            : log.status === "unmatched"
+                            ? "⚠ Chưa khớp thành viên"
+                            : log.status}
+                        </span>
+                        <span className="font-mono opacity-75">
+                          {log.amount ? `+${Number(log.amount).toLocaleString("vi-VN")}đ` : ""}
+                        </span>
+                      </div>
+                      {log.content && (
+                        <div className="truncate opacity-80 mt-0.5 font-mono">ND: {log.content}</div>
+                      )}
+                      {log.message && <div className="opacity-80 mt-0.5">{log.message}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

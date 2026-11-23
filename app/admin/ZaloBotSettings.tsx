@@ -222,10 +222,10 @@ const AI_TONE_OPTIONS = [
 ];
 
 const AI_MODELS = [
-  { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", tag: "Mới nhất", desc: "Tư duy sâu & phân tích database siêu thông minh" },
-  { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", tag: "Khuyên dùng", desc: "Hài hước, sắc sảo, tự nhiên, trả lời siêu chuẩn" },
+  { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", tag: "Mới nhất", desc: "Thế hệ mới nhất, tư duy & tổng hợp database xuất sắc" },
+  { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", tag: "Khuyên dùng", desc: "Hài hước, sắc sảo, tự nhiên, trả lời siêu chuẩn" },
   { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", tag: "Siêu tốc", desc: "Phản hồi nhanh chớp mắt, tiết kiệm token" },
-  { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", tag: "Google AI", desc: "Tốc độ nhanh, ổn định từ hệ sinh thái Google" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", tag: "Google AI", desc: "Tốc độ nhanh, ổn định từ hệ sinh thái Google" },
 ];
 
 export default function ZaloBotSettings() {

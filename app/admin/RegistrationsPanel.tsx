@@ -16,6 +16,18 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
+import { DEFAULT_BANK_INFO, fetchBankInfo, getBankInfo, type BankConfig } from "@/lib/bank";
+
+function formatShortPaidAmount(amount?: number, fallback = 1000000): string {
+  const val = Number(amount) > 0 ? Number(amount) : fallback;
+  if (val >= 1000000) {
+    const millions = val / 1000000;
+    return Number.isInteger(millions)
+      ? `${millions} triệu`
+      : `${millions.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} triệu`;
+  }
+  return `${Math.round(val / 1000)}k`;
+}
 
 function formatRegistrationDate(val?: string) {
   if (!val) return "—";
@@ -47,10 +59,14 @@ const DEFAULT_REGS: Registration[] = [];
 export default function RegistrationsPanel() {
   const toast = useToast();
   const [list, setList] = useState<Registration[]>(DEFAULT_REGS);
+  const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
   const [searchTerm, setSearchTerm] = useState("");
   const [classFilter, setClassFilter] = useState("all");
 
   useEffect(() => {
+    setBankInfo(getBankInfo());
+    fetchBankInfo().then((cfg) => setBankInfo(cfg)).catch(() => {});
+
     try {
       const stored = localStorage.getItem("tcdn4_registrations");
       if (stored) {
@@ -122,9 +138,18 @@ export default function RegistrationsPanel() {
     const target = list.find((x) => x.id === id);
     if (!target) return;
     const nextStatus = target.status === "confirmed" ? "pending" : "confirmed";
+    const resolvedPaidAmount =
+      nextStatus === "confirmed"
+        ? (target.paidAmount > 0 ? target.paidAmount : bankInfo.amount)
+        : target.paidAmount;
+
     const updated = list.map((item) => {
       if (item.id === id) {
-        return { ...item, status: nextStatus as "confirmed" | "pending" };
+        return {
+          ...item,
+          status: nextStatus as "confirmed" | "pending",
+          paidAmount: resolvedPaidAmount,
+        };
       }
       return item;
     });
@@ -134,7 +159,7 @@ export default function RegistrationsPanel() {
       await fetch("/api/registrations", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: nextStatus }),
+        body: JSON.stringify({ id, status: nextStatus, paidAmount: resolvedPaidAmount }),
       });
     } catch {}
 
@@ -180,7 +205,7 @@ export default function RegistrationsPanel() {
 
   const totalPaid = list
     .filter((r) => r.status === "confirmed")
-    .reduce((sum, r) => sum + r.paidAmount, 0);
+    .reduce((sum, r) => sum + (Number(r.paidAmount) > 0 ? Number(r.paidAmount) : bankInfo.amount), 0);
 
   return (
     <div className="space-y-6">
@@ -314,7 +339,7 @@ export default function RegistrationsPanel() {
                   >
                     {item.status === "confirmed" ? (
                       <>
-                        <CheckCircle2 size={12} /> Đã thu 500k
+                        <CheckCircle2 size={12} /> Đã thu {formatShortPaidAmount(item.paidAmount, bankInfo.amount)}
                       </>
                     ) : (
                       <>

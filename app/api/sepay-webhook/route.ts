@@ -1,30 +1,65 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadRegistrations, saveRegistrations } from "@/app/api/registrations/route";
+import { loadBankConfigServer } from "@/lib/bank-server";
 import fs from "fs";
 import path from "path";
 
+const BUCKET_NAME = "alumni-media";
+const CLOUD_SEPAY_LOGS_PATH = "settings/sepay-webhook-logs.json";
 const SEPAY_LOGS_PATH = path.join(process.cwd(), "data", "sepay-webhook-logs.json");
 
-function appendSepayLog(entry: any) {
+async function loadSepayLogs(): Promise<any[]> {
+  // 1. Ưu tiên đọc từ Supabase Storage (hoạt động trên Vercel Production)
   try {
-    const dir = path.dirname(SEPAY_LOGS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    let logs: any[] = [];
-    if (fs.existsSync(SEPAY_LOGS_PATH)) {
-      try {
-        logs = JSON.parse(fs.readFileSync(SEPAY_LOGS_PATH, "utf-8"));
-      } catch {
-        logs = [];
+    const supabase = getSupabaseAdmin();
+    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(CLOUD_SEPAY_LOGS_PATH);
+    if (pub?.publicUrl) {
+      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const parsed = JSON.parse(await res.text());
+        if (Array.isArray(parsed)) return parsed;
       }
     }
+  } catch {}
+
+  // 2. Fallback file local
+  try {
+    if (fs.existsSync(SEPAY_LOGS_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(SEPAY_LOGS_PATH, "utf-8"));
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+
+  return [];
+}
+
+async function appendSepayLog(entry: any) {
+  try {
+    const logs = await loadSepayLogs();
     logs.unshift({
       time: new Date().toISOString(),
       ...entry,
     });
-    if (logs.length > 50) logs = logs.slice(0, 50);
-    fs.writeFileSync(SEPAY_LOGS_PATH, JSON.stringify(logs, null, 2), "utf-8");
+    const trimmed = logs.slice(0, 30);
+    const json = JSON.stringify(trimmed, null, 2);
+
+    // Lưu local
+    try {
+      const dir = path.dirname(SEPAY_LOGS_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(SEPAY_LOGS_PATH, json, "utf-8");
+    } catch {}
+
+    // Lưu lên Supabase Storage để xem được trên Vercel Production
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase.storage.from(BUCKET_NAME).upload(
+        CLOUD_SEPAY_LOGS_PATH,
+        Buffer.from(json, "utf-8"),
+        { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
+      );
+    } catch {}
   } catch {}
 }
 
@@ -36,57 +71,129 @@ function removeVietnameseTones(str: string) {
     .replace(/Đ/g, "D");
 }
 
-export async function GET() {
-  let logs: any[] = [];
-  try {
-    if (fs.existsSync(SEPAY_LOGS_PATH)) {
-      logs = JSON.parse(fs.readFileSync(SEPAY_LOGS_PATH, "utf-8"));
+function normalizeUpper(str: string) {
+  return removeVietnameseTones((str || "").toUpperCase());
+}
+
+/**
+ * Chấm điểm mức độ khớp giữa nội dung chuyển khoản ngân hàng và một thành viên.
+ * Trả về điểm số (0 = không khớp; càng cao càng chính xác).
+ */
+function scoreMemberMatch(
+  cleanContent: string,
+  spacedContent: string,
+  member: { id?: string; fullName?: string; phone?: string; className?: string }
+): { score: number; reason: string } {
+  const phoneDigits = (member.phone || "").replace(/[^0-9]/g, "");
+  const phoneNoZero = phoneDigits.startsWith("0") ? phoneDigits.slice(1) : phoneDigits;
+  const phoneWith84 = phoneNoZero ? `84${phoneNoZero}` : "";
+  const phoneLast6 = phoneDigits.length >= 6 ? phoneDigits.slice(-6) : "";
+  const phoneLast4 = phoneDigits.length >= 4 ? phoneDigits.slice(-4) : "";
+
+  const idClean = (member.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const nameUpper = normalizeUpper(member.fullName || "");
+  const nameClean = nameUpper.replace(/[^A-Z0-9]/g, "");
+  const nameTokens = nameUpper
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+
+  // 1. Khớp đầy đủ số điện thoại (có 0, bỏ 0, hoặc 84...)
+  if (
+    phoneDigits.length >= 9 &&
+    (cleanContent.includes(phoneDigits) ||
+      (phoneNoZero.length >= 8 && cleanContent.includes(phoneNoZero)) ||
+      (phoneWith84.length >= 10 && cleanContent.includes(phoneWith84)))
+  ) {
+    return { score: 100, reason: "full_phone" };
+  }
+
+  // 2. Khớp mã ID đăng ký (khi độ dài >= 6)
+  if (idClean.length >= 6 && cleanContent.includes(idClean)) {
+    return { score: 95, reason: "registration_id" };
+  }
+
+  // 3. Khớp chính xác nguyên họ tên không dấu viết liền (VD: TRANVUYENLINH)
+  if (nameClean.length >= 4 && cleanContent.includes(nameClean)) {
+    return { score: 90, reason: "exact_full_name" };
+  }
+
+  // 4. Khớp ĐỦ các từ trong họ tên bất kể thứ tự (VD: profile "Hiệp Cao Tuấn" vs CK "CAO TUAN HIEP")
+  if (nameTokens.length >= 2 && nameTokens.every((t) => cleanContent.includes(t))) {
+    return { score: 85, reason: "all_name_tokens_any_order" };
+  }
+
+  // 5. Khớp 6 số cuối SĐT
+  if (phoneLast6.length === 6 && cleanContent.includes(phoneLast6)) {
+    return { score: 80, reason: "phone_last6" };
+  }
+
+  // 6. Khớp 4 số cuối SĐT
+  if (phoneLast4.length === 4 && cleanContent.includes(phoneLast4)) {
+    // Ưu tiên cao hơn nếu có thêm 1 từ của tên hoặc chữ TCDN4
+    const hasNameHint = nameTokens.some((t) => t.length >= 3 && cleanContent.includes(t));
+    return { score: hasNameHint ? 78 : 65, reason: "phone_last4" };
+  }
+
+  // 7. Khớp tên gọi (2 từ cuối cùng của họ tên, VD: "YEN LINH", "PHUC NGHIA", "TUAN HIEP")
+  // Hoặc 2 từ bất kỳ độ dài >= 3 trong tên (VD: profile "Hiệp Cao Tuấn" -> "TUAN" + "HIEP")
+  if (nameTokens.length >= 2) {
+    const lastTwo = nameTokens.slice(-2);
+    const lastTwoJoined = lastTwo.join("");
+    if (lastTwoJoined.length >= 5 && cleanContent.includes(lastTwoJoined)) {
+      return { score: 70, reason: "last_two_name_words" };
     }
-  } catch {}
-  return NextResponse.json({
-    status: "active",
-    endpoint: "https://tcdn4.top/api/sepay-webhook",
-    logsCount: logs.length,
-    recentLogs: logs.slice(0, 15),
-  });
+    // Khớp ít nhất 2 từ riêng biệt (tổng >= 6 ký tự) xuất hiện trong nội dung CK
+    const matchedTokens = nameTokens.filter((t) => t.length >= 3 && spacedContent.includes(t));
+    if (matchedTokens.length >= 2 && matchedTokens.join("").length >= 6) {
+      return { score: 62, reason: "two_name_tokens" };
+    }
+  }
+
+  return { score: 0, reason: "none" };
+}
+
+export async function GET() {
+  const logs = await loadSepayLogs();
+  return NextResponse.json(
+    {
+      status: "active",
+      endpoint: "https://tcdn4.top/api/sepay-webhook",
+      logsCount: logs.length,
+      recentLogs: logs.slice(0, 20),
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    }
+  );
 }
 
 export async function POST(request: Request) {
   try {
-    // 1. Kiểm tra API Key từ Header nếu cấu hình SEPAY_API_KEY hoặc lưu trong bank-config
-    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
-    let configuredApiKey = process.env.SEPAY_API_KEY;
+    // 1. Đọc cấu hình Ngân hàng & SePay API Key từ Cloud Storage (ưu tiên cao nhất)
+    const { config: bankConfig } = await loadBankConfigServer();
+    const configuredApiKey = (bankConfig.sepayApiKey || process.env.SEPAY_API_KEY || "").trim();
 
-    if (!configuredApiKey) {
-      try {
-        const bankConfigPath = path.join(process.cwd(), "data", "bank-config.json");
-        if (fs.existsSync(bankConfigPath)) {
-          const cfg = JSON.parse(fs.readFileSync(bankConfigPath, "utf-8"));
-          if (cfg.sepayApiKey) configuredApiKey = cfg.sepayApiKey;
-        }
-      } catch {}
+    // Kiểm tra API Key từ Header (hỗ trợ Apikey, Bearer, raw Authorization, x-api-key)
+    const authHeader =
+      request.headers.get("authorization") ||
+      request.headers.get("Authorization") ||
+      request.headers.get("x-api-key") ||
+      request.headers.get("X-Api-Key") ||
+      "";
 
-      if (!configuredApiKey) {
-        try {
-          const admin = getSupabaseAdmin();
-          if (admin) {
-            const { data } = await admin.storage.from("alumni-media").download("settings/bank-config.json");
-            if (data) {
-              const cfg = JSON.parse(await data.text());
-              if (cfg?.sepayApiKey) configuredApiKey = cfg.sepayApiKey;
-            }
-          }
-        } catch {}
-      }
-    }
-
-    if (configuredApiKey && configuredApiKey.trim() !== "") {
-      const token = authHeader ? authHeader.replace(/^Apikey\s+/i, "").trim() : "";
-      if (!token || token !== configuredApiKey.trim()) {
-        appendSepayLog({
+    if (configuredApiKey !== "") {
+      const token = authHeader
+        .replace(/^(Apikey|Bearer)\s+/i, "")
+        .trim();
+      if (!token || token !== configuredApiKey) {
+        await appendSepayLog({
           status: "unauthorized",
-          receivedAuth: authHeader || "(none)",
-          message: "API Key không khớp hoặc bị thiếu",
+          receivedAuth: authHeader ? `${authHeader.slice(0, 12)}...` : "(none)",
+          message: "API Key trong Header không khớp với API Key SePay đã lưu trong Admin",
         });
         return NextResponse.json(
           { success: false, message: "Unauthorized API Key" },
@@ -104,22 +211,25 @@ export async function POST(request: Request) {
     }
 
     const {
+      id: sepayTxId,
       gateway,
       transactionDate,
       accountNumber,
+      code,
       content,
+      description,
       transferType,
       transferAmount,
       referenceCode,
     } = data;
 
     // Chỉ xử lý giao dịch tiền vào (tiền vào tài khoản lớp)
-    if (transferType && transferType.toLowerCase() !== "in") {
-      appendSepayLog({
+    if (transferType && String(transferType).toLowerCase() !== "in") {
+      await appendSepayLog({
         status: "ignored_not_in",
         transferType,
         amount: transferAmount,
-        content,
+        content: content || description || "",
       });
       return NextResponse.json({
         success: true,
@@ -127,113 +237,154 @@ export async function POST(request: Request) {
       });
     }
 
-    const rawContent = (content || "").toUpperCase();
-    const cleanContent = removeVietnameseTones(rawContent).replace(/[^A-Z0-9]/g, "");
+    const combinedRawContent = [content, description, code].filter(Boolean).join(" ").trim();
+    const upperContent = normalizeUpper(combinedRawContent);
+    const spacedContent = ` ${upperContent.replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ")} `;
+    const cleanContent = upperContent.replace(/[^A-Z0-9]/g, "");
     const amountNum = Number(transferAmount) || 0;
+    const txRef = String(referenceCode || sepayTxId || gateway || "SEPAY_AUTO");
 
     let matchedName = "Thành viên TCDN4";
     let matchedClass = "TC4";
     let matchedShirtSize = "L (Nam)";
     let isMatched = false;
+    let matchReason = "none";
     let matchedId = "";
+    let saveOk = false;
 
-    // 3. Khớp lệnh với danh sách đăng ký lưu trữ tập trung (loadRegistrations)
+    // 3. Khớp lệnh thông minh với danh sách đăng ký tập trung (loadRegistrations)
     try {
       const allRegs = await loadRegistrations();
       if (allRegs && allRegs.length > 0) {
-        const updated = allRegs.map((reg) => {
-          if (reg.status === "confirmed") return reg;
+        // Chấm điểm toàn bộ phiếu đang pending (và cả phiếu đã confirmed phòng trường hợp kiểm tra lại)
+        let bestIdx = -1;
+        let bestScore = 0;
+        let bestReason = "none";
 
-          const regPhoneClean = (reg.phone || "").replace(/[^0-9]/g, "");
-          const regPhoneLast4 = regPhoneClean.slice(-4);
-          const regNameClean = removeVietnameseTones((reg.fullName || "").toUpperCase()).replace(/[^A-Z0-9]/g, "");
-          const regIdClean = (reg.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-          // Khớp nếu nội dung chuyển khoản chứa số điện thoại, 4 số cuối, tên không dấu, hoặc ID đăng ký
-          const fullPhoneMatch = regPhoneClean.length >= 9 && cleanContent.includes(regPhoneClean);
-          const phoneLast4Match = regPhoneLast4.length >= 4 && cleanContent.includes(regPhoneLast4);
-          const nameMatch = regNameClean.length >= 3 && cleanContent.includes(regNameClean);
-          const idMatch = regIdClean.length >= 4 && cleanContent.includes(regIdClean);
-
-          if (!isMatched && (fullPhoneMatch || phoneLast4Match || nameMatch || idMatch)) {
-            isMatched = true;
-            matchedName = reg.fullName;
-            matchedClass = reg.className;
-            matchedId = reg.id;
-            matchedShirtSize = reg.shirtSize || "L (Nam)";
-
-            return {
-              ...reg,
-              status: "confirmed" as const,
-              paidAmount: amountNum > 0 ? amountNum : reg.paidAmount,
-              paymentRef: referenceCode || gateway || "SEPAY_AUTO",
-              confirmedAt: new Date().toISOString(),
-              note: (reg.note ? reg.note + " | " : "") + `SePay tự động khớp: ${referenceCode || gateway}`,
-            };
+        allRegs.forEach((reg, idx) => {
+          const { score, reason } = scoreMemberMatch(cleanContent, spacedContent, {
+            id: reg.id,
+            fullName: reg.fullName,
+            phone: reg.phone,
+            className: reg.className,
+          });
+          // Ưu tiên phiếu đang pending lên trên phiếu đã confirmed
+          const effectiveScore = reg.status === "pending" ? score + 10 : score;
+          if (score > 0 && effectiveScore > bestScore) {
+            bestScore = effectiveScore;
+            bestIdx = idx;
+            bestReason = reason;
           }
-          return reg;
         });
 
-        if (isMatched) {
-          await saveRegistrations(updated);
+        if (bestIdx >= 0) {
+          const target = allRegs[bestIdx];
+          isMatched = true;
+          matchReason = bestReason;
+          matchedName = target.fullName;
+          matchedClass = target.className;
+          matchedId = target.id;
+          matchedShirtSize = target.shirtSize || "L (Nam)";
+          const targetPhoneClean = (target.phone || "").replace(/[^0-9]/g, "");
+
+          // Cập nhật trạng thái sang confirmed (cập nhật luôn mọi bản ghi trùng ID/SĐT nếu có)
+          const updated = allRegs.map((reg, idx) => {
+            const regPhoneClean = (reg.phone || "").replace(/[^0-9]/g, "");
+            const isSamePerson =
+              idx === bestIdx ||
+              (target.id && reg.id === target.id) ||
+              (targetPhoneClean.length >= 9 && regPhoneClean === targetPhoneClean);
+
+            if (isSamePerson) {
+              return {
+                ...reg,
+                status: "confirmed" as const,
+                paidAmount: amountNum > 0 ? amountNum : (reg.paidAmount || bankConfig.amount || 1000000),
+                paymentRef: txRef,
+                confirmedAt: new Date().toISOString(),
+                note: (reg.note ? reg.note + " | " : "") + `SePay tự động khớp (${bestReason}): ${txRef}`,
+              };
+            }
+            return reg;
+          });
+
+          saveOk = await saveRegistrations(updated);
+
+          // Đồng bộ attendance_status trên bảng profiles
+          try {
+            if (matchedId && !matchedId.startsWith("reg-") && !matchedId.startsWith("profile-")) {
+              const supabase = getSupabaseAdmin();
+              await supabase.from("profiles").update({ attendance_status: "attending" }).eq("id", matchedId);
+            }
+          } catch {}
         }
       }
 
-      // 4. Nếu chưa khớp trong registrations, thử đối soát trong bảng profiles trên Supabase
+      // 4. Nếu chưa khớp trong registrations, đối soát trong bảng profiles trên Supabase
       if (!isMatched) {
         const supabase = getSupabaseAdmin();
         const { data: dbProfiles } = await supabase.from("profiles").select("*");
         if (dbProfiles && dbProfiles.length > 0) {
+          let bestProfile: any = null;
+          let bestScore = 0;
+          let bestReason = "none";
+
           for (const p of dbProfiles) {
-            const pPhone = (p.phone || "").replace(/[^0-9]/g, "");
-            const pPhoneLast4 = pPhone.slice(-4);
-            const pNameClean = removeVietnameseTones((p.full_name || "").toUpperCase()).replace(/[^A-Z0-9]/g, "");
-
-            const fullPhoneMatch = pPhone.length >= 9 && cleanContent.includes(pPhone);
-            const phoneLast4Match = pPhoneLast4.length >= 4 && cleanContent.includes(pPhoneLast4);
-            const nameMatch = pNameClean.length >= 4 && cleanContent.includes(pNameClean);
-
-            if (fullPhoneMatch || phoneLast4Match || nameMatch) {
-              isMatched = true;
-              matchedName = p.full_name || "Thành viên K33";
-              matchedClass = (p.class_name as any) || "TC10";
-              matchedId = p.id;
-              matchedShirtSize = p.shirt_size || "L (Nam)";
-
-              // Cập nhật profile lên attending
-              await supabase.from("profiles").update({
-                attendance_status: "attending",
-              }).eq("id", p.id);
-
-              // Cập nhật / Thêm mới vào danh sách registrations
-              const currentRegs = await loadRegistrations();
-              const newConfirmedReg = {
-                id: p.id || `reg-${Date.now()}`,
-                fullName: p.full_name || "Thành viên K33",
-                className: (p.class_name as any) || "TC10",
-                phone: p.phone || "",
-                shirtSize: p.shirt_size || "L (Nam)",
-                address: p.delivery_address || (p.location_region === "hn" ? "Hà Nội" : "TP.HCM"),
-                guestsCount: 0,
-                status: "confirmed" as const,
-                paidAmount: amountNum > 0 ? amountNum : 1000000,
-                paymentRef: referenceCode || gateway || "SEPAY_AUTO",
-                confirmedAt: new Date().toISOString(),
-                createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-                note: `SePay tự động khớp từ hồ sơ danh bạ: ${referenceCode || gateway}`,
-              };
-
-              const existingIdx = currentRegs.findIndex(
-                (r: any) => r.id === p.id || (pPhone && r.phone === pPhone)
-              );
-              if (existingIdx >= 0) {
-                currentRegs[existingIdx] = { ...currentRegs[existingIdx], ...newConfirmedReg };
-              } else {
-                currentRegs.unshift(newConfirmedReg);
-              }
-              await saveRegistrations(currentRegs);
-              break;
+            const { score, reason } = scoreMemberMatch(cleanContent, spacedContent, {
+              id: p.id,
+              fullName: p.full_name,
+              phone: p.phone,
+              className: p.class_name,
+            });
+            if (score > bestScore) {
+              bestScore = score;
+              bestProfile = p;
+              bestReason = reason;
             }
+          }
+
+          if (bestProfile && bestScore > 0) {
+            isMatched = true;
+            matchReason = `profile_${bestReason}`;
+            matchedName = bestProfile.full_name || "Thành viên K33";
+            matchedClass = (bestProfile.class_name as any) || "TC10";
+            matchedId = bestProfile.id;
+            matchedShirtSize = bestProfile.shirt_size || "L (Nam)";
+            const pPhone = (bestProfile.phone || "").replace(/[^0-9]/g, "");
+
+            // Cập nhật profile lên attending
+            try {
+              await supabase.from("profiles").update({ attendance_status: "attending" }).eq("id", bestProfile.id);
+            } catch {}
+
+            // Cập nhật / Thêm mới vào danh sách registrations
+            const currentRegs = await loadRegistrations();
+            const newConfirmedReg = {
+              id: bestProfile.id || `reg-${Date.now()}`,
+              fullName: bestProfile.full_name || "Thành viên K33",
+              className: (bestProfile.class_name as any) || "TC10",
+              phone: bestProfile.phone || "",
+              shirtSize: bestProfile.shirt_size || "L (Nam)",
+              address: bestProfile.delivery_address || (bestProfile.location_region === "hn" ? "Hà Nội" : "TP. Hồ Chí Minh"),
+              avatarUrl: bestProfile.avatar_url || undefined,
+              guestsCount: 0,
+              status: "confirmed" as const,
+              paidAmount: amountNum > 0 ? amountNum : (bankConfig.amount || 1000000),
+              paymentRef: txRef,
+              confirmedAt: new Date().toISOString(),
+              createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+              note: `SePay tự động khớp từ danh bạ (${bestReason}): ${txRef}`,
+            };
+
+            const existingIdx = currentRegs.findIndex(
+              (r: any) => r.id === bestProfile.id || (pPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === pPhone)
+            );
+            if (existingIdx >= 0) {
+              currentRegs[existingIdx] = { ...currentRegs[existingIdx], ...newConfirmedReg };
+            } else {
+              currentRegs.unshift(newConfirmedReg);
+            }
+            saveOk = await saveRegistrations(currentRegs);
           }
         }
       }
@@ -241,22 +392,44 @@ export async function POST(request: Request) {
       console.warn("Lỗi khớp lệnh manifest registrations:", err);
     }
 
-    // 5. Ghi log SePay để kiểm tra đối soát
-    appendSepayLog({
+    // 5. Phát sóng Supabase Realtime Broadcast để mọi trình duyệt (Admin & User QR) tự đổi trạng thái ngay lập tức
+    if (isMatched) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const ch1 = supabase.channel("tcdn4-realtime-sync");
+        await ch1.send({
+          type: "broadcast",
+          event: "registration_updated",
+          payload: { id: matchedId, status: "confirmed", paidAmount: amountNum, time: Date.now() },
+        });
+        const ch2 = supabase.channel("tcdn4-global-realtime");
+        await ch2.send({
+          type: "broadcast",
+          event: "registration_updated",
+          payload: { id: matchedId, status: "confirmed", paidAmount: amountNum, time: Date.now() },
+        });
+      } catch {}
+    }
+
+    // 6. Ghi log SePay tập trung (Cloud + Local) để kiểm tra đối soát trong Admin
+    await appendSepayLog({
       status: isMatched ? "matched" : "unmatched",
+      matchReason,
+      saveOk,
       amount: amountNum,
       gateway,
       accountNumber,
-      content,
+      content: combinedRawContent,
       cleanContent,
       transactionDate,
-      referenceCode,
+      referenceCode: txRef,
       matchedMember: isMatched ? `${matchedName} (${matchedClass})` : null,
     });
 
-    // 6. Tự động bắn thông báo xác nhận chuyển khoản vào Zalo Bot
+    // 7. Tự động bắn thông báo xác nhận chuyển khoản vào Zalo Bot (nhóm Ban Liên Lạc / nhóm bật nhận tin chuyển khoản)
     try {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://tcdn4.top";
+      const origin = new URL(request.url).origin;
+      const siteUrl = origin && !origin.includes("localhost") ? origin : (process.env.NEXT_PUBLIC_SITE_URL || origin || "https://tcdn4.top");
       await fetch(`${siteUrl}/api/zalo-bot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -266,10 +439,10 @@ export async function POST(request: Request) {
           className: matchedClass,
           paidAmount: amountNum,
           shirtSize: matchedShirtSize || "L (Nam)",
-          bankGateway: gateway || accountNumber || "Tài khoản lớp",
-          content: content || "",
+          bankGateway: gateway || bankConfig.bankName || accountNumber || "Tài khoản lớp",
+          content: combinedRawContent || "",
           transactionDate: transactionDate || new Date().toLocaleString("vi-VN"),
-          referenceCode: referenceCode || "N/A",
+          referenceCode: txRef,
         }),
       });
     } catch (zErr) {
@@ -279,14 +452,16 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       matched: isMatched,
+      matchReason,
+      saveOk,
       matchedMember: isMatched ? `${matchedName} (${matchedClass})` : null,
       message: isMatched
-        ? `Đã khớp thành công cho ${matchedName} (${matchedClass})`
+        ? `Đã khớp thành công cho ${matchedName} (${matchedClass}) [${matchReason}]`
         : "Đã nhận webhook giao dịch nhưng chưa khớp được với thành viên nào",
     });
   } catch (err: any) {
     console.error("SePay webhook error:", err);
-    appendSepayLog({
+    await appendSepayLog({
       status: "error",
       error: err.message,
     });

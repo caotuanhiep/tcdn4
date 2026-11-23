@@ -146,13 +146,13 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
           continue;
         }
 
-        // NẾU ĐÃ CÓ PHIẾU ĐĂNG KÝ -> ĐỒNG BỘ TÊN VÀ THÔNG TIN MỚI NHẤT (YÊU CẦU 4)
+        // NẾU ĐÃ CÓ PHIẾU ĐĂNG KÝ -> ĐỒNG BỘ TÊN VÀ THÔNG TIN CƠ BẢN (KHÔNG GHI ĐÈ SIZE ÁO MỚI NHẤT ĐÃ LƯU)
         if (existingIdx >= 0) {
           mergedList[existingIdx].fullName = p.full_name.trim();
           mergedList[existingIdx].className = (p.class_name as any) || mergedList[existingIdx].className;
           if (p.avatar_url) mergedList[existingIdx].avatarUrl = p.avatar_url;
-          if (p.shirt_size) mergedList[existingIdx].shirtSize = p.shirt_size;
-          if (p.delivery_address) mergedList[existingIdx].address = p.delivery_address;
+          if (!mergedList[existingIdx].shirtSize && p.shirt_size) mergedList[existingIdx].shirtSize = p.shirt_size;
+          if (!mergedList[existingIdx].address && p.delivery_address) mergedList[existingIdx].address = p.delivery_address;
         } else if (p.attendance_status === "attending" && phoneKey.length >= 9) {
           // THÊM MỚI NẾU THỰC SỰ CHỌN THAM GIA
           const address =
@@ -245,22 +245,40 @@ export async function POST(req: NextRequest) {
     }
 
     const currentList = await loadRegistrations(supabase);
+    const cleanPhone = String(phone).replace(/[^0-9]/g, "");
+    const existingReg = currentList.find((r) => {
+      if (body.id && r.id === body.id) return true;
+      const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+      if (cleanPhone.length >= 9 && rPhone === cleanPhone) return true;
+      return false;
+    });
+
     const newReg: RegistrationItem = {
-      id: body.id || `reg-${Date.now()}`,
+      id: body.id || existingReg?.id || `reg-${Date.now()}`,
       fullName: String(fullName).trim(),
-      className: (className as any) || "TC10",
+      className: (className as any) || existingReg?.className || "TC10",
       phone: String(phone).trim(),
-      shirtSize: shirtSize || "L (Nam)",
-      address: address ? String(address).trim() : "TP. Hồ Chí Minh",
-      avatarUrl: avatarUrl || undefined,
-      guestsCount: Number(guestsCount) || 0,
-      status: (body.status as any) || "pending",
-      paidAmount: Number(paidAmount) || 1000000,
-      createdAt: body.createdAt || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-      note: note ? String(note).trim() : undefined,
+      shirtSize: shirtSize || existingReg?.shirtSize || "L (Nam)",
+      address: address ? String(address).trim() : (existingReg?.address || "TP. Hồ Chí Minh"),
+      avatarUrl: avatarUrl || existingReg?.avatarUrl || undefined,
+      guestsCount: typeof guestsCount === "number" ? Number(guestsCount) : (existingReg?.guestsCount || 0),
+      status: existingReg?.status === "confirmed" ? "confirmed" : ((body.status as any) || "pending"),
+      paidAmount: Number(paidAmount) || existingReg?.paidAmount || 1000000,
+      createdAt: existingReg?.createdAt || body.createdAt || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+      confirmedAt: existingReg?.confirmedAt,
+      paymentRef: existingReg?.paymentRef,
+      note: note ? String(note).trim() : existingReg?.note,
     };
 
-    const updated = [newReg, ...currentList.filter((r) => r.id !== newReg.id)];
+    const updated = [
+      newReg,
+      ...currentList.filter((r) => {
+        if (r.id === newReg.id) return false;
+        const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+        if (cleanPhone.length >= 9 && rPhone === cleanPhone) return false;
+        return true;
+      }),
+    ];
     await saveRegistrations(updated, supabase);
 
     return NextResponse.json({ success: true, registration: newReg, registrations: updated });
@@ -274,7 +292,7 @@ export async function PUT(req: NextRequest) {
   try {
     const supabase = getStorageClient(req);
     const body = await req.json();
-    const { id, status, paidAmount, paymentRef, note } = body;
+    const { id, status, paidAmount, paymentRef, note, shirtSize, address } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: "Thiếu ID đăng ký" }, { status: 400 });
@@ -291,6 +309,8 @@ export async function PUT(req: NextRequest) {
           status: status || item.status,
           paidAmount: typeof paidAmount === "number" ? paidAmount : item.paidAmount,
           paymentRef: paymentRef || item.paymentRef,
+          shirtSize: shirtSize || item.shirtSize,
+          address: address !== undefined ? address : item.address,
           confirmedAt: status === "confirmed" ? (body.confirmedAt || new Date().toISOString()) : item.confirmedAt,
           note: note !== undefined ? note : item.note,
         };

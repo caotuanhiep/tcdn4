@@ -163,11 +163,11 @@ export default function EventSection() {
             });
 
             if (existing) {
-              // Luôn cập nhật họ tên mới nhất và thông tin từ profile (Yêu cầu 4)
+              // Luôn cập nhật họ tên mới nhất từ profile, giữ nguyên size áo mới nhất từ phiếu đăng ký
               existing.fullName = p.full_name.trim();
               if (p.class_name) existing.className = (p.class_name as any);
               if (p.avatar_url) existing.avatarUrl = p.avatar_url;
-              if (p.shirt_size) existing.shirtSize = p.shirt_size;
+              if (!existing.shirtSize && p.shirt_size) existing.shirtSize = p.shirt_size;
             } else {
               combined.push({
                 id: p.id,
@@ -977,17 +977,20 @@ export default function EventSection() {
                       </button>
                     </div>
                     <select
-                      value={shirtSize}
+                      value={shirtSize === "XXL (Nam)" ? "2XL (Nam)" : shirtSize}
                       onChange={(e) => setShirtSize(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
                     >
-                      <option value="S (Nữ)">Size S (Nữ - &lt;48kg)</option>
-                      <option value="M (Nữ)">Size M (Nữ - 48-54kg)</option>
-                      <option value="L (Nữ)">Size L (Nữ - 55-62kg)</option>
+                      <option value="S (Nam)">Size S (Nam - &lt;55kg)</option>
                       <option value="M (Nam)">Size M (Nam - 55-64kg)</option>
                       <option value="L (Nam)">Size L (Nam - 65-73kg)</option>
                       <option value="XL (Nam)">Size XL (Nam - 74-82kg)</option>
-                      <option value="XXL (Nam)">Size XXL (Nam - &gt;82kg)</option>
+                      <option value="2XL (Nam)">Size 2XL (Nam - 82-90kg)</option>
+                      <option value="3XL (Nam)">Size 3XL (Nam - &gt;90kg)</option>
+                      <option value="S (Nữ)">Size S (Nữ - &lt;48kg)</option>
+                      <option value="M (Nữ)">Size M (Nữ - 48-54kg)</option>
+                      <option value="L (Nữ)">Size L (Nữ - 55-62kg)</option>
+                      <option value="XL (Nữ)">Size XL (Nữ - &gt;62kg)</option>
                     </select>
                   </div>
                 </div>
