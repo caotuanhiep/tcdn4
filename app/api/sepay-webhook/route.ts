@@ -65,15 +65,28 @@ export async function POST(request: Request) {
           if (cfg.sepayApiKey) configuredApiKey = cfg.sepayApiKey;
         }
       } catch {}
+
+      if (!configuredApiKey) {
+        try {
+          const admin = getSupabaseAdmin();
+          if (admin) {
+            const { data } = await admin.storage.from("alumni-media").download("settings/bank-config.json");
+            if (data) {
+              const cfg = JSON.parse(await data.text());
+              if (cfg?.sepayApiKey) configuredApiKey = cfg.sepayApiKey;
+            }
+          }
+        } catch {}
+      }
     }
 
-    if (configuredApiKey && authHeader) {
-      const token = authHeader.replace(/^Apikey\s+/i, "").trim();
-      if (token !== configuredApiKey.trim()) {
+    if (configuredApiKey && configuredApiKey.trim() !== "") {
+      const token = authHeader ? authHeader.replace(/^Apikey\s+/i, "").trim() : "";
+      if (!token || token !== configuredApiKey.trim()) {
         appendSepayLog({
           status: "unauthorized",
-          receivedAuth: authHeader,
-          message: "API Key không khớp",
+          receivedAuth: authHeader || "(none)",
+          message: "API Key không khớp hoặc bị thiếu",
         });
         return NextResponse.json(
           { success: false, message: "Unauthorized API Key" },

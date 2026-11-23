@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { DEFAULT_BANK_INFO, normalizeBankConfig } from "@/lib/bank";
-import { requireAdmin } from "@/lib/supabase/requestAuth";
+import { requireAdmin, getRequestUser, isAdminUser } from "@/lib/supabase/requestAuth";
 
 // Cấu hình tài khoản ngân hàng được lưu tập trung trên Supabase Storage (dùng chung cho mọi thiết bị / mọi khách),
 // thay vì localStorage của riêng trình duyệt admin như trước.
@@ -58,8 +58,19 @@ export async function GET(req: NextRequest) {
   const supabase = getStorageClient(req);
   const cloud = await loadCloudConfig(supabase);
   const raw = cloud || loadLocalConfig();
+  const fullConfig = raw ? normalizeBankConfig(raw) : DEFAULT_BANK_INFO;
+
+  // Bảo mật API Key: Chỉ trả về SePay API Key khi người gọi là Admin
+  const user = await getRequestUser(req);
+  const isAdmin = await isAdminUser(user, req);
+
+  const config = {
+    ...fullConfig,
+    sepayApiKey: isAdmin ? (fullConfig.sepayApiKey || "") : "",
+  };
+
   return NextResponse.json(
-    { success: true, source: cloud ? "cloud" : raw ? "local" : "default", config: raw ? normalizeBankConfig(raw) : DEFAULT_BANK_INFO },
+    { success: true, source: cloud ? "cloud" : raw ? "local" : "default", config },
     { headers: NO_STORE_HEADERS }
   );
 }
@@ -121,3 +132,5 @@ export async function PUT(req: NextRequest) {
 
   return NextResponse.json({ success: true, cloud: cloudOk, config }, { headers: NO_STORE_HEADERS });
 }
+
+export const POST = PUT;

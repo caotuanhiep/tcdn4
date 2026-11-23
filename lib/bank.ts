@@ -7,6 +7,7 @@ export interface BankConfig {
   amount: number;
   amountText: string;
   syntaxPrefix: string;
+  sepayApiKey?: string;
 }
 
 export const BANK_STORAGE_KEY = "tcdn4_bank_config";
@@ -21,6 +22,7 @@ export const DEFAULT_BANK_INFO: BankConfig = {
   amount: 1000000,
   amountText: "1.000.000 VNĐ",
   syntaxPrefix: "TCDN4",
+  sepayApiKey: "",
 };
 
 export function normalizeBankConfig(parsed: any): BankConfig {
@@ -34,6 +36,7 @@ export function normalizeBankConfig(parsed: any): BankConfig {
     amount,
     amountText: `${amount.toLocaleString("vi-VN")} VNĐ`,
     syntaxPrefix: String(parsed?.syntaxPrefix || DEFAULT_BANK_INFO.syntaxPrefix),
+    sepayApiKey: parsed?.sepayApiKey !== undefined ? String(parsed.sepayApiKey).trim() : (DEFAULT_BANK_INFO.sepayApiKey || ""),
   };
 }
 

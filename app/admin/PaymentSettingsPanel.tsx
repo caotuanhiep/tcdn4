@@ -46,6 +46,8 @@ export default function PaymentSettingsPanel() {
   const [syntaxPrefix, setSyntaxPrefix] = useState("TCDN4");
   const [sepayApiKey, setSepayApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingSepayKey, setSavingSepayKey] = useState(false);
+  const [savedSepayKeySuccess, setSavedSepayKeySuccess] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [testingSepay, setTestingSepay] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -75,19 +77,31 @@ export default function PaymentSettingsPanel() {
       }
     } catch {}
 
-    // Nguồn chuẩn: cấu hình đã lưu trên máy chủ (dùng chung cho mọi thiết bị)
-    fetch("/api/settings/bank", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data?.success) return;
-        if (data.source !== "default") {
-          applyConfig(data.config);
-          cacheBankInfo(normalizeBankConfig(data.config));
-        } else if (localCache) {
-          toast.error("Cấu hình tài khoản chưa được lưu lên máy chủ. Bấm \"Lưu cấu hình\" để áp dụng cho toàn website.");
+    const loadServerConfig = async () => {
+      try {
+        const supabase = getSupabase();
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        // Nguồn chuẩn: cấu hình đã lưu trên máy chủ (dùng chung cho mọi thiết bị)
+        const res = await fetch("/api/settings/bank", { cache: "no-store", headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            if (data.source !== "default") {
+              applyConfig(data.config);
+              cacheBankInfo(normalizeBankConfig(data.config));
+            } else if (localCache) {
+              toast.error("Cấu hình tài khoản chưa được lưu lên máy chủ. Bấm \"Lưu cấu hình\" để áp dụng cho toàn website.");
+            }
+          }
         }
-      })
-      .catch(() => {});
+      } catch {}
+    };
+
+    loadServerConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -151,6 +165,50 @@ export default function PaymentSettingsPanel() {
     toast.success("Đã sao chép Webhook URL SePay!");
   };
 
+  const handleSaveSepayKey = async () => {
+    setSavingSepayKey(true);
+    setSavedSepayKeySuccess(false);
+
+    const config = {
+      bankCode,
+      bankName,
+      accountNumber: accountNumber.trim(),
+      accountName: accountName.trim().toUpperCase(),
+      phoneReceive: phoneReceive.trim(),
+      amount: Number(amount),
+      syntaxPrefix: syntaxPrefix || "TCDN4",
+      sepayApiKey: sepayApiKey.trim(),
+    };
+
+    try {
+      const supabase = getSupabase();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch("/api/settings/bank", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(config),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      cacheBankInfo(normalizeBankConfig(data.config || config));
+      setSavedSepayKeySuccess(true);
+      setTimeout(() => setSavedSepayKeySuccess(false), 3500);
+      toast.success("Đã lưu API Key SePay thành công lên máy chủ!");
+    } catch (err: any) {
+      toast.error("Không thể lưu API Key SePay: " + (err?.message || "Lỗi máy chủ"));
+    } finally {
+      setSavingSepayKey(false);
+    }
+  };
+
   const handleTestSepay = async () => {
     setTestingSepay(true);
     setTestResult(null);
@@ -165,9 +223,14 @@ export default function PaymentSettingsPanel() {
         referenceCode: `TEST_${Date.now()}`,
       };
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sepayApiKey.trim()) {
+        headers["Authorization"] = `Apikey ${sepayApiKey.trim()}`;
+      }
+
       const res = await fetch("/api/sepay-webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(testPayload),
       });
 
@@ -415,16 +478,43 @@ export default function PaymentSettingsPanel() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                API Key SePay (Tùy chọn - nếu bật xác thực header):
-              </label>
-              <input
-                type="text"
-                value={sepayApiKey}
-                onChange={(e) => setSepayApiKey(e.target.value)}
-                placeholder="VD: sepay_live_xxxx... (để trống nếu không bật kiểm tra key)"
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase text-slate-700">
+                  API Key SePay (Tùy chọn - nếu bật xác thực header):
+                </label>
+                {savedSepayKeySuccess && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 animate-pulse">
+                    <CheckCircle2 size={13} /> Đã lưu máy chủ!
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={sepayApiKey}
+                  onChange={(e) => setSepayApiKey(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveSepayKey();
+                    }
+                  }}
+                  placeholder="VD: sepay_live_xxxx... (để trống nếu không bật kiểm tra key)"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveSepayKey}
+                  disabled={savingSepayKey}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0 cursor-pointer"
+                >
+                  {savingSepayKey ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>{savingSepayKey ? "Đang lưu..." : "Lưu API Key"}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Dán mã API Key bạn đặt trong portal SePay và bấm <strong>Lưu API Key</strong> (hoặc Enter). Hệ thống sẽ lưu trực tiếp lên máy chủ để tự động xác thực gói tin Webhook.
+              </p>
             </div>
 
             {/* Test button & result */}
