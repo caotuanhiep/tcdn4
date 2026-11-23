@@ -278,6 +278,11 @@ export default function ZaloBotSettings() {
   const [birthdayTemplate, setBirthdayTemplate] = useState(
     "🎂 ALO ALO CẢ NHÀ ƠI!\nHôm nay là sinh nhật của bạn {ten} ({lop})! 🎉\nThay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng phong độ, tiền vào như nước Sông Sài Gòn, sự nghiệp thăng hoa và mãi giữ tinh thần trẻ khỏe thời sinh viên nhé! 🍻\n👉 Gửi lời chúc tới {ten}: https://tcdn4.top"
   );
+  // Sinh nhật testing
+  const [testBirthdayGroupId, setTestBirthdayGroupId] = useState<string>("grp-all");
+  const [testBirthdayMemberName, setTestBirthdayMemberName] = useState<string>("");
+  const [testBirthdayMemberClass, setTestBirthdayMemberClass] = useState<string>("");
+  const [isSendingTestBirthday, setIsSendingTestBirthday] = useState<boolean>(false);
 
   // Logs
   const [logs, setLogs] = useState<SendLog[]>(INITIAL_LOGS);
@@ -546,6 +551,82 @@ export default function ZaloBotSettings() {
       toast.error("Lỗi khi lưu cấu hình sinh nhật!");
     } finally {
       setIsSavingBirthdayTemplate(false);
+    }
+  };
+
+  // Gửi thử tin nhắn chúc mừng sinh nhật chọn nhóm có sẵn
+  const handleSendTestBirthday = async (overrideMember?: { name: string; className: string }) => {
+    const memberName = overrideMember?.name || testBirthdayMemberName || birthdayMembers[0]?.name || "Nguyễn Văn Tuấn";
+    const memberClass = overrideMember?.className || testBirthdayMemberClass || birthdayMembers[0]?.className || "TC10";
+    const message = birthdayTemplate
+      .replace(/\{ten\}/g, memberName)
+      .replace(/\{lop\}/g, memberClass);
+
+    const targetGroup = groups.find((g) => g.id === testBirthdayGroupId);
+
+    if (testBirthdayGroupId !== "all" && targetGroup && !targetGroup.chatId) {
+      toast.error(
+        `Nhóm "${targetGroup.name}" chưa kết nối Chat ID! Vui lòng mời Bot Elephant vào nhóm và gõ lệnh: /verify ${targetGroup.verifyCode}`
+      );
+      return;
+    }
+
+    setIsSendingTestBirthday(true);
+    try {
+      const payload: any = {
+        type: "birthday",
+        name: memberName,
+        className: memberClass,
+        customWish: message,
+      };
+
+      if (testBirthdayGroupId && testBirthdayGroupId !== "all") {
+        payload.targetGroupId = testBirthdayGroupId;
+        if (targetGroup?.chatId) {
+          payload.targetChatId = targetGroup.chatId;
+          payload.targetGroupName = targetGroup.name;
+        }
+      }
+
+      const res = await fetch("/api/zalo-bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const resData = await res.json();
+      const targetDesc = testBirthdayGroupId === "all"
+        ? "Tất cả nhóm Zalo"
+        : (targetGroup?.name || "Nhóm đã chọn");
+
+      const newLog: SendLog = {
+        id: `log-bday-${Date.now()}`,
+        time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }),
+        group: targetDesc,
+        type: "birthday",
+        title: `Thử nghiệm chúc mừng sinh nhật: ${memberName} (${memberClass})`,
+        content: message,
+        status: (resData.sentSuccessCount > 0 || resData.externalWebhookSent) ? "success" : "pending",
+      };
+
+      const updatedLogs = [newLog, ...logs];
+      setLogs(updatedLogs);
+      try {
+        const existing = localStorage.getItem("tcdn4_zalo_logs");
+        const parsed = existing ? JSON.parse(existing) : [];
+        localStorage.setItem("tcdn4_zalo_logs", JSON.stringify([newLog, ...parsed]));
+      } catch {}
+
+      if (resData.success && (resData.sentSuccessCount > 0 || resData.externalWebhookSent)) {
+        toast.success(`Đã gửi thử tin mừng sinh nhật "${memberName}" tới ${targetDesc}!`);
+      } else {
+        const errMsg = resData.message || resData.error || "Gửi tin thử nghiệm không thành công. Kiểm tra lại kết nối Bot!";
+        toast.error(errMsg);
+      }
+    } catch (err: any) {
+      toast.error("Lỗi khi gửi tin sinh nhật thử nghiệm: " + (err?.message || "Lỗi mạng"));
+    } finally {
+      setIsSendingTestBirthday(false);
     }
   };
 
@@ -1884,18 +1965,32 @@ export default function ZaloBotSettings() {
                   <p className="text-xs text-slate-400 py-4 text-center">Chưa có thông tin ngày sinh trong danh bạ</p>
                 ) : (
                   birthdayMembers.slice(0, 8).map((m, idx) => (
-                    <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
-                      <div>
+                    <div key={idx} className="py-2.5 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
                         <span className="font-bold text-slate-900">{m.name}</span>
                         <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.2 text-[10px] text-slate-600 font-bold">{m.className}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="font-mono text-slate-500">{m.formattedDate}</span>
                         {m.isToday ? (
                           <span className="rounded-full bg-pink-100 text-pink-700 px-2 py-0.5 text-[10px] font-bold">Hôm nay 🎉</span>
                         ) : (
                           <span className="text-[10px] text-slate-400">còn {m.daysUntil} ngày</span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestBirthdayMemberName(m.name);
+                            setTestBirthdayMemberClass(m.className || "TC10");
+                            handleSendTestBirthday(m);
+                          }}
+                          disabled={isSendingTestBirthday}
+                          className="inline-flex items-center gap-1 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 px-2 py-1 text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+                          title={`Bắn tin chúc mừng sinh nhật ${m.name} vào nhóm Zalo`}
+                        >
+                          <Send size={10} />
+                          <span>Gửi thử</span>
+                        </button>
                       </div>
                     </div>
                   ))
@@ -1906,12 +2001,138 @@ export default function ZaloBotSettings() {
 
           <div className="lg:col-span-5 flex flex-col items-center">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 self-start px-1">
-              Xem trước tin nhắn Sinh nhật (Ví dụ mẫu)
+              Xem trước tin nhắn Sinh nhật & Gửi thử
             </span>
             {renderZaloPreview(
               "",
-              birthdayTemplate.replace("{ten}", birthdayMembers[0]?.name || "Nguyễn Văn Tuấn").replace("{lop}", birthdayMembers[0]?.className || "TC10")
+              birthdayTemplate
+                .replace(/\{ten\}/g, testBirthdayMemberName || birthdayMembers[0]?.name || "Nguyễn Văn Tuấn")
+                .replace(/\{lop\}/g, testBirthdayMemberClass || birthdayMembers[0]?.className || "TC10"),
+              testBirthdayGroupId === "all" ? "Tất cả nhóm Zalo" : (groups.find((g) => g.id === testBirthdayGroupId)?.name || "TCDN4 - Toàn Khóa K33")
             )}
+
+            {/* Hộp cấu hình gửi thử tin nhắn vào nhóm Zalo */}
+            <div className="w-full max-w-sm mt-5 rounded-3xl border border-pink-200/90 bg-gradient-to-br from-pink-50/50 via-white to-rose-50/30 p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-xl bg-pink-100 flex items-center justify-center text-pink-600 font-bold">
+                    <Send size={15} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-900">
+                      Gửi Thử Tin Sinh Nhật
+                    </h4>
+                    <p className="text-[10px] text-slate-500">
+                      Chọn nhóm Zalo có sẵn để kiểm tra tin
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 border border-pink-200">
+                  Bắn tin test
+                </span>
+              </div>
+
+              {/* 1. Chọn nhóm Zalo có sẵn */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Nhóm Zalo nhận tin thử:
+                  </label>
+                  {groups.find((g) => g.id === testBirthdayGroupId)?.chatId ? (
+                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 size={11} /> Đã nối Chat ID
+                    </span>
+                  ) : testBirthdayGroupId !== "all" ? (
+                    <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                      <AlertCircle size={11} /> Chưa có Chat ID
+                    </span>
+                  ) : null}
+                </div>
+                <select
+                  value={testBirthdayGroupId}
+                  onChange={(e) => setTestBirthdayGroupId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-pink-500 focus:outline-none"
+                >
+                  <option value="all">📢 Tất cả nhóm (bật nhận tin sinh nhật)</option>
+                  {groups.map((grp) => (
+                    <option key={grp.id} value={grp.id}>
+                      {grp.name} {grp.chatId ? "(✓ Đã nối Bot)" : "(Chưa nối Chat ID)"}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const curr = groups.find((g) => g.id === testBirthdayGroupId);
+                  if (curr && !curr.chatId && testBirthdayGroupId !== "all") {
+                    return (
+                      <p className="text-[10px] text-amber-800 mt-1.5 bg-amber-50 rounded-xl p-2.5 border border-amber-200 leading-relaxed">
+                        ⚠ Nhóm này chưa kết nối Chat ID. Hãy mời <strong>Bot Elephant</strong> vào nhóm, bổ nhiệm làm Phó nhóm và soạn tin: <code className="font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">/verify {curr.verifyCode}</code>
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
+              {/* 2. Chọn thành viên mẫu */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Thành viên mẫu để thử tin:
+                </label>
+                {birthdayMembers.length > 0 ? (
+                  <select
+                    value={testBirthdayMemberName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTestBirthdayMemberName(val);
+                      const found = birthdayMembers.find((m) => m.name === val);
+                      if (found) setTestBirthdayMemberClass(found.className || "TC10");
+                    }}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-pink-500 focus:outline-none"
+                  >
+                    <option value="">
+                      {birthdayMembers[0].name} ({birthdayMembers[0].className}) - Mặc định
+                    </option>
+                    {birthdayMembers.map((m, idx) => (
+                      <option key={idx} value={m.name}>
+                        {m.name} ({m.className}) - {m.isToday ? "🎉 Hôm nay" : m.formattedDate}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={testBirthdayMemberName}
+                      onChange={(e) => setTestBirthdayMemberName(e.target.value)}
+                      placeholder="Họ và tên (VD: Cao Tuấn Hiệp)"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-pink-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={testBirthdayMemberClass}
+                      onChange={(e) => setTestBirthdayMemberClass(e.target.value)}
+                      placeholder="Lớp (VD: TC10)"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-pink-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Nút gửi thử nghiệm */}
+              <button
+                type="button"
+                onClick={() => handleSendTestBirthday()}
+                disabled={isSendingTestBirthday}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 via-rose-600 to-pink-700 hover:from-pink-700 hover:to-rose-800 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSendingTestBirthday ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                <span>
+                  {isSendingTestBirthday 
+                    ? "Đang gửi thử tin..." 
+                    : `Gửi Thử Tin Nhắn Tới ${testBirthdayGroupId === "all" ? "Tất cả nhóm Zalo" : (groups.find((g) => g.id === testBirthdayGroupId)?.name || "Nhóm đã chọn")}`}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
