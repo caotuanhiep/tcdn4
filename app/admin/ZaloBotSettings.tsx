@@ -280,18 +280,28 @@ export default function ZaloBotSettings() {
   const [scheduledDateTime, setScheduledDateTime] = useState("2026-12-01T08:00");
   const [isSending, setIsSending] = useState(false);
 
-  // Auto-triggers (Điểm danh & Đăng ký 15 năm & Chuyển khoản)
+  // Auto-triggers (Điểm danh, Đăng ký 15 năm, Chuyển khoản SePay & Lưu bút không tham gia)
+  const [selectedAutoScenario, setSelectedAutoScenario] = useState<
+    "checkin" | "registration" | "payment" | "guestbook"
+  >("checkin");
+  const [isTestingAutoScenario, setIsTestingAutoScenario] = useState(false);
+  const [hasUnsavedAutoTemplates, setHasUnsavedAutoTemplates] = useState(false);
+
   const [autoCheckin, setAutoCheckin] = useState(true);
   const [autoRegistration, setAutoRegistration] = useState(true);
   const [autoPayment, setAutoPayment] = useState(true);
+  const [autoGuestbook, setAutoGuestbook] = useState(true);
   const [checkinTemplate, setCheckinTemplate] = useState(
-    "🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}) vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory"
+    "🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}){nghe_nghiep}{khu_vuc} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory"
   );
   const [registrationTemplate, setRegistrationTemplate] = useState(
-    "🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n{ten} ({lop}) đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event"
+    "🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n👤 {ten} ({lop}){nguoi_nha} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event"
   );
   const [paymentTemplate, setPaymentTemplate] = useState(
-    "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!"
+    "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🍻 Tiến độ hiện tại: {tong_so} anh em đã đăng ký ({da_xac_nhan} bạn đã xác nhận chuyển khoản)!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!"
+  );
+  const [guestbookTemplate, setGuestbookTemplate] = useState(
+    "💌 [LỜI NHẮN TỪ PHƯƠNG XA - SỔ LƯU BÚT TCDN4]\n━━━━━━━━━━━━━━━━━━━━\n👤 {ten} ({lop}) gửi lời nhắn thân thương tới đại gia đình K33:\n\n\"{loi_nhan}\"{ao_ship}\n\n❤️ Dù ở xa nhưng tình đồng môn TCDN4 vẫn luôn gần kề!\n👉 Xem & thả tim Sổ Lưu Bút tại: https://tcdn4.top/#guestbook"
   );
 
   // Sinh nhật
@@ -312,7 +322,7 @@ export default function ZaloBotSettings() {
 
   // AI Assistant Modal State
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiTargetField, setAiTargetField] = useState<"broadcast" | "checkin" | "registration" | "birthday" | "payment">("broadcast");
+  const [aiTargetField, setAiTargetField] = useState<"broadcast" | "checkin" | "registration" | "birthday" | "payment" | "guestbook">("broadcast");
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState<string>("funny");
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -334,11 +344,13 @@ export default function ZaloBotSettings() {
         if (typeof p.autoRegistration === "boolean") setAutoRegistration(p.autoRegistration);
         if (typeof p.autoBirthday === "boolean") setAutoBirthday(p.autoBirthday);
         if (typeof p.autoPayment === "boolean") setAutoPayment(p.autoPayment);
+        if (typeof p.autoGuestbook === "boolean") setAutoGuestbook(p.autoGuestbook);
         if (p.birthdayHour) setBirthdayHour(p.birthdayHour);
         if (p.checkinTemplate) setCheckinTemplate(p.checkinTemplate);
         if (p.registrationTemplate) setRegistrationTemplate(p.registrationTemplate);
         if (p.birthdayTemplate) setBirthdayTemplate(p.birthdayTemplate);
         if (p.paymentTemplate) setPaymentTemplate(p.paymentTemplate);
+        if (p.guestbookTemplate) setGuestbookTemplate(p.guestbookTemplate);
         if (p.aiApiKey || p.claudeApiKey || p.geminiApiKey) setClaudeApiKey(p.aiApiKey || p.claudeApiKey || p.geminiApiKey);
         if (p.aiModel) setAiModel(p.aiModel);
       }
@@ -371,10 +383,12 @@ export default function ZaloBotSettings() {
           if (typeof d.config.autoRegistration === "boolean") setAutoRegistration(d.config.autoRegistration);
           if (typeof d.config.autoBirthday === "boolean") setAutoBirthday(d.config.autoBirthday);
           if (typeof d.config.autoPayment === "boolean") setAutoPayment(d.config.autoPayment);
+          if (typeof d.config.autoGuestbook === "boolean") setAutoGuestbook(d.config.autoGuestbook);
           if (d.config.checkinTemplate) setCheckinTemplate(d.config.checkinTemplate);
           if (d.config.registrationTemplate) setRegistrationTemplate(d.config.registrationTemplate);
           if (d.config.birthdayTemplate) setBirthdayTemplate(d.config.birthdayTemplate);
           if (d.config.paymentTemplate) setPaymentTemplate(d.config.paymentTemplate);
+          if (d.config.guestbookTemplate) setGuestbookTemplate(d.config.guestbookTemplate);
           if (Array.isArray(d.config.groups) && d.config.groups.length > 0) {
             setGroups(d.config.groups);
             try {
@@ -554,19 +568,106 @@ export default function ZaloBotSettings() {
   const handleSaveAutoTemplates = async () => {
     setIsSavingAutoTemplates(true);
     try {
-      await saveBotConfig({
+      const ok = await saveBotConfig({
         autoCheckin,
         autoRegistration,
+        autoPayment,
+        autoGuestbook,
         checkinTemplate,
         registrationTemplate,
-        autoPayment,
         paymentTemplate,
+        guestbookTemplate,
       });
-      toast.success("Đã lưu mẫu tin nhắn Điểm danh, 15 Năm & Chuyển khoản thành công lên máy chủ!");
+      if (!ok) {
+        toast.error("Không thể lưu lên máy chủ. Vui lòng kiểm tra quyền Admin và thử lại!");
+        return;
+      }
+      setHasUnsavedAutoTemplates(false);
+      toast.success("Đã lưu toàn bộ 4 mẫu tin tự động lên máy chủ thành công!");
     } catch {
       toast.error("Lỗi khi lưu cấu hình mẫu tin nhắn!");
     } finally {
       setIsSavingAutoTemplates(false);
+    }
+  };
+
+  const handleTestAutoScenario = async (
+    scenario: "checkin" | "registration" | "payment" | "guestbook"
+  ) => {
+    setIsTestingAutoScenario(true);
+    try {
+      // Lưu trước nếu có thay đổi chưa lưu để bản gửi thử khớp 100% nội dung đang soạn
+      if (hasUnsavedAutoTemplates) {
+        await saveBotConfig({
+          autoCheckin,
+          autoRegistration,
+          autoPayment,
+          autoGuestbook,
+          checkinTemplate,
+          registrationTemplate,
+          paymentTemplate,
+          guestbookTemplate,
+        });
+        setHasUnsavedAutoTemplates(false);
+      }
+
+      const testPayloads: Record<string, Record<string, any>> = {
+        checkin: {
+          type: "checkin",
+          isTest: true,
+          fullName: "Cao Tuấn Hiệp (Test)",
+          className: "TC12",
+          jobTitle: "Founder - CEO",
+          company: "SMLIFE",
+          location: "TP.HCM",
+        },
+        registration: {
+          type: "registration",
+          isTest: true,
+          fullName: "Trần Vũ Yến Linh (Test)",
+          className: "TC12",
+          shirtSize: "S (Nữ)",
+          guestsCount: 0,
+        },
+        payment: {
+          type: "payment",
+          isTest: true,
+          fullName: "Trần Vũ Yến Linh (Test)",
+          className: "TC12",
+          paidAmount: 1000000,
+          shirtSize: "S (Nữ)",
+          bankGateway: "TPBank",
+          content: "TCDN4 TRAN VU YEN LINH 0988668319",
+          transactionDate: new Date().toLocaleString("vi-VN"),
+          referenceCode: "TEST_SEPAY_001",
+        },
+        guestbook: {
+          type: "guestbook",
+          isTest: true,
+          fromDecline: true,
+          fullName: "Nguyễn Minh Tuấn (Test)",
+          className: "TC11",
+          message: "Tiếc quá đợt này mình kẹt công tác ở Hà Nội không về kịp, chúc đại gia đình TCDN4 hội ngộ 15 năm thật cháy nhé!",
+          shirtSize: "L (Nam)",
+          deliveryAddress: "Cầu Giấy, Hà Nội",
+        },
+      };
+
+      const res = await fetch("/api/zalo-bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testPayloads[scenario]),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        toast.success(data.message || "Đã gửi tin thử nghiệm vào nhóm Zalo!");
+      } else {
+        toast.error(data?.message || data?.error || "Không gửi được tin thử nghiệm (kiểm tra kết nối nhóm Zalo).");
+      }
+    } catch {
+      toast.error("Lỗi kết nối khi gửi thử tin nhắn Zalo!");
+    } finally {
+      setIsTestingAutoScenario(false);
     }
   };
 
@@ -748,12 +849,15 @@ export default function ZaloBotSettings() {
   };
 
   // Trigger AI assistant
-  const handleOpenAiAssistant = (field: "broadcast" | "checkin" | "registration" | "birthday" | "payment") => {
+  const handleOpenAiAssistant = (
+    field: "broadcast" | "checkin" | "registration" | "birthday" | "payment" | "guestbook"
+  ) => {
     setAiTargetField(field);
     if (field === "birthday") setAiTone("birthday");
     else if (field === "checkin") setAiTone("funny");
     else if (field === "registration") setAiTone("urgent");
     else if (field === "payment") setAiTone("formal");
+    else if (field === "guestbook") setAiTone("warm");
     else setAiTone("funny");
 
     setAiTopic("");
@@ -830,16 +934,19 @@ export default function ZaloBotSettings() {
       setComposerContent(aiGeneratedResult);
     } else if (aiTargetField === "checkin") {
       setCheckinTemplate(aiGeneratedResult);
-      saveBotConfig({ checkinTemplate: aiGeneratedResult });
+      setHasUnsavedAutoTemplates(true);
     } else if (aiTargetField === "registration") {
       setRegistrationTemplate(aiGeneratedResult);
-      saveBotConfig({ registrationTemplate: aiGeneratedResult });
+      setHasUnsavedAutoTemplates(true);
     } else if (aiTargetField === "birthday") {
       setBirthdayTemplate(aiGeneratedResult);
       saveBotConfig({ birthdayTemplate: aiGeneratedResult });
     } else if (aiTargetField === "payment") {
       setPaymentTemplate(aiGeneratedResult);
-      saveBotConfig({ paymentTemplate: aiGeneratedResult });
+      setHasUnsavedAutoTemplates(true);
+    } else if (aiTargetField === "guestbook") {
+      setGuestbookTemplate(aiGeneratedResult);
+      setHasUnsavedAutoTemplates(true);
     }
     setIsAiModalOpen(false);
     toast.success("Đã áp dụng nội dung AI vào khung soạn thảo!");
@@ -934,28 +1041,28 @@ export default function ZaloBotSettings() {
         </div>
 
         {/* Chat Body */}
-        <div className="flex-1 bg-[#E7EBF0] p-3.5 overflow-y-auto space-y-3 flex flex-col justify-end">
+        <div className="flex-1 bg-[#E7EBF0] p-3.5 overflow-y-auto overflow-x-hidden space-y-3 flex flex-col justify-end">
           <div className="text-center">
             <span className="rounded-full bg-slate-300/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-600">
               Hôm nay lúc {new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
             </span>
           </div>
 
-          <div className="flex items-start gap-2 max-w-[94%]">
+          <div className="flex items-start gap-2 w-full min-w-0">
             <div className="h-7 w-7 rounded-full bg-[#0068FF] text-white flex items-center justify-center shrink-0 shadow-xs border border-white mt-1">
               <Bot size={14} />
             </div>
 
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1 mb-1 pl-1">
-                <span className="text-[11px] font-bold text-slate-700">TCDN4 Bot Nhóm</span>
-                <span className="rounded bg-blue-100 text-[#0068FF] text-[9px] font-black px-1.5 py-0.2">BOT NHÓM</span>
+                <span className="text-[11px] font-bold text-slate-700 truncate">TCDN4 Bot Nhóm</span>
+                <span className="rounded bg-blue-100 text-[#0068FF] text-[9px] font-black px-1.5 py-0.2 shrink-0">BOT NHÓM</span>
               </div>
 
               {/* Message Bubble */}
-              <div className="bg-white rounded-2xl rounded-tl-xs p-3 text-xs text-slate-800 shadow-sm border border-slate-200/60 leading-relaxed whitespace-pre-wrap break-words">
+              <div className="bg-white rounded-2xl rounded-tl-xs p-3 text-xs text-slate-800 shadow-sm border border-slate-200/60 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] overflow-hidden">
                 {title && <div className="font-bold text-ueh mb-1 border-b border-slate-100 pb-1">{title}</div>}
-                <div>{message || "Chưa có nội dung xem trước..."}</div>
+                <div className="[overflow-wrap:anywhere]">{message || "Chưa có nội dung xem trước..."}</div>
                 <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-slate-400">
                   <span>{new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
                   <CheckCheck size={12} className="text-blue-500" />
@@ -997,10 +1104,15 @@ export default function ZaloBotSettings() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-5 mt-4 border-t border-slate-100">
+        <div className="flex flex-wrap items-center gap-1.5 pt-5 mt-4 border-t border-slate-100">
           {[
             { id: "broadcast", label: "Đăng tin", count: broadcasts.length, icon: Send },
-            { id: "auto", label: "Điểm danh & 15 Năm", count: 2, icon: Bell },
+            {
+              id: "auto",
+              label: "Điểm danh & 15 Năm",
+              count: [autoCheckin, autoRegistration, autoPayment, autoGuestbook].filter(Boolean).length,
+              icon: Bell,
+            },
             { id: "birthday", label: "Sinh nhật", count: birthdayMembers.length, icon: Cake },
             { id: "logs", label: "Nhật ký gửi tin", count: logs.length, icon: FileText },
             { id: "connection", label: "Đấu nối Zalo & Nhóm", count: groups.length, icon: LinkIcon },
@@ -1797,294 +1909,478 @@ export default function ZaloBotSettings() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: ĐIỂM DANH & 15 NĂM (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)            */}
+      {/* TAB 2: ĐIỂM DANH & 15 NĂM (GIAO DIỆN MASTER-DETAIL 4 KỊCH BẢN TRỰC QUAN)  */}
       {/* ========================================================================= */}
-      {activeTab === "auto" && (
-        <div className="space-y-6">
-          {/* Thanh tiêu đề & Nút Lưu Cấu Hình Mẫu Tin */}
-          <div className="rounded-3xl border border-blue-200/80 bg-gradient-to-r from-blue-50/80 via-white to-sky-50/50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Bell size={18} className="text-ueh" /> Cấu Hình Mẫu Tin Điểm Danh, 15 Năm & Chuyển Khoản (SePay)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Các mẫu tin nhắn dưới đây sẽ được Bot tự động bắn vào nhóm Zalo khi có sự kiện. Bấm nút Lưu để áp dụng.
-              </p>
-            </div>
-            <button
-              onClick={handleSaveAutoTemplates}
-              disabled={isSavingAutoTemplates}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all shrink-0 cursor-pointer"
-            >
-              {isSavingAutoTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin"}</span>
-            </button>
-          </div>
+      {activeTab === "auto" && (() => {
+        const scenarios = [
+          {
+            id: "checkin" as const,
+            step: "01",
+            shortTitle: "Điểm danh mới",
+            title: "Thông Báo Điểm Danh Thành Viên Mới",
+            subtitle: "Tự động gửi vào nhóm Zalo khi cựu sinh viên lưu hồ sơ lần đầu (chỉ gửi 1 lần/người).",
+            icon: UserCheck,
+            accent: "blue",
+            enabled: autoCheckin,
+            setEnabled: (v: boolean) => {
+              setAutoCheckin(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            template: checkinTemplate,
+            setTemplate: (v: string) => {
+              setCheckinTemplate(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            variables: ["{ten}", "{lop}", "{nghe_nghiep}", "{khu_vuc}"],
+            presets: [
+              {
+                label: "Dí dỏm K33",
+                content:
+                  "🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}){nghe_nghiep}{khu_vuc} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory",
+              },
+              {
+                label: "Trang trọng",
+                content:
+                  "📢 CHÀO MỪNG ĐỒNG MÔN!\nThành viên {ten} ({lop}){nghe_nghiep}{khu_vuc} vừa hoàn tất điểm danh và cập nhật hồ sơ trên Alumni Hub TCDN4.\n👉 Vào xem danh bạ: https://tcdn4.top/#directory",
+              },
+            ],
+            previewText: checkinTemplate
+              .replaceAll("{ten}", "Hiệp Cao Tuấn")
+              .replaceAll("{lop}", "TC12")
+              .replaceAll("{nghe_nghiep}", " đang làm Founder - CEO tại SMLIFE")
+              .replaceAll("{khu_vuc}", " ở TP.HCM"),
+            targetGroups: groups.filter((g) => g.chatId && g.receiveCheckin !== false),
+          },
+          {
+            id: "registration" as const,
+            step: "02",
+            shortTitle: "Đăng ký 15 Năm",
+            title: "Thông Báo Đăng Ký Họp Mặt 15 Năm",
+            subtitle: "Tự động tạo không khí hào hứng khi thành viên chọn tham gia ngày 12/12 & chọn size áo.",
+            icon: Calendar,
+            accent: "orange",
+            enabled: autoRegistration,
+            setEnabled: (v: boolean) => {
+              setAutoRegistration(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            template: registrationTemplate,
+            setTemplate: (v: string) => {
+              setRegistrationTemplate(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            variables: ["{ten}", "{lop}", "{size}", "{tong_so}", "{nguoi_nha}"],
+            presets: [
+              {
+                label: "Hào hứng",
+                content:
+                  "🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n👤 {ten} ({lop}){nguoi_nha} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event",
+              },
+              {
+                label: "Ngắn gọn",
+                content:
+                  "🎉 Chúc mừng {ten} ({lop}) vừa xác nhận tham gia Hội Ngộ 15 Năm (Áo size {size})!\n📊 Hiện đã có {tong_so} đồng môn đăng ký.\n👉 Đăng ký tại: https://tcdn4.top/#event",
+              },
+            ],
+            previewText: registrationTemplate
+              .replaceAll("{ten}", "Trần Vũ Yến Linh")
+              .replaceAll("{lop}", "TC12")
+              .replaceAll("{size}", "S (Nữ)")
+              .replaceAll("{tong_so}", "3")
+              .replaceAll("{nguoi_nha}", ""),
+            targetGroups: groups.filter((g) => g.chatId && g.receiveRegistration !== false),
+          },
+          {
+            id: "payment" as const,
+            step: "03",
+            shortTitle: "Chuyển khoản SePay",
+            title: "Xác Nhận Chuyển Khoản Tự Động (SePay)",
+            subtitle: "Bắn ngay khi tiền về tài khoản ngân hàng lớp kèm tiến độ tổng số người đăng ký.",
+            icon: DollarSign,
+            accent: "emerald",
+            enabled: autoPayment,
+            setEnabled: (v: boolean) => {
+              setAutoPayment(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            template: paymentTemplate,
+            setTemplate: (v: string) => {
+              setPaymentTemplate(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            variables: [
+              "{ten}",
+              "{lop}",
+              "{so_tien}",
+              "{size}",
+              "{ngan_hang}",
+              "{noi_dung}",
+              "{thoi_gian}",
+              "{ma_gd}",
+              "{tong_so}",
+              "{da_xac_nhan}",
+            ],
+            presets: [
+              {
+                label: "Chuẩn BLL",
+                content:
+                  "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🍻 Tiến độ hiện tại: {tong_so} anh em đã đăng ký ({da_xac_nhan} bạn đã xác nhận chuyển khoản)!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!",
+              },
+              {
+                label: "Ngắn gọn",
+                content:
+                  "💰 TING TING! SEPAY XÁC NHẬN ĐÓNG GÓP 15 NĂM\n👤 {ten} ({lop}) • +{so_tien} VNĐ • Áo {size}\n🏦 {ngan_hang} • Mã GD: {ma_gd}\n🍻 Hiện có {tong_so} anh em đăng ký ({da_xac_nhan} bạn đã chuyển khoản)!\n👉 https://tcdn4.top/#event",
+              },
+            ],
+            previewText: paymentTemplate
+              .replaceAll("{ten}", "Trần Vũ Yến Linh")
+              .replaceAll("{lop}", "TC12")
+              .replaceAll("{so_tien}", "1.000.000")
+              .replaceAll("{size}", "S (Nữ)")
+              .replaceAll("{ngan_hang}", "TPBank")
+              .replaceAll("{noi_dung}", "TCDN4 TRAN VU YEN LINH 0988668319")
+              .replaceAll("{thoi_gian}", "21:54 23/11/2026")
+              .replaceAll("{ma_gd}", "239V602263272316")
+              .replaceAll("{tong_so}", "3")
+              .replaceAll("{da_xac_nhan}", "2"),
+            targetGroups: groups.filter(
+              (g) => g.chatId && (g.receivePayment || g.id === "grp-bll" || g.verifyCode?.includes("BLL"))
+            ),
+          },
+          {
+            id: "guestbook" as const,
+            step: "04",
+            shortTitle: "Lưu bút / Không dự",
+            title: "Lời Nhắn Sổ Lưu Bút & Bạn Ở Xa Không Tham Gia",
+            subtitle: "Tự động đẩy lời chúc lên nhóm Zalo khi thành viên không dự được gửi lưu bút hoặc viết trên Sổ Lưu Bút.",
+            icon: MessageSquare,
+            accent: "rose",
+            enabled: autoGuestbook,
+            setEnabled: (v: boolean) => {
+              setAutoGuestbook(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            template: guestbookTemplate,
+            setTemplate: (v: string) => {
+              setGuestbookTemplate(v);
+              setHasUnsavedAutoTemplates(true);
+            },
+            variables: ["{ten}", "{lop}", "{loi_nhan}", "{ao_ship}"],
+            presets: [
+              {
+                label: "Từ phương xa",
+                content:
+                  "💌 [LỜI NHẮN TỪ PHƯƠNG XA - SỔ LƯU BÚT TCDN4]\n━━━━━━━━━━━━━━━━━━━━\n👤 {ten} ({lop}) gửi lời nhắn thân thương tới đại gia đình K33:\n\n\"{loi_nhan}\"{ao_ship}\n\n❤️ Dù ở xa nhưng tình đồng môn TCDN4 vẫn luôn gần kề!\n👉 Xem & thả tim Sổ Lưu Bút tại: https://tcdn4.top/#guestbook",
+              },
+              {
+                label: "Ấm áp ngắn gọn",
+                content:
+                  "💌 Lưu bút mới từ {ten} ({lop}):\n\"{loi_nhan}\"{ao_ship}\n👉 Vào đọc & thả tim tại: https://tcdn4.top/#guestbook",
+              },
+            ],
+            previewText: guestbookTemplate
+              .replaceAll("{ten}", "Nguyễn Minh Tuấn")
+              .replaceAll("{lop}", "TC11")
+              .replaceAll(
+                "{loi_nhan}",
+                "Tiếc quá đợt này mình kẹt công tác ở Hà Nội không về kịp, chúc đại gia đình TCDN4 hội ngộ 15 năm thật cháy nhé!"
+              )
+              .replaceAll("{ao_ship}", "\n👕 Đăng ký ship áo Polo size L (Nam) về: Cầu Giấy, Hà Nội"),
+            targetGroups: groups.filter(
+              (g) => g.chatId && (g.receiveRegistration !== false || g.receiveCheckin !== false)
+            ),
+          },
+        ];
 
-          {/* Section 1: Thông báo Điểm danh */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
-            <div className="lg:col-span-7 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <UserCheck size={18} className="text-blue-600" /> 1. Thông Báo Điểm Danh Mới
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Tự động bắn tin vào nhóm Zalo khi có cựu sinh viên tạo tài khoản hoặc điểm danh.
-                  </p>
-                </div>
+        const activeScenario =
+          scenarios.find((s) => s.id === selectedAutoScenario) || scenarios[0];
+        const ActiveIcon = activeScenario.icon;
+        const enabledCount = scenarios.filter((s) => s.enabled).length;
 
-                <div className="flex items-center gap-2">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoCheckin}
-                      onChange={(e) => {
-                        setAutoCheckin(e.target.checked);
-                        saveBotConfig({ autoCheckin: e.target.checked });
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ueh"></div>
-                  </label>
-                  <button
-                    onClick={() => handleOpenAiAssistant("checkin")}
-                    className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-2.5 py-1 text-xs font-bold text-ueh border border-blue-200 hover:bg-blue-100"
-                  >
-                    <Wand2 size={12} className="text-ueh-orange" /> AI Viết Lại
-                  </button>
-                </div>
-              </div>
+        const accentClasses: Record<
+          string,
+          { activeCard: string; badge: string; iconBg: string; ring: string }
+        > = {
+          blue: {
+            activeCard: "border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/20",
+            badge: "bg-blue-100 text-blue-700",
+            iconBg: "bg-blue-600 text-white",
+            ring: "focus:border-blue-600",
+          },
+          orange: {
+            activeCard: "border-orange-500 bg-orange-50/70 ring-2 ring-orange-500/20",
+            badge: "bg-orange-100 text-orange-700",
+            iconBg: "bg-ueh-orange text-white",
+            ring: "focus:border-orange-500",
+          },
+          emerald: {
+            activeCard: "border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20",
+            badge: "bg-emerald-100 text-emerald-700",
+            iconBg: "bg-emerald-600 text-white",
+            ring: "focus:border-emerald-600",
+          },
+          rose: {
+            activeCard: "border-rose-500 bg-rose-50/70 ring-2 ring-rose-500/20",
+            badge: "bg-rose-100 text-rose-700",
+            iconBg: "bg-rose-600 text-white",
+            ring: "focus:border-rose-500",
+          },
+        };
+        const activeStyle = accentClasses[activeScenario.accent];
 
+        return (
+          <div className="space-y-5">
+            {/* Thanh công cụ trên cùng: Tổng quan trạng thái + Nút Lưu tập trung */}
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Mẫu tin nhắn (Sử dụng các biến: &#123;ten&#125;, &#123;lop&#125;, &#123;nghe_nghiep&#125;)
-                </label>
-                <textarea
-                  rows={5}
-                  value={checkinTemplate}
-                  onChange={(e) => {
-                    setCheckinTemplate(e.target.value);
-                    saveBotConfig({ checkinTemplate: e.target.value });
-                  }}
-                  className="w-full rounded-2xl border border-slate-300 p-3 text-xs leading-relaxed focus:border-ueh focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span>Gợi ý:</span>
-                <button
-                  onClick={() => {
-                    const sample = "🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}) vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory";
-                    setCheckinTemplate(sample);
-                    saveBotConfig({ checkinTemplate: sample });
-                  }}
-                  className="rounded-lg bg-slate-100 px-2 py-0.5 font-semibold hover:bg-slate-200"
-                >
-                  Mẫu Dí dỏm
-                </button>
-                <button
-                  onClick={() => {
-                    const sample = "📢 CHÀO MỪNG ĐỒNG MÔN!\nThành viên {ten} ({lop}) vừa hoàn tất điểm danh và cập nhật hồ sơ cá nhân trên Alumni Hub TCDN4.\n👉 Vào xem danh bạ: https://tcdn4.top/#directory";
-                    setCheckinTemplate(sample);
-                    saveBotConfig({ checkinTemplate: sample });
-                  }}
-                  className="rounded-lg bg-slate-100 px-2 py-0.5 font-semibold hover:bg-slate-200"
-                >
-                  Mẫu Trang trọng
-                </button>
-              </div>
-            </div>
-
-            <div className="lg:col-span-5 flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 self-start px-1">
-                Xem trước tin nhắn Điểm danh (Ví dụ mẫu: Hiệp Cao Tuấn)
-              </span>
-              {renderZaloPreview(
-                "",
-                checkinTemplate.replace("{ten}", "Hiệp Cao Tuấn").replace("{lop}", "TC12").replace("{nghe_nghiep}", "Founder - CEO SMLIFE")
-              )}
-            </div>
-          </div>
-
-          {/* Section 2: Thông báo Đăng ký tham gia 15 Năm */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
-            <div className="lg:col-span-7 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Calendar size={18} className="text-ueh-orange" /> 2. Thông Báo Đăng Ký Họp Mặt 15 Năm
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Bell size={18} className="text-ueh" /> Kịch Bản Tin Nhắn Tự Động
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Tự động chúc mừng và tạo không khí hào hứng khi có bạn đăng ký tham gia họp mặt & nhận áo.
-                  </p>
+                  <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    Đang bật {enabledCount}/{scenarios.length}
+                  </span>
+                  {hasUnsavedAutoTemplates && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-bold text-amber-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Chưa lưu thay đổi
+                    </span>
+                  )}
                 </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Chọn 1 trong 4 kịch bản bên dưới để bật/tắt, chỉnh sửa nội dung, xem trước trên Zalo và gửi thử ngay.
+                </p>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoRegistration}
-                      onChange={(e) => {
-                        setAutoRegistration(e.target.checked);
-                        saveBotConfig({ autoRegistration: e.target.checked });
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ueh"></div>
-                  </label>
+              <button
+                type="button"
+                onClick={handleSaveAutoTemplates}
+                disabled={isSavingAutoTemplates}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all shrink-0 cursor-pointer disabled:opacity-50 ${
+                  hasUnsavedAutoTemplates
+                    ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/30"
+                    : "bg-ueh hover:bg-ueh-light"
+                }`}
+              >
+                {isSavingAutoTemplates ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Tất Cả Mẫu Tin"}</span>
+              </button>
+            </div>
+
+            {/* 4 Thẻ chọn kịch bản gọn gàng trên 1 hàng — không phải cuộn trang dài */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {scenarios.map((sc) => {
+                const Icon = sc.icon;
+                const isSelected = sc.id === activeScenario.id;
+                const st = accentClasses[sc.accent];
+                return (
                   <button
-                    onClick={() => handleOpenAiAssistant("registration")}
-                    className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-2.5 py-1 text-xs font-bold text-ueh-orange border border-orange-200 hover:bg-orange-100"
+                    key={sc.id}
+                    type="button"
+                    onClick={() => setSelectedAutoScenario(sc.id)}
+                    className={`text-left rounded-2xl border p-3.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? `${st.activeCard} shadow-xs`
+                        : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/60"
+                    }`}
                   >
-                    <Wand2 size={12} /> AI Viết Lại
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl shadow-2xs ${
+                          isSelected ? st.iconBg : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        <Icon size={16} />
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          sc.enabled
+                            ? "bg-emerald-100/90 text-emerald-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            sc.enabled ? "bg-emerald-500" : "bg-slate-400"
+                          }`}
+                        />
+                        {sc.enabled ? "Đang bật" : "Đang tắt"}
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Kịch bản {sc.step}
+                    </div>
+                    <div className="text-xs sm:text-sm font-black text-slate-900 mt-0.5 line-clamp-1">
+                      {sc.shortTitle}
+                    </div>
                   </button>
+                );
+              })}
+            </div>
+
+            {/* Khu vực chỉnh sửa 2 cột gọn gàng: Trái = Soạn thảo | Phải = Xem trước Zalo Live */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
+              {/* Cột Trái: Điều khiển & Soạn nội dung */}
+              <div className="lg:col-span-7 space-y-4">
+                {/* Header kịch bản đang chọn — bố cục rõ ràng, không bao giờ đè chữ */}
+                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-xs ${activeStyle.iconBg}`}
+                    >
+                      <ActiveIcon size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-sm sm:text-base font-black text-slate-900">
+                        {activeScenario.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                        {activeScenario.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Nhóm nút hành động bên phải luôn thẳng hàng, không xuống dòng */}
+                  <div className="flex items-center gap-2 shrink-0 self-start">
+                    <button
+                      type="button"
+                      onClick={() => activeScenario.setEnabled(!activeScenario.enabled)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                        activeScenario.enabled
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          activeScenario.enabled ? "bg-emerald-500" : "bg-slate-400"
+                        }`}
+                      />
+                      {activeScenario.enabled ? "Tự động: BẬT" : "Tự động: TẮT"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAiAssistant(activeScenario.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <Wand2 size={13} /> AI Viết Lại
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Mẫu tin nhắn (Sử dụng các biến: &#123;ten&#125;, &#123;lop&#125;, &#123;size&#125;, &#123;tong_so&#125;)
-                </label>
-                <textarea
-                  rows={5}
-                  value={registrationTemplate}
-                  onChange={(e) => {
-                    setRegistrationTemplate(e.target.value);
-                    saveBotConfig({ registrationTemplate: e.target.value });
-                  }}
-                  className="w-full rounded-2xl border border-slate-300 p-3 text-xs leading-relaxed focus:border-ueh focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span>Gợi ý:</span>
-                <button
-                  onClick={() => {
-                    const sample = "🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n{ten} ({lop}) đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event";
-                    setRegistrationTemplate(sample);
-                    saveBotConfig({ registrationTemplate: sample });
-                  }}
-                  className="rounded-lg bg-slate-100 px-2 py-0.5 font-semibold hover:bg-slate-200"
-                >
-                  Mẫu Hào hứng
-                </button>
-              </div>
-            </div>
-
-            <div className="lg:col-span-5 flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 self-start px-1">
-                Xem trước tin nhắn Đăng ký 15 năm (Ví dụ mẫu)
-              </span>
-              {renderZaloPreview(
-                "",
-                registrationTemplate.replace("{ten}", "Hiệp Cao Tuấn").replace("{lop}", "TC12").replace("{size}", "XL (Nam)").replace("{tong_so}", "36")
-              )}
-            </div>
-          </div>
-
-          {/* Section 3: Thông báo Xác nhận Chuyển khoản (SePay) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
-            <div className="lg:col-span-7 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                {/* Các biến động bấm là chèn thẳng vào mẫu */}
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <DollarSign size={18} className="text-emerald-600" /> 3. Thông Báo Xác Nhận Chuyển Khoản (SePay)
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Tự động bắn tin xác nhận khi thành viên chuyển khoản qua SePay. Mặc định gửi riêng vào nhóm <strong>Ban Liên Lạc</strong> (hoặc nhóm có bật quyền &apos;Chuyển khoản&apos;).
-                  </p>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Bấm để chèn biến tự động:
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeScenario.variables.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => activeScenario.setTemplate(`${activeScenario.template}${v}`)}
+                        className="rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-ueh hover:border-blue-200 border border-slate-200 px-2 py-1 text-[11px] font-mono font-bold text-slate-700 transition-colors cursor-pointer"
+                        title={`Chèn biến ${v} vào cuối mẫu tin`}
+                      >
+                        + {v}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <label className="relative inline-flex items-center cursor-pointer" title="Bật/Tắt tự động gửi tin nhắn khi SePay khớp thanh toán">
-                    <input
-                      type="checkbox"
-                      checked={autoPayment}
-                      onChange={(e) => {
-                        setAutoPayment(e.target.checked);
-                        saveBotConfig({ autoPayment: e.target.checked });
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
+                {/* Khung soạn mẫu tin */}
+                <div>
+                  <textarea
+                    rows={8}
+                    value={activeScenario.template}
+                    onChange={(e) => activeScenario.setTemplate(e.target.value)}
+                    className={`w-full rounded-2xl border border-slate-300 p-3.5 text-xs leading-relaxed focus:outline-none ${activeStyle.ring}`}
+                    placeholder="Nhập mẫu nội dung tin nhắn Zalo..."
+                  />
+                </div>
+
+                {/* Thanh dưới: Gợi ý mẫu nhanh + Nút gửi thử Zalo */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                    <span className="font-semibold text-[11px]">Mẫu nhanh:</span>
+                    {activeScenario.presets.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => activeScenario.setTemplate(preset.content)}
+                        className="rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => handleOpenAiAssistant("payment")}
-                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                    disabled={isTestingAutoScenario}
+                    onClick={() => void handleTestAutoScenario(activeScenario.id)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
                   >
-                    <Wand2 size={12} /> AI Viết Lại
+                    {isTestingAutoScenario ? (
+                      <RefreshCw size={13} className="animate-spin" />
+                    ) : (
+                      <Send size={13} />
+                    )}
+                    <span>{isTestingAutoScenario ? "Đang gửi thử..." : "Gửi thử vào Zalo"}</span>
                   </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Mẫu tin nhắn (Sử dụng các biến: &#123;ten&#125;, &#123;lop&#125;, &#123;so_tien&#125;, &#123;size&#125;, &#123;ngan_hang&#125;, &#123;noi_dung&#125;, &#123;thoi_gian&#125;, &#123;ma_gd&#125;)
-                </label>
-                <textarea
-                  rows={8}
-                  value={paymentTemplate}
-                  onChange={(e) => {
-                    setPaymentTemplate(e.target.value);
-                    saveBotConfig({ paymentTemplate: e.target.value });
-                  }}
-                  className="w-full rounded-2xl border border-slate-300 p-3 text-xs font-mono leading-relaxed focus:border-emerald-600 focus:outline-none"
-                />
-              </div>
+              {/* Cột Phải: Xem trước tin nhắn Zalo Live + Nhóm đích nhận tin */}
+              <div className="lg:col-span-5 flex flex-col items-center space-y-3">
+                <div className="w-full flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Xem trước trên Zalo (Live)
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${activeStyle.badge}`}>
+                    {activeScenario.shortTitle}
+                  </span>
+                </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span>Gợi ý mẫu:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const sample = "🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!";
-                    setPaymentTemplate(sample);
-                    saveBotConfig({ paymentTemplate: sample });
-                  }}
-                  className="rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 font-semibold hover:bg-emerald-100 cursor-pointer"
-                >
-                  Mẫu Chuẩn BLL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const sample = "💰 TING TING! SEPAY XÁC NHẬN ĐÓNG GÓP HỘI NGỘ 15 NĂM\n━━━━━━━━━━━━━━━━━━━━\n👤 Người chuyển: {ten} ({lop})\n💵 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📌 Mã GD: {ma_gd}\n⏰ Lúc: {thoi_gian}\n━━━━━━━━━━━━━━━━━━━━\n👏 BLL đã tự động khóa slot tham dự cho bạn!";
-                    setPaymentTemplate(sample);
-                    saveBotConfig({ paymentTemplate: sample });
-                  }}
-                  className="rounded-lg bg-slate-100 px-2 py-0.5 font-semibold hover:bg-slate-200 cursor-pointer"
-                >
-                  Mẫu Ngắn Gọn
-                </button>
-              </div>
+                {renderZaloPreview("", activeScenario.previewText)}
 
-              <div className="rounded-xl bg-blue-50/70 border border-blue-200 p-3 text-xs text-blue-900 leading-relaxed">
-                🎯 <strong>Cơ chế định tuyến Zalo:</strong> Khi SePay gửi webhook báo thanh toán thành công, hệ thống sẽ lọc nhóm Zalo nào có quyền <code>✓ Chuyển khoản</code> (mặc định là nhóm Ban Liên Lạc) để gửi tin. Các nhóm khác sẽ không bị làm phiền.
+                {/* Hiển thị rõ những nhóm Zalo nào sẽ nhận kịch bản này */}
+                <div className="w-full rounded-2xl bg-slate-50 border border-slate-200/80 p-3 text-[11px] text-slate-600">
+                  <div className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <Users size={12} className="text-ueh" />
+                    <span>Nhóm Zalo sẽ nhận tin này:</span>
+                  </div>
+                  {activeScenario.targetGroups.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {activeScenario.targetGroups.map((g) => (
+                        <span
+                          key={g.id}
+                          className="inline-flex items-center gap-1 rounded-lg bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-800"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          {g.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-amber-700 font-medium">
+                      Chưa có nhóm nào bật quyền này (vào tab &quot;Đấu nối Zalo &amp; Nhóm&quot; để bật).
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-
-            <div className="lg:col-span-5 flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 self-start px-1">
-                Xem trước tin nhắn Xác nhận chuyển khoản (Ví dụ mẫu)
-              </span>
-              {renderZaloPreview(
-                "",
-                paymentTemplate
-                  .replace("{ten}", "Cao Tuấn Hiệp")
-                  .replace("{lop}", "TC12")
-                  .replace("{so_tien}", "1.000.000")
-                  .replace("{size}", "XL (Nam)")
-                  .replace("{ngan_hang}", "MBBank")
-                  .replace("{noi_dung}", "TCDN4 CAO TUAN HIEP 0972555211")
-                  .replace("{thoi_gian}", "14:30 23/11/2026")
-                  .replace("{ma_gd}", "FT261123987654")
-              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* TAB 3: CHÚC MỪNG SINH NHẬT (TÍCH HỢP XEM TRƯỚC VÀ AI SOẠN TIN)           */}

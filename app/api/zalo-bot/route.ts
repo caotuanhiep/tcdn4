@@ -736,34 +736,52 @@ export async function POST(request: Request) {
     let botMessage = "";
     let summaryTitle = "";
 
+    // Kiểm tra công tắc Bật/Tắt tự động trong Admin (trừ khi Admin đang bấm Gửi thử isTest: true)
+    if (!payload.isTest) {
+      if (type === "checkin" && botConfig.autoCheckin === false) {
+        return NextResponse.json({ ok: true, skipped: true, message: "Thông báo điểm danh đang tắt." });
+      }
+      if (type === "registration" && botConfig.autoRegistration === false) {
+        return NextResponse.json({ ok: true, skipped: true, message: "Thông báo đăng ký 15 năm đang tắt." });
+      }
+      if ((type === "payment" || type === "sepay_payment_confirmed") && botConfig.autoPayment === false) {
+        return NextResponse.json({ ok: true, skipped: true, message: "Thông báo chuyển khoản SePay đang tắt." });
+      }
+      if (type === "guestbook" && botConfig.autoGuestbook === false) {
+        return NextResponse.json({ ok: true, skipped: true, message: "Thông báo lưu bút đang tắt." });
+      }
+    }
+
     // LUỒNG 1: ĐĂNG KÝ THAM GIA HỘI NGỘ 15 NĂM (CHỈ GỬI 1 LẦN / THÀNH VIÊN TRÁNH SPAM KHI ĐỔI SIZE ÁO)
     if (type === "registration") {
-      const { fullName, className, shirtSize, guestsCount, userId, phone } = payload;
+      const { fullName, className, shirtSize, guestsCount, userId, phone, isTest } = payload;
 
-      const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
-      const cleanName = (fullName || "").toLowerCase().trim();
-      const regKeys = [
-        userId ? `user_${userId}` : null,
-        cleanPhone ? `phone_${cleanPhone}` : null,
-        cleanName ? `name_${cleanName}` : null,
-      ].filter(Boolean) as string[];
+      if (!isTest) {
+        const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
+        const cleanName = (fullName || "").toLowerCase().trim();
+        const regKeys = [
+          userId ? `user_${userId}` : null,
+          cleanPhone ? `phone_${cleanPhone}` : null,
+          cleanName ? `name_${cleanName}` : null,
+        ].filter(Boolean) as string[];
 
-      const existingRegNotified = await loadCloudIdList(REGISTRATIONS_NOTIFIED_PATH);
-      if (regKeys.some((k) => existingRegNotified.includes(k))) {
-        appendWebhookLog({
-          event: "registration_skipped_duplicate",
-          fullName,
-          phone: cleanPhone,
-          userId,
-        });
-        return NextResponse.json({
-          ok: true,
-          skipped: true,
-          message: "Thành viên đã được gửi thông báo đăng ký 15 năm trước đó, bỏ qua để không gửi trùng.",
-        });
+        const existingRegNotified = await loadCloudIdList(REGISTRATIONS_NOTIFIED_PATH);
+        if (regKeys.some((k) => existingRegNotified.includes(k))) {
+          appendWebhookLog({
+            event: "registration_skipped_duplicate",
+            fullName,
+            phone: cleanPhone,
+            userId,
+          });
+          return NextResponse.json({
+            ok: true,
+            skipped: true,
+            message: "Thành viên đã được gửi thông báo đăng ký 15 năm trước đó, bỏ qua để không gửi trùng.",
+          });
+        }
+
+        await markCloudIdList(REGISTRATIONS_NOTIFIED_PATH, regKeys);
       }
-
-      await markCloudIdList(REGISTRATIONS_NOTIFIED_PATH, regKeys);
 
       let totalCount = 1;
       try {
@@ -792,35 +810,37 @@ export async function POST(request: Request) {
 
     // LUỒNG 2: THÔNG BÁO ĐIỂM DANH MỚI (CHỈ GỬI LẦN ĐẦU TIÊN KHI ĐIỂM DANH)
     else if (type === "checkin") {
-      const { fullName, className, jobTitle, company, location, userId, phone } = payload;
-      
-      const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
-      const cleanName = (fullName || "").toLowerCase().trim();
-      const keysToCheck = [
-        userId ? `user_${userId}` : null,
-        cleanPhone ? `phone_${cleanPhone}` : null,
-        cleanName ? `name_${cleanName}` : null,
-      ].filter(Boolean) as string[];
+      const { fullName, className, jobTitle, company, location, userId, phone, isTest } = payload;
 
-      const existingCheckins = await loadCheckins();
-      const isAlreadyNotified = keysToCheck.some((k) => existingCheckins.includes(k));
+      if (!isTest) {
+        const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
+        const cleanName = (fullName || "").toLowerCase().trim();
+        const keysToCheck = [
+          userId ? `user_${userId}` : null,
+          cleanPhone ? `phone_${cleanPhone}` : null,
+          cleanName ? `name_${cleanName}` : null,
+        ].filter(Boolean) as string[];
 
-      if (isAlreadyNotified) {
-        appendWebhookLog({
-          event: "checkin_skipped_duplicate",
-          fullName,
-          phone: cleanPhone,
-          userId,
-        });
-        return NextResponse.json({
-          ok: true,
-          skipped: true,
-          message: "Thành viên đã được gửi thông báo điểm danh trước đó, bỏ qua để không gửi lại.",
-        });
+        const existingCheckins = await loadCheckins();
+        const isAlreadyNotified = keysToCheck.some((k) => existingCheckins.includes(k));
+
+        if (isAlreadyNotified) {
+          appendWebhookLog({
+            event: "checkin_skipped_duplicate",
+            fullName,
+            phone: cleanPhone,
+            userId,
+          });
+          return NextResponse.json({
+            ok: true,
+            skipped: true,
+            message: "Thành viên đã được gửi thông báo điểm danh trước đó, bỏ qua để không gửi lại.",
+          });
+        }
+
+        // Đánh dấu đã gửi
+        await markCheckedIn(keysToCheck);
       }
-
-      // Đánh dấu đã gửi
-      await markCheckedIn(keysToCheck);
 
       summaryTitle = `Điểm danh mới: ${fullName} (${className || "K33"})`;
 
@@ -915,15 +935,20 @@ export async function POST(request: Request) {
       const cleanMsg = String(message || "").trim();
       const sender = fullName || "Đồng môn K33";
       const cls = className || "K33";
+      const shirtLine =
+        deliveryAddress && String(deliveryAddress).trim()
+          ? `\n👕 Đăng ký ship áo Polo size ${shirtSize || "L (Nam)"} về: ${String(deliveryAddress).trim()}`
+          : "";
 
       summaryTitle = `Lưu bút mới: ${sender} (${cls})`;
 
-      if (fromDecline) {
-        const shirtLine =
-          deliveryAddress && String(deliveryAddress).trim()
-            ? `\n👕 Đăng ký ship áo Polo size ${shirtSize || "L (Nam)"} về: ${String(deliveryAddress).trim()}`
-            : "";
-
+      if (botConfig.guestbookTemplate && botConfig.guestbookTemplate.trim().length > 0) {
+        botMessage = botConfig.guestbookTemplate
+          .replace(/\{ten\}/g, sender)
+          .replace(/\{lop\}/g, cls)
+          .replace(/\{loi_nhan\}/g, cleanMsg || "Chúc đại gia đình TCDN4 K33 hội ngộ thật vui!")
+          .replace(/\{ao_ship\}/g, shirtLine);
+      } else if (fromDecline) {
         botMessage =
           `💌 [LỜI NHẮN TỪ PHƯƠNG XA - SỔ LƯU BÚT TCDN4]\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
