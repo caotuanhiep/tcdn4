@@ -102,9 +102,16 @@ export default function Hero() {
           if (!cleanId && !cleanName && !cleanPhone) return;
 
           const existing = uniqueMembers.find((m) => {
-            if (cleanId && m.id && m.id === cleanId) return true;
-            if (cleanPhone && m.phone && m.phone === cleanPhone) return true;
-            if (cleanName && m.name && m.name === cleanName) return true;
+            // Match theo SĐT nếu cả 2 đều có SĐT
+            if (cleanPhone && m.phone && cleanPhone === m.phone) return true;
+            // Match theo ID nếu cả 2 đều có ID
+            if (cleanId && m.id && cleanId === m.id) return true;
+            // Chỉ match theo Tên nếu KHÔNG có xung đột về SĐT hoặc ID khác nhau
+            if (cleanName && m.name && cleanName === m.name) {
+              const phoneConflict = cleanPhone && m.phone && cleanPhone !== m.phone;
+              const idConflict = cleanId && m.id && cleanId !== m.id;
+              if (!phoneConflict && !idConflict) return true;
+            }
             return false;
           });
 
@@ -113,7 +120,10 @@ export default function Hero() {
             if (item.single) existing.single = true;
             if (!existing.id && cleanId) existing.id = cleanId;
             if (!existing.phone && cleanPhone) existing.phone = cleanPhone;
-            if (!existing.name && cleanName) existing.name = cleanName;
+            // Cập nhật tên nếu tên mới dài hơn / rõ hơn hoặc tên cũ bị trống
+            if (cleanName && (!existing.name || cleanName.length >= existing.name.length)) {
+              existing.name = cleanName;
+            }
           } else {
             uniqueMembers.push({
               id: cleanId,
@@ -125,16 +135,8 @@ export default function Hero() {
           }
         };
 
-        profiles.forEach((p: any) => {
-          addOrMerge({
-            id: p.id,
-            name: p.full_name,
-            phone: p.phone,
-            attending: p.attendance_status === "attending",
-            single: p.marital_status === "single",
-          });
-        });
-
+        // 1. Ưu tiên đưa danh sách đã đăng ký tham gia (regs) vào trước
+        // để ghi nhận chính xác tên người tham gia (tránh bị tên Google Account đè)
         regs.forEach((r: any) => {
           addOrMerge({
             id: r.id,
@@ -142,6 +144,17 @@ export default function Hero() {
             phone: r.phone,
             attending: true,
             single: false,
+          });
+        });
+
+        // 2. Sau đó nạp danh sách profiles từ database để bổ sung thành viên điểm danh / độc thân
+        profiles.forEach((p: any) => {
+          addOrMerge({
+            id: p.id,
+            name: p.full_name,
+            phone: p.phone,
+            attending: p.attendance_status === "attending",
+            single: p.marital_status === "single",
           });
         });
 

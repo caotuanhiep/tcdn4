@@ -103,14 +103,6 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
 
     if (dbProfiles && dbProfiles.length > 0) {
       const mergedList = [...stored];
-      const seen = new Set<string>();
-
-      mergedList.forEach((item) => {
-        if (item.phone) seen.add(item.phone.trim().toLowerCase());
-        if (item.fullName) seen.add(item.fullName.trim().toLowerCase());
-        if (item.id) seen.add(item.id.toLowerCase());
-      });
-
       for (const p of dbProfiles) {
         if (!p.full_name) continue;
         if (p.attendance_status === "not_attending") continue;
@@ -119,13 +111,22 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
         const nameKey = p.full_name.trim().toLowerCase();
         const idKey = p.id ? p.id.toLowerCase() : "";
 
-        const alreadyExists = (phoneKey && seen.has(phoneKey)) || seen.has(nameKey) || (idKey && seen.has(idKey));
+        const alreadyExists = mergedList.some((item) => {
+          const itemPhone = item.phone ? item.phone.trim().toLowerCase() : "";
+          const itemId = item.id ? item.id.toLowerCase() : "";
+          const itemName = item.fullName ? item.fullName.trim().toLowerCase() : "";
+
+          if (phoneKey && itemPhone && phoneKey === itemPhone) return true;
+          if (idKey && itemId && idKey === itemId) return true;
+          if (nameKey && itemName && nameKey === itemName) {
+            const phoneConflict = phoneKey && itemPhone && phoneKey !== itemPhone;
+            const idConflict = idKey && itemId && idKey !== itemId;
+            if (!phoneConflict && !idConflict) return true;
+          }
+          return false;
+        });
 
         if (!alreadyExists) {
-          if (phoneKey) seen.add(phoneKey);
-          seen.add(nameKey);
-          if (idKey) seen.add(idKey);
-
           const address =
             p.delivery_address?.trim() ||
             p.specific_location?.trim() ||

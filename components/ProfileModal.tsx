@@ -433,8 +433,11 @@ export default function ProfileModal({
         createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
       };
 
-      // Cập nhật profile
+      // Cập nhật profile (lưu đầy đủ họ tên, SĐT, lớp đã đăng ký)
       await updateProfile({
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        class_name: className,
         attendance_status: "attending",
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
