@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadZaloBotConfig, saveZaloBotConfig, ZaloGroupConfigItem } from "@/app/api/settings/zalo/route";
 import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
+import { loadMergedRegistrations } from "@/lib/alumni-server";
 import fs from "fs";
 import path from "path";
 
@@ -238,26 +239,21 @@ async function handleAlumniAiQuery(
   const dbSummary = await getAlumniDatabaseContext(cleanQuery);
   const bankInfo = dbSummary.bankInfo;
   const systemContext = dbSummary.rawTextContext;
-  const selectedModel = botConfig.aiModel || "claude-3-5-sonnet-20241022";
+  const selectedModel = botConfig.aiModel || "claude-sonnet-4-6";
   const activeKey = aiApiKey || botConfig.aiApiKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || process.env.GEMINI_API_KEY;
 
-  const systemPrompt = `Bạn là Bot AI K33 của Hội cựu sinh viên Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
-Nhiệm vụ: Trả lời câu hỏi của thành viên trong nhóm chat Zalo một cách CHÍNH XÁC 100%, thân tình, dí dỏm, hào sảng và đậm chất sinh viên UEH.
+  const systemPrompt = `Bạn là Bot AI K33 (tên hiển thị: ${botConfig.botName || "Bot Elephant"}) — trợ lý thông minh, hài hước, hào sảng và đậm chất sinh viên UEH của tập thể Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
 
-Quy tắc BẮT BUỘC:
-- MỌI số liệu (Ngân hàng, Số tài khoản, Chủ tài khoản, Số tiền đóng góp, Cú pháp chuyển khoản, Số lượng đã đăng ký, Danh sách đã chuyển khoản / chờ chuyển khoản, Tổng quỹ, Khu vực TP.HCM / Hà Nội / Tỉnh khác / Nước ngoài, Thông tin từng thành viên, Ban Liên Lạc, Sinh nhật...) PHẢI lấy ĐÚNG TUYỆT ĐỐI từ phần DỮ LIỆU THỰC TẾ ĐƯỢC CUNG CẤP bên dưới. Tuyệt đối KHÔNG bịa đặt hoặc tự suy đoán số tài khoản hay số liệu khác.
-- Khi được hỏi về số tài khoản, cách thức chuyển khoản, đóng quỹ, mức phí: ghi rõ Ngân hàng, Số tài khoản, Chủ tài khoản, Số tiền (${bankInfo.amountText}), Cú pháp chuyển khoản, và hướng dẫn quét VietQR tại https://tcdn4.top/#event (SePay tự động xác nhận).
-- Khi được hỏi về số người đăng ký / đã đóng tiền: báo chính xác số lượng đã đăng ký, số người đã chuyển khoản xác nhận, số người chờ chuyển khoản, và liệt kê tên các bạn.
-- Khi được hỏi về khu vực sinh sống (Hà Nội, TP.HCM, Tỉnh khác, Nước ngoài...): liệt kê chi tiết các bạn ở khu vực đó.
-- Khi được hỏi về thông tin của một thành viên cụ thể: tra cứu và trả lời rõ lớp, nghề nghiệp/công ty, khu vực, tình trạng đăng ký & chuyển khoản.
-- Trả lời ngắn gọn, súc tích, dễ đọc trên điện thoại Zalo (dùng gạch đầu dòng gọn gàng và emoji sinh động), không dùng cú pháp Markdown phức tạp như **bold** quá nhiều.
-- Xưng hô 'mình / bạn' hoặc 'em / anh chị', vui vẻ hóm hỉnh.`;
+Quy tắc trả lời:
+1. TRẢ LỜI TỰ DO MỌI CHỦ ĐỀ BÊN NGOÀI: Nếu thành viên nhờ làm thơ (thất ngôn tứ tuyệt, lục bát...), viết lời khích lệ đi họp lớp, kể chuyện vui, tư vấn quán ăn/nhậu, giải đáp kiến thức đời sống, tài chính, công việc hay trò chuyện phiếm -> HÃY PHÁT HUY TỐI ĐA TRÍ TUỆ CỦA BẠN để trả lời sáng tạo, tự nhiên, đúng trọng tâm câu hỏi! Tuyệt đối KHÔNG ép trả lời bằng danh sách/thống kê database khi câu hỏi không hỏi về số liệu lớp.
+2. CHÍNH XÁC 100% KHI HỎI DỮ LIỆU LỚP: Nếu câu hỏi có liên quan đến thông tin tập thể TCDN4 (số người đăng ký, ai đã đóng tiền, số tài khoản, mức phí ${bankInfo.amountText}, cú pháp CK, lịch họp 12/12, địa điểm, size áo, Ban Liên Lạc, danh sách anh em ở TP.HCM / Hà Nội / Nước ngoài, thông tin bạn bè, sinh nhật...) -> PHẢI trích xuất chính xác từ phần DỮ LIỆU THỰC TẾ bên dưới, tuyệt đối không bịa số liệu hay STK.
+3. PHONG CÁCH: Ngắn gọn, súc tích, dễ đọc trên màn hình điện thoại Zalo (dùng emoji vừa phải, không lạm dụng dấu ** markdown rối mắt), thân tình, xưng hô tự nhiên 'mình / bạn' hoặc 'em / anh chị'.`;
 
   let replyText = "";
   let usedProvider = "builtin-db";
   let usedModel = "k33-live-db";
 
-  // 2. GỌI CLAUDE AI HOẶC GEMINI VỚI DANH SÁCH MODEL DỰ PHÒNG TỰ ĐỘNG
+  // 2. GỌI CLAUDE AI HOẶC GEMINI VỚI DANH SÁCH MODEL ĐANG HOẠT ĐỘNG THỰC TẾ
   if (activeKey) {
     const isClaudeKey = activeKey.startsWith("sk-ant") || (!activeKey.startsWith("AIza") && activeKey.startsWith("sk-"));
     const preferClaude = isClaudeKey && !selectedModel.startsWith("gemini");
@@ -265,11 +261,11 @@ Quy tắc BẮT BUỘC:
     if (preferClaude) {
       const claudeCandidates = [
         selectedModel,
-        "claude-sonnet-4-20250514",
-        "claude-3-7-sonnet-20250219",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-5-haiku-20241022",
-        "claude-3-haiku-20240307",
+        "claude-sonnet-4-6",
+        "claude-sonnet-5-5",
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-5-20250929",
+        "claude-haiku-5-5",
       ].filter((v, i, a) => v && v.startsWith("claude") && a.indexOf(v) === i);
 
       for (const m of claudeCandidates) {
@@ -721,17 +717,10 @@ export async function POST(request: Request) {
     if (type === "registration") {
       const { fullName, className, shirtSize, guestsCount } = payload;
 
-      let totalCount = 35;
+      let totalCount = 1;
       try {
-        const supabaseAdmin = getSupabaseAdmin();
-        const { count } = await supabaseAdmin
-          .from("profiles")
-          .select("*", { count: "exact", head: true })
-          .eq("attendance_status", "attending");
-
-        if (count && count > 0) {
-          totalCount = count;
-        }
+        const allRegs = await loadMergedRegistrations();
+        if (allRegs.length > 0) totalCount = allRegs.length;
       } catch {}
 
       summaryTitle = `Đăng ký 15 năm: ${fullName} (${className || "K33"})`;
@@ -823,10 +812,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // LUỒNG 4: THÔNG BÁO XÁC NHẬN CHUYỂN KHOẢN (SEPAY)
+    // LUỒNG 4: THÔNG BÁO XÁC NHẬN CHUYỂN KHOẢN (SEPAY) — KÈM TỔNG SỐ NGƯỜI ĐÃ ĐĂNG KÝ & XÁC NHẬN
     else if (type === "payment" || type === "sepay_payment_confirmed") {
       const { fullName, className, paidAmount, shirtSize, bankGateway, content, transactionDate, referenceCode } = payload;
       summaryTitle = `Chuyển khoản thành công: ${fullName || "Thành viên"} (+${Number(paidAmount || 0).toLocaleString("vi-VN")} đ)`;
+
+      let totalAttending = 1;
+      let totalConfirmed = 1;
+      try {
+        const allRegs = await loadMergedRegistrations();
+        if (allRegs.length > 0) {
+          totalAttending = allRegs.length;
+          totalConfirmed = allRegs.filter((r) => r.status === "confirmed").length;
+        }
+      } catch {}
 
       if (botConfig.paymentTemplate && botConfig.paymentTemplate.trim().length > 0) {
         botMessage = botConfig.paymentTemplate
@@ -837,7 +836,14 @@ export async function POST(request: Request) {
           .replace(/\{ngan_hang\}/g, bankGateway || "Tài khoản lớp")
           .replace(/\{noi_dung\}/g, content || "Chuyển khoản")
           .replace(/\{thoi_gian\}/g, transactionDate || new Date().toLocaleString("vi-VN"))
-          .replace(/\{ma_gd\}/g, referenceCode || "N/A");
+          .replace(/\{ma_gd\}/g, referenceCode || "N/A")
+          .replace(/\{tong_so\}/g, String(totalAttending))
+          .replace(/\{da_xac_nhan\}/g, String(totalConfirmed));
+
+        // Nếu mẫu cũ chưa có số lượng tổng đăng ký -> tự động gắn thêm dòng thống kê realtime
+        if (!botConfig.paymentTemplate.includes("{tong_so}")) {
+          botMessage += `\n🍻 Tiến độ hiện tại: ${totalAttending} anh em đã đăng ký (${totalConfirmed} bạn đã xác nhận chuyển khoản)!\n👉 Xem danh sách: https://tcdn4.top/#event`;
+        }
       } else {
         botMessage = `🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -850,6 +856,7 @@ export async function POST(request: Request) {
           `🔢 Mã GD: ${referenceCode || "N/A"}\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n` +
+          `🍻 Tiến độ hiện tại: ${totalAttending} anh em đã đăng ký (${totalConfirmed} bạn đã xác nhận chuyển khoản)!\n` +
           `🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`;
       }
     }

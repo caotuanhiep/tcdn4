@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
       process.env.CLAUDE_API_KEY ||
       process.env.GEMINI_API_KEY;
 
-    // Chọn model AI phù hợp
-    const targetModel = requestedModel || savedConfig.aiModel || "claude-3-5-sonnet-20241022";
+    // Chọn model AI phù hợp (ưu tiên các model Claude đang hoạt động thực tế)
+    const targetModel = requestedModel || savedConfig.aiModel || "claude-sonnet-4-6";
 
     // 1. Trích xuất ngữ cảnh thời gian thực từ cơ sở dữ liệu Supabase
     const dbContext = await getAlumniDatabaseContext(topic || memberName || "");
@@ -70,11 +70,10 @@ export async function POST(req: NextRequest) {
 Bạn có quyền truy cập trực tiếp vào Cơ sở dữ liệu thời gian thực của website tcdn4.top:
 ${dbContext.rawTextContext}
 
-Phong cách trả lời:
-- Gần gũi, thân tình, hào sảng, đậm chất sinh viên UEH và giới tài chính doanh nghiệp.
-- Khi người dùng hỏi về dữ liệu (như: ai đang ở khu vực nào, có bao nhiêu người tham gia, tìm thông tin ai đó, sinh nhật ai), bạn hãy lấy số liệu chính xác từ cơ sở dữ liệu trên để trả lời rõ ràng, sinh động.
-- Trả lời ngắn gọn, súc tích (3-6 câu), có emoji phù hợp.
-- Link web tham khảo: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
+Quy tắc trả lời:
+- Nếu người dùng hỏi các câu hỏi ngoài database (làm thơ, khích lệ anh em, tư vấn quán ăn/nhậu, kiến thức tài chính, đời sống, trò chuyện vui...): trả lời sáng tạo, tự nhiên, đúng trọng tâm bằng đầy đủ trí tuệ của bạn.
+- Khi người dùng hỏi về dữ liệu lớp (ai ở khu vực nào, bao nhiêu người đăng ký/đóng tiền, STK ngân hàng, lịch họp 12/12, sinh nhật, tìm bạn...): lấy số liệu chính xác 100% từ cơ sở dữ liệu trên, tuyệt đối không bịa đặt.
+- Trả lời ngắn gọn, súc tích, thân tình, có emoji phù hợp. Link web tham khảo khi cần: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
 
     let userPrompt = "";
     if (tone === "chat") {
@@ -109,11 +108,11 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
       if (isClaude && !targetModel.includes("gemini")) {
         const candidateModels = [
           targetModel,
-          "claude-sonnet-4-20250514",
-          "claude-3-7-sonnet-20250219",
-          "claude-3-5-sonnet-20241022",
-          "claude-3-5-haiku-20241022",
-          "claude-3-haiku-20240307",
+          "claude-sonnet-4-6",
+          "claude-sonnet-5-5",
+          "claude-haiku-4-5-20251001",
+          "claude-sonnet-4-5-20250929",
+          "claude-haiku-5-5",
         ].filter((v, i, a) => v && v.startsWith("claude") && a.indexOf(v) === i);
 
         for (const m of candidateModels) {

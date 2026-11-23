@@ -58,7 +58,7 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
   botName: "TCDN4 K33 Bot",
   isTokenValid: true,
   aiApiKey: "",
-  aiModel: "claude-3-5-sonnet-20241022",
+  aiModel: "claude-sonnet-4-6",
   autoCheckin: true,
   autoRegistration: true,
   autoBirthday: true,
@@ -66,7 +66,7 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
   checkinTemplate: `🎉 ỐI DỒI ÔI CẢ NHÀ ƠI!\nSau 15 năm 'mất tích', cựu sinh viên {ten} ({lop}){nghe_nghiep}{khu_vuc} vừa chính thức lộ diện điểm danh trên Alumni Hub!\n👉 Anh em cùng khóa vào 'soi' hồ sơ và kết nối lại ngay nào: https://tcdn4.top/#directory`,
   registrationTemplate: `🔥 KÈO NÀY CĂNG ĐÂY ANH EM ƠI!\n👤 {ten} ({lop}){nguoi_nha} đã chính thức chốt slot họp mặt 15 năm tại Cơ sở B và rinh áo Polo size {size}!\n🍻 Đã có {tong_so} anh em lên thuyền sẵn sàng cụng ly ngày 12/12.\n👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`,
   birthdayTemplate: `🎂 ALO ALO CẢ NHÀ ƠI!\nHôm nay là sinh nhật của bạn {ten} ({lop})! 🎉\nThay mặt đại gia đình TCDN4 K33, chúc bạn tuổi mới ngày càng phong độ, tiền vào như nước Sông Sài Gòn, sự nghiệp thăng hoa và mãi giữ tinh thần trẻ khỏe thời sinh viên nhé! 🍻\n👉 Gửi lời chúc tới {ten}: https://tcdn4.top`,
-  paymentTemplate: `🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`,
+  paymentTemplate: `🔔 [XÁC NHẬN CHUYỂN KHOẢN THÀNH CÔNG - SEPAY]\n━━━━━━━━━━━━━━━━━━━━\n👤 Thành viên: {ten} ({lop})\n💰 Số tiền: +{so_tien} VNĐ\n👕 Size áo: {size}\n🏦 Ngân hàng: {ngan_hang}\n📝 Nội dung: {noi_dung}\n⏰ Thời gian: {thoi_gian}\n🔢 Mã GD: {ma_gd}\n━━━━━━━━━━━━━━━━━━━━\n✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n🍻 Tiến độ hiện tại: {tong_so} anh em đã đăng ký ({da_xac_nhan} bạn đã xác nhận chuyển khoản)!\n🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`,
   groups: [
     {
       id: "grp-all",

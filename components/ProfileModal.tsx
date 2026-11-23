@@ -324,7 +324,9 @@ export default function ProfileModal({
 
     setSaving(true);
     try {
-      const wasAlreadyAttending = Boolean(myRegistration);
+      const wasAlreadyAttending = Boolean(
+        myRegistration && profile?.attendance_status === "attending"
+      );
 
       // Ghi đè toàn bộ thông tin cá nhân + trạng thái tham gia + size áo + địa chỉ vào bảng profiles
       // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json trên Cloud)
@@ -335,10 +337,10 @@ export default function ProfileModal({
         delivery_address: deliveryAddress.trim(),
       });
 
-      // Chỉ gửi thông báo Zalo Bot nếu là lần đầu đăng ký tham gia
+      // Gửi thông báo Zalo Bot khi thành viên mới chốt đăng ký tham gia 15 năm
       if (!wasAlreadyAttending) {
         try {
-          void fetch("/api/zalo-bot", {
+          await fetch("/api/zalo-bot", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -999,8 +1001,15 @@ export default function ProfileModal({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowQrModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0"
+                    disabled={saving}
+                    onClick={() => {
+                      if (!myRegistration || profile?.attendance_status !== "attending") {
+                        void handleRegisterAttendance();
+                      } else {
+                        setShowQrModal(true);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0 disabled:opacity-50"
                   >
                     <QrCode size={13} className="text-ueh-gold" /> Mã VietQR
                   </button>

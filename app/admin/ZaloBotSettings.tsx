@@ -223,11 +223,19 @@ const AI_TONE_OPTIONS = [
 ];
 
 const AI_MODELS = [
-  { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", tag: "Mới nhất", desc: "Thế hệ mới nhất, tư duy & tổng hợp database xuất sắc" },
-  { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", tag: "Khuyên dùng", desc: "Hài hước, sắc sảo, tự nhiên, trả lời siêu chuẩn" },
-  { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", tag: "Siêu tốc", desc: "Phản hồi nhanh chớp mắt, tiết kiệm token" },
+  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", tag: "Khuyên dùng", desc: "Hài hước, làm thơ, chém gió & tra cứu database siêu chuẩn" },
+  { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", tag: "Mới nhất", desc: "Thế hệ mới nhất, tư duy & tổng hợp thông tin xuất sắc" },
+  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", tag: "Siêu tốc", desc: "Phản hồi nhanh chớp mắt, tiết kiệm chi phí token" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", tag: "Google AI", desc: "Tốc độ nhanh, ổn định từ hệ sinh thái Google" },
 ];
+
+const RETIRED_CLAUDE_MODELS = new Set([
+  "claude-3-7-sonnet-20250219",
+  "claude-sonnet-4-20250514",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-5-haiku-20241022",
+  "claude-3-haiku-20240307",
+]);
 
 export default function ZaloBotSettings() {
   const toast = useToast();
@@ -248,7 +256,8 @@ export default function ZaloBotSettings() {
   const [editingChatIdGroup, setEditingChatIdGroup] = useState<ZaloGroupItem | null>(null);
   const [customChatIdInput, setCustomChatIdInput] = useState("");
   const [claudeApiKey, setClaudeApiKey] = useState("");
-  const [aiModel, setAiModel] = useState("claude-3-5-sonnet-20241022");
+  const [aiModel, setAiModel] = useState("claude-sonnet-4-6");
+  const [isSavingAiConfig, setIsSavingAiConfig] = useState(false);
   const [aiChatQuery, setAiChatQuery] = useState("");
   const [aiChatResponse, setAiChatResponse] = useState<string | null>(null);
   const [isAiChatLoading, setIsAiChatLoading] = useState(false);
@@ -353,7 +362,11 @@ export default function ZaloBotSettings() {
           if (d.config.webhookUrl) setWebhookUrl(d.config.webhookUrl);
           if (d.config.botName) setBotName(d.config.botName);
           if (d.config.aiApiKey) setClaudeApiKey(d.config.aiApiKey);
-          if (d.config.aiModel) setAiModel(d.config.aiModel);
+          if (d.config.aiModel) {
+            setAiModel(
+              RETIRED_CLAUDE_MODELS.has(d.config.aiModel) ? "claude-sonnet-4-6" : d.config.aiModel
+            );
+          }
           if (typeof d.config.autoCheckin === "boolean") setAutoCheckin(d.config.autoCheckin);
           if (typeof d.config.autoRegistration === "boolean") setAutoRegistration(d.config.autoRegistration);
           if (typeof d.config.autoBirthday === "boolean") setAutoBirthday(d.config.autoBirthday);
@@ -386,18 +399,22 @@ export default function ZaloBotSettings() {
     scanBirthdays();
   }, []);
 
-  const saveBotConfig = async (patch: Record<string, any>) => {
+  const saveBotConfig = async (patch: Record<string, any>): Promise<boolean> => {
     try {
       const saved = localStorage.getItem("tcdn4_zalo_bot_config");
       const current = saved ? JSON.parse(saved) : {};
       const updated = { ...current, ...patch };
       localStorage.setItem("tcdn4_zalo_bot_config", JSON.stringify(updated));
 
-      await authFetch("/api/settings/zalo", {
+      const res = await authFetch("/api/settings/zalo", {
         method: "PUT",
         body: JSON.stringify(patch),
       });
-    } catch {}
+      const data = await res.json().catch(() => ({}));
+      return Boolean(res.ok && data?.success);
+    } catch {
+      return false;
+    }
   };
 
   const scanBirthdays = async () => {
@@ -1402,7 +1419,7 @@ export default function ZaloBotSettings() {
                   <Wand2 size={18} className="text-ueh-orange" /> Cấu Hình Claude AI & Tra Cứu Database K33
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tích hợp Claude 3.7 / 3.5 Sonnet truy cập dữ liệu thời gian thực từ Supabase để trả lời hỏi đáp và soạn thảo văn bản.
+                  Tích hợp Claude Sonnet 4.6 / 5.5 trả lời thông minh mọi câu hỏi (làm thơ, trò chuyện, tư vấn) và tra cứu dữ liệu thời gian thực từ Supabase.
                 </p>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 shrink-0 self-start sm:self-auto">
@@ -1421,26 +1438,12 @@ export default function ZaloBotSettings() {
                   type="password"
                   value={claudeApiKey}
                   onChange={(e) => setClaudeApiKey(e.target.value)}
-                  placeholder="Dán Anthropic Claude API Key (sk-ant-api...)"
+                  placeholder="Dán Anthropic Claude API Key (sk-ant-...)"
                   className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-mono focus:border-ueh focus:outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!claudeApiKey.trim()) {
-                      toast.error("Vui lòng nhập API Key của Claude!");
-                      return;
-                    }
-                    await saveBotConfig({ aiApiKey: claudeApiKey.trim(), aiModel });
-                    toast.success("Đã lưu khóa API và Model lên máy chủ! Dùng chung cho cả máy tính & điện thoại.");
-                  }}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 shrink-0 cursor-pointer"
-                >
-                  Lưu Khóa
-                </button>
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5">
-                Khóa API được lưu tập trung trên Supabase Storage máy chủ, mọi thiết bị Admin đều sử dụng chung mà không cần cấu hình lại.
+                Khóa API & Model được lưu tập trung trên Supabase Storage máy chủ, mọi thiết bị Admin và Bot Zalo đều dùng chung tức thời.
               </p>
             </div>
 
@@ -1456,11 +1459,7 @@ export default function ZaloBotSettings() {
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => {
-                        setAiModel(m.id);
-                        saveBotConfig({ aiModel: m.id });
-                        toast.success(`Đã kích hoạt model: ${m.name}`);
-                      }}
+                      onClick={() => setAiModel(m.id)}
                       className={`text-left p-3 rounded-2xl border transition-all cursor-pointer relative ${
                         isSelected
                           ? "bg-purple-50/80 border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
@@ -1485,6 +1484,43 @@ export default function ZaloBotSettings() {
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Nút Lưu Cấu Hình AI tổng (lưu cả Khóa API + Model lên máy chủ Cloud) */}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <div className="text-[11px] text-slate-500">
+                  Model đang chọn:{" "}
+                  <strong className="text-purple-700">
+                    {AI_MODELS.find((m) => m.id === aiModel)?.name || aiModel}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSavingAiConfig}
+                  onClick={async () => {
+                    if (!claudeApiKey.trim()) {
+                      toast.error("Vui lòng nhập API Key của Claude (hoặc Gemini)!");
+                      return;
+                    }
+                    setIsSavingAiConfig(true);
+                    const ok = await saveBotConfig({
+                      aiApiKey: claudeApiKey.trim(),
+                      aiModel,
+                    });
+                    setIsSavingAiConfig(false);
+                    if (ok) {
+                      toast.success(
+                        `Đã lưu cấu hình AI (${AI_MODELS.find((m) => m.id === aiModel)?.name || aiModel}) lên máy chủ thành công!`
+                      );
+                    } else {
+                      toast.error("Không thể lưu cấu hình AI lên máy chủ. Vui lòng kiểm tra quyền Admin và thử lại!");
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-purple-700 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50 cursor-pointer transition-all"
+                >
+                  <Save size={14} />
+                  <span>{isSavingAiConfig ? "Đang lưu lên máy chủ..." : "Lưu Cấu Hình AI"}</span>
+                </button>
               </div>
             </div>
 
