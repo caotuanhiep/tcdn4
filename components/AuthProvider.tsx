@@ -38,11 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileInitialTab, setProfileInitialTab] = useState<"info" | "attendance">("info");
 
   useEffect(() => {
-    // Tự động dọn dẹp dev mode mock nếu còn sót trong browser
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("tcdn4_dev_mode");
-      document.cookie = "tcdn4_dev_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }
+    const isDev =
+      typeof window !== "undefined" &&
+      (localStorage.getItem("tcdn4_dev_mode") === "admin" ||
+        document.cookie.includes("tcdn4_dev_mode=admin"));
 
     const supabase = getSupabase();
     let active = true;
@@ -109,6 +108,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: userRole,
         });
       }
+    }
+
+    if (isDev) {
+      const devUser = {
+        id: "647fb28f-2ab7-415e-84cd-87329017a7e0",
+        email: "caotuanhiep@gmail.com",
+        user_metadata: { full_name: "Hiệp Cao Tuấn" },
+      } as unknown as User;
+      setUser(devUser);
+      loadProfile(devUser).finally(() => active && setLoading(false));
+
+      const isFreshLogin =
+        typeof window !== "undefined" &&
+        (sessionStorage.getItem("tcdn4_auto_open_profile") === "1" ||
+          sessionStorage.getItem("tcdn4_just_logged_in") === "1");
+
+      if (isFreshLogin) {
+        try {
+          sessionStorage.removeItem("tcdn4_auto_open_profile");
+          sessionStorage.removeItem("tcdn4_just_logged_in");
+        } catch {}
+        setProfileInitialTab("info");
+        setProfileOpen(true);
+        setLoginOpen(false);
+      }
+      return () => {
+        active = false;
+      };
     }
 
     supabase.auth.getUser().then(({ data }) => {
