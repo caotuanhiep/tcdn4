@@ -105,7 +105,8 @@ export async function loadRegistrations(client?: SupabaseClient): Promise<Regist
       const mergedList = [...stored];
       for (const p of dbProfiles) {
         if (!p.full_name) continue;
-        if (p.attendance_status === "not_attending") continue;
+        // Chỉ thêm vào danh sách đăng ký nếu profile thực sự chọn tham gia (attending) và đã có số điện thoại liên hệ
+        if (p.attendance_status !== "attending" || !p.phone || p.phone.trim().length === 0) continue;
 
         const phoneKey = p.phone ? p.phone.trim().toLowerCase() : "";
         const nameKey = p.full_name.trim().toLowerCase();

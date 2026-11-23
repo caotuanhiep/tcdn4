@@ -6,6 +6,60 @@ import fs from "fs";
 import path from "path";
 
 const WEBHOOK_LOGS_PATH = path.join(process.cwd(), "data", "zalo-webhook-logs.json");
+const CHECKINS_PATH = "settings/zalo-checkins.json";
+const LOCAL_CHECKINS_PATH = path.join(process.cwd(), "data", "zalo-checkins.json");
+
+// Đọc danh sách định danh các thành viên đã gửi thông báo điểm danh Zalo
+async function loadCheckins(): Promise<string[]> {
+  try {
+    if (fs.existsSync(LOCAL_CHECKINS_PATH)) {
+      const data = JSON.parse(fs.readFileSync(LOCAL_CHECKINS_PATH, "utf-8"));
+      if (Array.isArray(data)) return data;
+    }
+  } catch {}
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(CHECKINS_PATH);
+    if (pub?.publicUrl) {
+      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const parsed = JSON.parse(await res.text());
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch {}
+
+  return [];
+}
+
+// Lưu định danh thành viên đã điểm danh để không bao giờ gửi lại lần 2
+async function markCheckedIn(identifiers: string[]): Promise<void> {
+  const list = await loadCheckins();
+  let changed = false;
+  for (const id of identifiers) {
+    if (id && !list.includes(id)) {
+      list.push(id);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+
+  try {
+    const dir = path.dirname(LOCAL_CHECKINS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(LOCAL_CHECKINS_PATH, JSON.stringify(list, null, 2), "utf-8");
+  } catch {}
+
+  try {
+    const supabase = getSupabaseAdmin();
+    await supabase.storage.from("alumni-media").upload(
+      CHECKINS_PATH,
+      Buffer.from(JSON.stringify(list, null, 2), "utf-8"),
+      { contentType: "application/json", upsert: true }
+    );
+  } catch {}
+}
 
 // Helper ghi nhận nhật ký webhook gần nhất để debug khi cần
 function appendWebhookLog(entry: any) {
@@ -597,9 +651,38 @@ export async function POST(request: Request) {
         `👉 Ai chưa chốt thì vào lẹ kẻo hết bàn nhé: https://tcdn4.top/#event`;
     }
 
-    // LUỒNG 2: THÔNG BÁO ĐIỂM DANH MỚI
+    // LUỒNG 2: THÔNG BÁO ĐIỂM DANH MỚI (CHỈ GỬI LẦN ĐẦU TIÊN KHI ĐIỂM DANH)
     else if (type === "checkin") {
-      const { fullName, className, jobTitle, company, location } = payload;
+      const { fullName, className, jobTitle, company, location, userId, phone } = payload;
+      
+      const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
+      const cleanName = (fullName || "").toLowerCase().trim();
+      const keysToCheck = [
+        userId ? `user_${userId}` : null,
+        cleanPhone ? `phone_${cleanPhone}` : null,
+        cleanName ? `name_${cleanName}` : null,
+      ].filter(Boolean) as string[];
+
+      const existingCheckins = await loadCheckins();
+      const isAlreadyNotified = keysToCheck.some((k) => existingCheckins.includes(k));
+
+      if (isAlreadyNotified) {
+        appendWebhookLog({
+          event: "checkin_skipped_duplicate",
+          fullName,
+          phone: cleanPhone,
+          userId,
+        });
+        return NextResponse.json({
+          ok: true,
+          skipped: true,
+          message: "Thành viên đã được gửi thông báo điểm danh trước đó, bỏ qua để không gửi lại.",
+        });
+      }
+
+      // Đánh dấu đã gửi
+      await markCheckedIn(keysToCheck);
+
       summaryTitle = `Điểm danh mới: ${fullName} (${className || "K33"})`;
 
       const jobInfo = jobTitle ? ` đang làm ${jobTitle}${company ? ` tại ${company}` : ""}` : "";

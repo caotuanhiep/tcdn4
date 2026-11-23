@@ -106,9 +106,13 @@ export default function ProfileModal({
   const [maritalStatus, setMaritalStatus] = useState<string>(profile?.marital_status || "married");
   const [childrenCount, setChildrenCount] = useState<number>(profile?.children_count ?? 1);
 
-  // Điểm danh Hội ngộ 15 Năm
-  const [attendanceStatus, setAttendanceStatus] = useState<"attending" | "not_attending">(
-    (profile?.attendance_status as any) === "not_attending" ? "not_attending" : "attending"
+  // Điểm danh Hội ngộ 15 Năm: chỉ gán giá trị nếu profile đã lưu rõ ràng
+  const [attendanceStatus, setAttendanceStatus] = useState<"attending" | "not_attending" | "unregistered">(
+    profile?.attendance_status === "attending"
+      ? "attending"
+      : profile?.attendance_status === "not_attending"
+      ? "not_attending"
+      : "unregistered"
   );
   const [shirtSize, setShirtSize] = useState(profile?.shirt_size || "L (Nam)");
   const [deliveryAddress, setDeliveryAddress] = useState(profile?.delivery_address || "");
@@ -125,6 +129,23 @@ export default function ProfileModal({
 
   // Đọc thông tin phiếu đăng ký hiện tại (nếu có)
   const [myRegistration, setMyRegistration] = useState<any>(null);
+
+  // Đồng bộ state khi profile nạp từ server
+  useEffect(() => {
+    if (profile) {
+      if (profile.full_name && !fullName) setFullName(profile.full_name);
+      if (profile.class_name && !className) setClassName(profile.class_name);
+      if (profile.job_title && !jobTitle) setJobTitle(profile.job_title);
+      if (profile.company && !company) setCompany(profile.company);
+      if (profile.phone && !phone) setPhone(profile.phone);
+      if (profile.avatar_url && !avatarUrl) setAvatarUrl(profile.avatar_url);
+      if (profile.birthday && !birthday) setBirthday(profile.birthday);
+      if (profile.bio && !bio) setBio(profile.bio);
+      if (profile.attendance_status === "attending") setAttendanceStatus("attending");
+      else if (profile.attendance_status === "not_attending") setAttendanceStatus("not_attending");
+      if (profile.shirt_size && !shirtSize) setShirtSize(profile.shirt_size);
+    }
+  }, [profile]);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -147,17 +168,16 @@ export default function ProfileModal({
       const stored = localStorage.getItem("tcdn4_registrations");
       const list = stored ? JSON.parse(stored) : [];
       const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
-      const userName = (fullName || profile?.full_name || "").toLowerCase().trim();
       const myReg = list.find((r: any) => {
         if (user?.id && r.id === user.id) return true;
-        if (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
-        if (userName && (r.fullName || "").toLowerCase().trim() === userName) return true;
+        if (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
         return false;
       });
       if (myReg) {
         setMyRegistration(myReg);
         if (myReg.shirtSize) setShirtSize(myReg.shirtSize);
         if (myReg.address) setDeliveryAddress(myReg.address);
+        setAttendanceStatus("attending");
       }
     } catch {}
   }, [user, profile, phone, fullName]);
@@ -175,12 +195,10 @@ export default function ProfileModal({
         if (!Array.isArray(list)) return;
 
         const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
-        const userName = (fullName || profile?.full_name || "").toLowerCase().trim();
 
         const serverReg = list.find((r: any) => {
           if (user?.id && r.id === user.id) return true;
-          if (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
-          if (userName && (r.fullName || "").toLowerCase().trim() === userName) return true;
+          if (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
           return false;
         });
 
@@ -198,6 +216,7 @@ export default function ProfileModal({
           });
           if (serverReg.shirtSize) setShirtSize(serverReg.shirtSize);
           if (serverReg.address) setDeliveryAddress(serverReg.address);
+          setAttendanceStatus("attending");
 
           // Cập nhật lại localStorage để toàn app đồng bộ
           try {
@@ -205,8 +224,7 @@ export default function ProfileModal({
             const localList: any[] = stored ? JSON.parse(stored) : [];
             const idx = localList.findIndex((r: any) =>
               (user?.id && r.id === user.id) ||
-              (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) ||
-              (userName && (r.fullName || "").toLowerCase().trim() === userName)
+              (userPhone && userPhone.length >= 9 && (r.phone || "").replace(/[^0-9]/g, "") === userPhone)
             );
             if (idx >= 0) {
               localList[idx] = { ...localList[idx], ...serverReg };
@@ -293,10 +311,13 @@ export default function ProfileModal({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Helper gửi thông báo điểm danh thành viên mới vào Zalo Bot (chỉ gửi lần đầu, không spam)
+  // Helper gửi thông báo điểm danh thành viên mới vào Zalo Bot (chỉ gửi lần đầu tiên khi điểm danh, không spam)
   const triggerCheckinNotificationIfNeeded = () => {
+    // Nếu hồ sơ trước đó đã có số điện thoại lưu sẵn, nghĩa là thành viên này đã từng lưu hồ sơ trước đó rồi
+    const hasAlreadySavedBefore = Boolean(profile?.phone && profile.phone.trim().length > 0);
     const checkinKey = `tcdn4_zalo_checkin_${user?.id || phone.trim()}`;
     const alreadyNotified = Boolean(
+      hasAlreadySavedBefore ||
       profile?.has_checked_in ||
       (typeof window !== "undefined" && localStorage.getItem(checkinKey))
     );
@@ -308,6 +329,8 @@ export default function ProfileModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "checkin",
+            userId: user?.id,
+            phone: phone.trim(),
             fullName: fullName.trim(),
             className,
             jobTitle: jobTitle.trim(),
@@ -576,57 +599,6 @@ export default function ProfileModal({
             Cập nhật danh bạ TC10 • TC11 • TC12 & đăng ký gặp mặt 15 năm (12/12/2026).
           </p>
         </div>
-
-        {/* Thẻ Trạng thái Tham gia 15 Năm (Gọn gàng & Chuyên nghiệp) */}
-        {myRegistration?.status === "confirmed" ? (
-          <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-              <div className="text-xs font-bold text-emerald-950 truncate">
-                ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
-              </div>
-            </div>
-            <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">100% OK</span>
-          </div>
-        ) : (myRegistration?.status === "pending" || (attendanceStatus === "attending" && myRegistration)) ? (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
-                <QrCode size={16} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-amber-950 truncate">
-                  ĐÃ ĐĂNG KÝ THAM GIA • Chờ chuyển khoản
-                </div>
-                <div className="text-[10px] text-amber-800 truncate">
-                  Size áo: {myRegistration?.shirtSize || shirtSize} • {bankInfo.amountText}
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowQrModal(true)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-ueh transition-colors"
-            >
-              <QrCode size={12} className="text-ueh-gold" />
-              <span>Mã QR</span>
-            </button>
-          </div>
-        ) : attendanceStatus === "not_attending" ? (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 mb-3">
-            <span className="text-[11px] font-medium text-slate-600 truncate">Trạng thái: Đã gửi lời chúc (Không tham gia)</span>
-            <button
-              type="button"
-              onClick={() => {
-                setAttendanceStatus("attending");
-                setActiveTab("attendance");
-              }}
-              className="rounded-lg bg-ueh px-2.5 py-1 text-[11px] font-bold text-white hover:bg-ueh-light shrink-0"
-            >
-              Đổi ý tham gia
-            </button>
-          </div>
-        ) : null}
 
         {/* 2 Tabs chuyển đổi mượt mà */}
         <div className="flex rounded-xl bg-slate-100 p-1 mb-3.5">
@@ -1023,6 +995,56 @@ export default function ProfileModal({
         {/* ========================================================= */}
         {activeTab === "attendance" && (
           <div className="space-y-3.5 animate-in fade-in duration-150">
+            {/* Thẻ Trạng thái Tham gia 15 Năm (Chỉ hiện trong Tab 2 khi ĐÃ đăng ký) */}
+            {myRegistration?.status === "confirmed" ? (
+              <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <div className="text-xs font-bold text-emerald-950 truncate">
+                    ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
+                  </div>
+                </div>
+                <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">100% OK</span>
+              </div>
+            ) : myRegistration?.status === "pending" ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+                    <QrCode size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-amber-950 truncate">
+                      ĐÃ ĐĂNG KÝ THAM GIA • Chờ chuyển khoản
+                    </div>
+                    <div className="text-[10px] text-amber-800 truncate">
+                      Size áo: {myRegistration?.shirtSize || shirtSize} • {bankInfo.amountText}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQrModal(true)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-ueh transition-colors"
+                >
+                  <QrCode size={12} className="text-ueh-gold" />
+                  <span>Mã QR</span>
+                </button>
+              </div>
+            ) : attendanceStatus === "not_attending" ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <span className="text-[11px] font-medium text-slate-600 truncate">Trạng thái: Đã gửi lời chúc (Không tham gia)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttendanceStatus("attending");
+                  }}
+                  className="rounded-lg bg-ueh px-2.5 py-1 text-[11px] font-bold text-white hover:bg-ueh-light shrink-0"
+                >
+                  Đổi ý tham gia
+                </button>
+              </div>
+            ) : null}
+
             {/* Lựa chọn Tham gia hoặc Không tham gia */}
             <div className="rounded-xl border border-blue-200/80 bg-blue-50/50 p-3">
               <div className="text-[11px] font-bold uppercase text-ueh mb-2 flex items-center justify-between">
@@ -1209,7 +1231,7 @@ export default function ProfileModal({
                   )}
                   <span>Đăng ký tham gia & Nhận mã QR</span>
                 </button>
-              ) : (
+              ) : attendanceStatus === "not_attending" ? (
                 <button
                   type="button"
                   onClick={handleDeclineAndSendWish}
@@ -1218,6 +1240,14 @@ export default function ProfileModal({
                 >
                   <MessageSquare size={15} />
                   <span>Gửi lời nhắn nhủ & Lời chúc</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAttendanceStatus("attending")}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-ueh active:scale-98 transition-all"
+                >
+                  <span>Chọn đăng ký tham gia →</span>
                 </button>
               )}
             </div>

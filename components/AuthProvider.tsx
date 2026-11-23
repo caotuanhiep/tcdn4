@@ -71,7 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data: created } = await supabase
           .from("profiles")
-          .insert({ id: u.id, full_name: fullName, avatar_url: avatarUrl, role: "member" })
+          .insert({
+            id: u.id,
+            full_name: fullName,
+            avatar_url: avatarUrl,
+            role: "member",
+            attendance_status: null,
+            shirt_size: null,
+          })
           .select("*")
           .maybeSingle();
         if (active && created) {
