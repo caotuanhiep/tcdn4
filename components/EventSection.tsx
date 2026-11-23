@@ -140,32 +140,34 @@ export default function EventSection() {
           .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
 
         if (dbProfiles && dbProfiles.length > 0) {
-          const seenPhones = new Set<string>();
-          const seenNames = new Set<string>();
-          const seenIds = new Set<string>();
-
-          combined.forEach((r) => {
-            if (r.id) seenIds.add(String(r.id).toLowerCase());
-            if (r.phone) seenPhones.add(r.phone.replace(/[^0-9]/g, ""));
-            if (r.fullName) seenNames.add(r.fullName.trim().toLowerCase());
-          });
-
           for (const p of dbProfiles) {
             if (!p.full_name || p.attendance_status === "not_attending") continue;
             const pId = p.id ? String(p.id).toLowerCase() : "";
             const pPhone = p.phone ? p.phone.replace(/[^0-9]/g, "") : "";
             const pName = p.full_name.trim().toLowerCase();
 
-            const isDuplicate = 
-              (pId && seenIds.has(pId)) ||
-              (pPhone && seenPhones.has(pPhone)) ||
-              (pName && seenNames.has(pName));
+            // Tìm xem người này đã có trong danh sách đăng ký hay chưa
+            const existing = combined.find((r) => {
+              const rPhone = (r.phone || "").replace(/[^0-9]/g, "");
+              const rId = String(r.id || "").toLowerCase();
+              const rName = (r.fullName || "").trim().toLowerCase();
 
-            if (!isDuplicate) {
-              if (pId) seenIds.add(pId);
-              if (pPhone) seenPhones.add(pPhone);
-              if (pName) seenNames.add(pName);
+              if (pPhone && rPhone && pPhone === rPhone) return true;
+              if (pId && rId && pId === rId) return true;
+              if (pName && rName && pName === rName) {
+                const phoneConflict = pPhone && rPhone && pPhone !== rPhone;
+                const idConflict = pId && rId && pId !== rId;
+                if (!phoneConflict && !idConflict) return true;
+              }
+              return false;
+            });
 
+            if (existing) {
+              // Bổ sung avatar từ profile nếu danh sách đăng ký chưa có avatar
+              if (!existing.avatarUrl && p.avatar_url) {
+                existing.avatarUrl = p.avatar_url;
+              }
+            } else {
               combined.push({
                 id: p.id,
                 fullName: p.full_name.trim(),

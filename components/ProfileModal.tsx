@@ -551,136 +551,112 @@ export default function ProfileModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-xl rounded-3xl bg-white p-5 sm:p-7 shadow-2xl overflow-y-auto max-h-[92vh]"
+        className="relative w-full max-w-lg rounded-2xl sm:rounded-3xl bg-white p-4 sm:p-6 shadow-2xl overflow-y-auto max-h-[92vh] sm:max-h-[88vh] overscroll-contain"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
           aria-label="Đóng"
-          className="absolute right-4 top-4 rounded-full bg-slate-100 p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+          className="absolute right-3.5 top-3.5 rounded-full bg-slate-100 p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
         >
           <X size={18} />
         </button>
 
-        {/* Header Tiêu đề */}
-        <div className="mb-4 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-bold text-ueh border border-blue-100 mb-1.5">
-            <Sparkles size={13} className="text-ueh-orange" /> Kỷ niệm 15 năm TCDN4 - K33 UEH
+        {/* Header Tiêu đề gọn gàng */}
+        <div className="mb-3 pr-8">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg sm:text-xl font-black text-ueh tracking-tight">
+              Điểm Danh & Hồ Sơ Thành Viên
+            </h3>
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-ueh border border-blue-100">
+              K33 UEH
+            </span>
           </div>
-          <h3 className="text-xl font-black text-ueh sm:text-2xl">
-            Điểm Danh & Hồ Sơ Thành Viên TC4-ers
-          </h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-            Cập nhật thông tin vào Danh bạ K33 và đăng ký tham dự ngày hội ngộ 12/12/2026.
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-snug">
+            Cập nhật danh bạ TC10 • TC11 • TC12 & đăng ký gặp mặt 15 năm (12/12/2026).
           </p>
         </div>
 
-        {/* Thẻ Trạng thái Tham gia 15 Năm (Yêu cầu Bước 8) */}
-        <div className="mb-4">
-          {myRegistration?.status === "confirmed" ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50/90 p-3 sm:p-3.5 text-emerald-900 shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-xs">
-                  <CheckCircle2 size={20} />
+        {/* Thẻ Trạng thái Tham gia 15 Năm (Gọn gàng & Chuyên nghiệp) */}
+        {myRegistration?.status === "confirmed" ? (
+          <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <div className="text-xs font-bold text-emerald-950 truncate">
+                ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
+              </div>
+            </div>
+            <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">100% OK</span>
+          </div>
+        ) : (myRegistration?.status === "pending" || (attendanceStatus === "attending" && myRegistration)) ? (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+                <QrCode size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-amber-950 truncate">
+                  ĐÃ ĐĂNG KÝ THAM GIA • Chờ chuyển khoản
                 </div>
-                <div>
-                  <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
-                    <span>ĐÃ XÁC NHẬN THAM GIA & THANH TOÁN THÀNH CÔNG</span>
-                    <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800">100% OK</span>
-                  </div>
-                  <div className="text-[11px] text-emerald-800 mt-0.5">
-                    Áo Polo: <strong>{myRegistration.shirtSize || shirtSize}</strong> • Hẹn gặp bạn ngày 12/12/2026 tại Cơ sở B!
-                  </div>
+                <div className="text-[10px] text-amber-800 truncate">
+                  Size áo: {myRegistration?.shirtSize || shirtSize} • {bankInfo.amountText}
                 </div>
               </div>
             </div>
-          ) : (myRegistration?.status === "pending" || (attendanceStatus === "attending" && myRegistration)) ? (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl border border-amber-300 bg-amber-50/90 p-3 sm:p-3.5 text-amber-900 shadow-xs">
-              <div className="flex items-start gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs mt-0.5 sm:mt-0">
-                  <QrCode size={19} />
-                </div>
-                <div>
-                  <div className="text-xs font-black text-amber-950">
-                    ĐÃ ĐĂNG KÝ THAM GIA • CHỜ CHUYỂN KHOẢN ({bankInfo.amountText})
-                  </div>
-                  <div className="text-[11px] text-amber-800 mt-0.5">
-                    Quét mã VietQR để hệ thống SePay tự động xác nhận slot họp mặt & size áo {myRegistration?.shirtSize || shirtSize}.
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowQrModal(true)}
-                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-ueh transition-colors"
-              >
-                <QrCode size={14} className="text-ueh-gold" />
-                <span>Mở Mã VietQR</span>
-              </button>
-            </div>
-          ) : attendanceStatus === "not_attending" ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              <div>
-                <div className="font-bold text-slate-800">Trạng thái: Đã gửi lời chúc mừng (Không tham gia)</div>
-                <div className="text-[11px] text-slate-500">Bạn có thể đổi ý bất cứ lúc nào trước ngày 12/12.</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setAttendanceStatus("attending");
-                  setActiveTab("attendance");
-                }}
-                className="rounded-xl bg-ueh px-3 py-1.5 text-xs font-bold text-white hover:bg-ueh-light"
-              >
-                Đổi ý tham gia
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200/80 bg-blue-50/60 p-3 text-xs text-slate-700">
-              <div>
-                <div className="font-bold text-ueh">Bạn chưa đăng ký tham gia gặp mặt 15 năm</div>
-                <div className="text-[11px] text-slate-500">Hãy cập nhật thông tin và chọn áo Polo để giữ slot nhé!</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("attendance")}
-                className="rounded-xl bg-ueh px-3 py-1.5 text-xs font-bold text-white hover:bg-ueh-light"
-              >
-                Đăng ký ngay →
-              </button>
-            </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => setShowQrModal(true)}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-ueh transition-colors"
+            >
+              <QrCode size={12} className="text-ueh-gold" />
+              <span>Mã QR</span>
+            </button>
+          </div>
+        ) : attendanceStatus === "not_attending" ? (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 mb-3">
+            <span className="text-[11px] font-medium text-slate-600 truncate">Trạng thái: Đã gửi lời chúc (Không tham gia)</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAttendanceStatus("attending");
+                setActiveTab("attendance");
+              }}
+              className="rounded-lg bg-ueh px-2.5 py-1 text-[11px] font-bold text-white hover:bg-ueh-light shrink-0"
+            >
+              Đổi ý tham gia
+            </button>
+          </div>
+        ) : null}
 
-        {/* 2 Tabs Chuyển đổi mượt mà */}
-        <div className="flex rounded-2xl bg-slate-100 p-1 mb-5">
+        {/* 2 Tabs chuyển đổi mượt mà */}
+        <div className="flex rounded-xl bg-slate-100 p-1 mb-3.5">
           <button
             type="button"
             onClick={() => setActiveTab("info")}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
               activeTab === "info"
                 ? "bg-white text-ueh shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <UserCheck size={15} className={activeTab === "info" ? "text-ueh" : ""} />
-            <span>1. Thông tin cá nhân (Điểm danh)</span>
+            <UserCheck size={14} className={activeTab === "info" ? "text-ueh" : ""} />
+            <span>1. Thông tin cá nhân</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("attendance")}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
               activeTab === "attendance"
                 ? "bg-white text-ueh-orange shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Shirt size={15} className={activeTab === "attendance" ? "text-ueh-orange" : ""} />
+            <Shirt size={14} className={activeTab === "attendance" ? "text-ueh-orange" : ""} />
             <span>2. Đăng ký gặp mặt 15 năm</span>
             {myRegistration?.status === "confirmed" ? (
-              <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             ) : myRegistration?.status === "pending" ? (
-              <span className="flex h-2 w-2 rounded-full bg-amber-500" />
+              <span className="flex h-1.5 w-1.5 rounded-full bg-amber-500" />
             ) : null}
           </button>
         </div>
@@ -689,21 +665,13 @@ export default function ProfileModal({
         {/* TAB 1: THÔNG TIN CÁ NHÂN (ĐIỂM DANH)                      */}
         {/* ========================================================= */}
         {activeTab === "info" && (
-          <div className="space-y-4 animate-in fade-in duration-150">
-            {/* Khuyến khích đổi ảnh đại diện cá nhân rõ mặt */}
-            <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 p-3 text-xs text-amber-900 flex items-start gap-2.5">
-              <Sparkles size={17} className="text-amber-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <strong className="text-amber-800">Khuyến khích:</strong> Bạn hãy tải lên ảnh đại diện cá nhân rõ mặt để bạn bè cùng khóa TC10, TC11, TC12 dễ dàng nhận ra nhau sau 15 năm nhé!
-              </div>
-            </div>
-
-            {/* Avatar Section: Chạm vào avatar để đổi ảnh ngay, gợi ý 2 option mặc định */}
-            <div className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/70">
+          <div className="space-y-3 animate-in fade-in duration-150">
+            {/* Avatar Section: Gọn gàng, chạm vào avatar để đổi ảnh ngay */}
+            <div className="flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200/80 bg-slate-50/70">
               <label className="relative shrink-0 cursor-pointer group" title="Chạm vào để tải ảnh từ máy / điện thoại">
-                <div className="h-20 w-20 sm:h-22 sm:w-22 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl relative">
+                <div className="h-16 w-16 sm:h-18 sm:w-18 overflow-hidden rounded-full ring-3 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-xl relative">
                   {uploadingAvatar ? (
-                    <Loader2 size={24} className="animate-spin text-white" />
+                    <Loader2 size={20} className="animate-spin text-white" />
                   ) : avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={avatarUrl} alt={fullName} className="h-full w-full object-cover" />
@@ -712,15 +680,15 @@ export default function ProfileModal({
                   )}
 
                   {/* Lớp phủ đổi ảnh khi hover */}
-                  <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-                    <Camera size={20} className="text-ueh-gold mb-0.5" />
-                    <span className="text-[10px] font-bold">Đổi ảnh</span>
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                    <Camera size={16} className="text-ueh-gold mb-0.5" />
+                    <span className="text-[9px] font-bold">Đổi ảnh</span>
                   </div>
                 </div>
 
                 {/* Icon Camera góc dưới */}
-                <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ueh text-white shadow-md border-2 border-white group-hover:scale-110 transition-transform">
-                  <Camera size={12} className="text-ueh-gold" />
+                <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full bg-ueh text-white shadow-sm border border-white">
+                  <Camera size={10} className="text-ueh-gold" />
                 </span>
 
                 <input
@@ -733,26 +701,26 @@ export default function ProfileModal({
               </label>
 
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-800">
-                  {uploadingAvatar ? "Đang tải ảnh lên..." : "Ảnh đại diện thành viên"}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5 mb-2.5">
-                  Chạm trực tiếp vào ảnh để tải ảnh từ máy hoặc điện thoại.
-                </p>
+                <div className="text-xs font-bold text-slate-800">
+                  {uploadingAvatar ? "Đang tải ảnh..." : "Ảnh đại diện thành viên"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5 mb-1.5">
+                  Chạm ảnh để tải lên từ điện thoại / máy tính (rõ mặt để bạn bè nhận ra nhé).
+                </div>
 
                 {/* 2 Option ảnh mặc định gợi ý duy nhất */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">
-                    Ảnh mặc định:
+                    Mặc định:
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {DEFAULT_AVATARS.map((item) => (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => setAvatarUrl(item.src)}
                         title={`Chọn ${item.label}`}
-                        className={`h-9 w-9 overflow-hidden rounded-full border-2 transition-all hover:scale-105 ${
+                        className={`h-7 w-7 overflow-hidden rounded-full border-2 transition-all hover:scale-105 ${
                           avatarUrl === item.src
                             ? "border-ueh ring-2 ring-blue-200 scale-105 shadow-xs"
                             : "border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300"
@@ -768,9 +736,9 @@ export default function ProfileModal({
             </div>
 
             {/* Họ tên & Lớp */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Họ và Tên *
                 </label>
                 <input
@@ -779,18 +747,18 @@ export default function ProfileModal({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="VD: Cao Tuấn Hiệp"
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none focus:ring-1 focus:ring-ueh"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none focus:ring-1 focus:ring-ueh"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Lớp sinh viên
                 </label>
                 <select
                   value={className}
                   onChange={(e) => setClassName(e.target.value as any)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
                 >
                   <option value="TC10">Lớp TC10 - K33 UEH</option>
                   <option value="TC11">Lớp TC11 - K33 UEH</option>
@@ -800,9 +768,9 @@ export default function ProfileModal({
             </div>
 
             {/* Số điện thoại & Ngày sinh */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Số điện thoại / Zalo *
                 </label>
                 <input
@@ -810,30 +778,30 @@ export default function ProfileModal({
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="VD: 0972555211 (Dùng đối soát SePay)"
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                  placeholder="VD: 0972555211 (dùng đối soát SePay)"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Ngày sinh nhật của bạn
                 </label>
                 <input
                   type="date"
                   value={birthday}
                   onChange={(e) => setBirthday(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Khu vực sinh sống */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5">
-              <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-2">
-                <MapPin size={14} className="text-rose-500" /> Khu vực sinh sống hiện tại
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5 sm:p-3">
+              <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-700 mb-1.5">
+                <MapPin size={13} className="text-rose-500" /> Khu vực sinh sống hiện tại
               </label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mb-2.5">
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 mb-2">
                 {[
                   { id: "hcm", label: "TP. Hồ Chí Minh" },
                   { id: "hn", label: "Hà Nội" },
@@ -844,7 +812,7 @@ export default function ProfileModal({
                     key={item.id}
                     type="button"
                     onClick={() => setLocation(item.id)}
-                    className={`rounded-xl py-2 px-2.5 text-xs font-bold text-center border transition-all ${
+                    className={`rounded-lg py-1.5 px-2 text-xs font-bold text-center border transition-all ${
                       location === item.id
                         ? "bg-ueh text-white border-ueh shadow-xs"
                         : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
@@ -856,17 +824,17 @@ export default function ProfileModal({
               </div>
 
               {location === "other" ? (
-                <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
-                  <span className="text-[11px] font-bold text-ueh block mb-1.5">
+                <div className="mt-2 pt-2 border-t border-slate-200/80">
+                  <span className="text-[10px] font-bold text-ueh block mb-1">
                     📍 Chọn nhanh tỉnh / thành phố:
                   </span>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
                     {OTHER_PROVINCES_PRESETS.map((preset) => (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => setSpecificLocation(preset)}
-                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                        className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold border transition-all ${
                           specificLocation === preset
                             ? "bg-ueh text-white border-ueh shadow-2xs"
                             : "bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-ueh"
@@ -880,22 +848,22 @@ export default function ProfileModal({
                     type="text"
                     value={specificLocation}
                     onChange={(e) => setSpecificLocation(e.target.value)}
-                    placeholder="Hoặc điền thêm tỉnh thành của bạn (VD: Đà Nẵng, Nha Trang, Huế...)"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                    placeholder="Hoặc điền tỉnh thành: Đà Nẵng, Nha Trang, Huế..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
                 </div>
               ) : location === "overseas" ? (
-                <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
-                  <span className="text-[11px] font-bold text-ueh-orange block mb-1.5">
-                    🌏 Bạn đang sinh sống / làm việc tại quốc gia nào?
+                <div className="mt-2 pt-2 border-t border-slate-200/80">
+                  <span className="text-[10px] font-bold text-ueh-orange block mb-1">
+                    🌏 Quốc gia / Thành phố sinh sống:
                   </span>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
                     {OVERSEAS_PRESETS.map((preset) => (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => setSpecificLocation(preset)}
-                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                        className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold border transition-all ${
                           specificLocation === preset
                             ? "bg-orange-500 text-white border-orange-500 shadow-2xs"
                             : "bg-white text-slate-600 border-slate-200 hover:bg-orange-50"
@@ -909,8 +877,8 @@ export default function ProfileModal({
                     type="text"
                     value={specificLocation}
                     onChange={(e) => setSpecificLocation(e.target.value)}
-                    placeholder="Hoặc nhập cụ thể: VD: Sydney, Úc hoặc California, Mỹ..."
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                    placeholder="VD: Sydney (Úc), California (Mỹ)..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
                 </div>
               ) : (
@@ -919,22 +887,22 @@ export default function ProfileModal({
                   value={specificLocation}
                   onChange={(e) => setSpecificLocation(e.target.value)}
                   placeholder="Quận / Huyện cụ thể (VD: Quận 1, Quận 7, Cầu Giấy...)"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                 />
               )}
             </div>
 
             {/* Hôn nhân & F1 */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-                <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  <Heart size={14} className="text-rose-500" /> Tình trạng hôn nhân
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-700 mb-1.5">
+                  <Heart size={13} className="text-rose-500" /> Tình trạng hôn nhân
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => setMaritalStatus("married")}
-                    className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                    className={`rounded-lg py-1.5 px-2 text-xs font-bold text-center border transition-all ${
                       maritalStatus === "married"
                         ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
@@ -945,7 +913,7 @@ export default function ProfileModal({
                   <button
                     type="button"
                     onClick={() => setMaritalStatus("single")}
-                    className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                    className={`rounded-lg py-1.5 px-2 text-xs font-bold text-center border transition-all ${
                       maritalStatus === "single"
                         ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
@@ -956,17 +924,17 @@ export default function ProfileModal({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-                <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  <Baby size={14} className="text-emerald-600" /> Số con cái (F1 & Nhóc tì)
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-700 mb-1.5">
+                  <Baby size={13} className="text-emerald-600" /> Số con cái (F1 & Nhóc tì)
                 </label>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-4 gap-1">
                   {[0, 1, 2, 3].map((num) => (
                     <button
                       key={num}
                       type="button"
                       onClick={() => setChildrenCount(num)}
-                      className={`rounded-xl py-2 text-xs font-bold text-center border transition-all ${
+                      className={`rounded-lg py-1.5 text-xs font-bold text-center border transition-all ${
                         childrenCount === num
                           ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                           : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -980,9 +948,9 @@ export default function ProfileModal({
             </div>
 
             {/* Chức danh & Công ty */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Chức danh / Nghề nghiệp
                 </label>
                 <input
@@ -990,12 +958,12 @@ export default function ProfileModal({
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
                   placeholder="VD: Giám đốc Tài chính, CEO..."
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                   Công ty / Doanh nghiệp
                 </label>
                 <input
@@ -1003,14 +971,14 @@ export default function ProfileModal({
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="VD: SMLIFE, VinaCapital..."
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Tiểu sử ngắn */}
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                 Đôi dòng chia sẻ ngắn (Bio)
               </label>
               <input
@@ -1018,17 +986,17 @@ export default function ProfileModal({
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="VD: Rất vui được gặp lại mọi người sau 15 năm!"
-                className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
               />
             </div>
 
-            {/* Nút hành động chuyên nghiệp cho Tab 1 (Yêu cầu bước 6) */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+            {/* Nút hành động gọn gàng */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={handleSaveProfileOnly}
                 disabled={saving}
-                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 active:scale-98 transition-all"
               >
                 {saving ? "Đang lưu..." : "Chỉ lưu thông tin (Đóng)"}
               </button>
@@ -1037,52 +1005,52 @@ export default function ProfileModal({
                 type="button"
                 onClick={handleSaveAndContinue}
                 disabled={saving}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 transition-all"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 active:scale-98 transition-all"
               >
                 {saving ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Loader2 size={15} className="animate-spin" />
                 ) : (
-                  <Sparkles size={16} className="text-ueh-gold" />
+                  <Sparkles size={15} className="text-ueh-gold" />
                 )}
-                <span>Cập nhật thông tin & Tiếp tục đăng ký 15 năm →</span>
+                <span>Lưu & Tiếp tục đăng ký 15 năm →</span>
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================= */}
-        {/* TAB 2: ĐĂNG KÝ CHƯƠNG TRÌNH GẶP MẶT 15 NĂM (BƯỚC 7)       */}
+        {/* TAB 2: ĐĂNG KÝ CHƯƠNG TRÌNH GẶP MẶT 15 NĂM                */}
         {/* ========================================================= */}
         {activeTab === "attendance" && (
-          <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="space-y-3.5 animate-in fade-in duration-150">
             {/* Lựa chọn Tham gia hoặc Không tham gia */}
-            <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5">
-              <div className="text-xs font-bold uppercase text-ueh mb-2.5 flex items-center justify-between">
+            <div className="rounded-xl border border-blue-200/80 bg-blue-50/50 p-3">
+              <div className="text-[11px] font-bold uppercase text-ueh mb-2 flex items-center justify-between">
                 <span>Bạn có tham gia gặp mặt Thứ 7 ngày 12/12 không?</span>
-                <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
                   Hạn chốt: 30/11
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setAttendanceStatus("attending")}
-                  className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "attending"
-                      ? "bg-white border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
+                      ? "bg-white border-emerald-500 shadow-xs ring-2 ring-emerald-500/20"
                       : "bg-white/80 border-slate-200 hover:bg-white"
                   }`}
                 >
-                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                  <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                     attendanceStatus === "attending" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"
                   }`}>
-                    {attendanceStatus === "attending" && <Check size={12} strokeWidth={3} />}
+                    {attendanceStatus === "attending" && <Check size={10} strokeWidth={3} />}
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-900">🟢 Tôi sẽ tham gia</div>
                     <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng Thứ 7 ngày 12/12/2026. Kèo này 15 năm mới hội ngộ một lần, không say không về, không gặp không tha nha anh em! 🍻🎉
+                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng Thứ 7 ngày 12/12/2026.
                     </div>
                   </div>
                 </button>
@@ -1090,21 +1058,21 @@ export default function ProfileModal({
                 <button
                   type="button"
                   onClick={() => setAttendanceStatus("not_attending")}
-                  className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
                     attendanceStatus === "not_attending"
-                      ? "bg-white border-orange-500 shadow-md ring-2 ring-orange-500/20"
+                      ? "bg-white border-orange-500 shadow-xs ring-2 ring-orange-500/20"
                       : "bg-white/80 border-slate-200 hover:bg-white"
                   }`}
                 >
-                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                  <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                     attendanceStatus === "not_attending" ? "border-orange-500 bg-orange-500 text-white" : "border-slate-300"
                   }`}>
-                    {attendanceStatus === "not_attending" && <Check size={12} strokeWidth={3} />}
+                    {attendanceStatus === "not_attending" && <Check size={10} strokeWidth={3} />}
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-900">🟠 Rất tiếc không thể tham gia</div>
                     <div className="text-[11px] text-slate-500 mt-0.5">
-                      Gửi lời nhắn nhủ thân thương và chúc mừng vào Sổ lưu bút K33
+                      Gửi lời nhắn nhủ thân thương và chúc mừng vào Sổ lưu bút K33.
                     </div>
                   </div>
                 </button>
@@ -1113,30 +1081,30 @@ export default function ProfileModal({
 
             {/* NẾU ĐI: CHỌN ÁO, SỐ NGƯỜI, ĐỊA CHỈ NHẬN ÁO & KINH PHÍ */}
             {attendanceStatus === "attending" && (
-              <div className="space-y-3.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+              <div className="space-y-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 uppercase">
-                    <Shirt size={15} className="text-ueh-gold" />
-                    <span>Chọn size Áo Polo Kỷ Niệm 15 Năm (Tặng kèm)</span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-900 uppercase">
+                    <Shirt size={14} className="text-ueh-gold" />
+                    <span>Chọn size Áo Polo Kỷ Niệm 15 Năm</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowShirtSizePopup(true)}
                     className="text-[11px] font-bold text-ueh hover:underline"
                   >
-                    Xem bảng số đo size áo ↗
+                    Bảng số đo ↗
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {SHIRT_SIZES.map((s) => (
                     <button
                       key={s}
                       type="button"
                       onClick={() => setShirtSize(s)}
-                      className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                      className={`rounded-lg py-1.5 px-1 text-xs font-bold text-center border transition-all ${
                         shirtSize === s
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-102"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                           : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-50"
                       }`}
                     >
@@ -1146,31 +1114,31 @@ export default function ProfileModal({
                 </div>
 
                 <div className="pt-1">
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Địa chỉ nhận áo (hoặc nhận tại tiệc)
+                  <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                    Địa chỉ nhận áo (hoặc nhận trực tiếp tại tiệc)
                   </label>
                   <input
                     type="text"
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                    placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B hoặc địa chỉ nhà..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
                 </div>
 
                 {/* Box Kinh phí & VietQR */}
-                <div className="rounded-xl border border-emerald-300 bg-white p-3.5 flex items-center justify-between shadow-2xs">
+                <div className="rounded-xl border border-emerald-300 bg-white p-2.5 sm:p-3 flex items-center justify-between shadow-2xs">
                   <div>
-                    <div className="text-[11px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
-                    <div className="text-base font-black text-slate-900">{bankInfo.amountText} / thành viên</div>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
+                    <div className="text-sm sm:text-base font-black text-slate-900">{bankInfo.amountText} / thành viên</div>
                     <div className="text-[10px] text-emerald-700 font-medium">Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowQrModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-ueh transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0"
                   >
-                    <QrCode size={14} className="text-ueh-gold" /> Mã VietQR
+                    <QrCode size={13} className="text-ueh-gold" /> Mã VietQR
                   </button>
                 </div>
               </div>
@@ -1178,22 +1146,22 @@ export default function ProfileModal({
 
             {/* NẾU KHÔNG ĐI: GỬI LƯU BÚT */}
             {attendanceStatus === "not_attending" && (
-              <div className="space-y-3.5 rounded-2xl border border-orange-200/80 bg-orange-50/40 p-4">
-                <div className="flex items-center gap-2 text-xs font-bold text-orange-900 uppercase">
-                  <MessageSquare size={15} className="text-ueh-orange" />
+              <div className="space-y-3 rounded-xl border border-orange-200/80 bg-orange-50/40 p-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-orange-900 uppercase">
+                  <MessageSquare size={14} className="text-ueh-orange" />
                   <span>Gửi lời nhắn thân thương vào Sổ Lưu Bút K33</span>
                 </div>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={guestbookMessage}
                   onChange={(e) => setGuestbookMessage(e.target.value)}
-                  placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười! Hẹn gặp mọi người vào dịp gần nhất..."
-                  className="w-full rounded-xl border border-orange-200 bg-white p-3 text-xs focus:border-ueh focus:outline-none"
+                  placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười!..."
+                  className="w-full rounded-xl border border-orange-200 bg-white p-2.5 text-xs focus:border-ueh focus:outline-none"
                 />
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-600 mb-1">
-                    <Shirt size={14} /> Đăng ký nhận Áo Polo gửi ship tận nơi (tùy chọn)
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-600 mb-1">
+                    <Shirt size={13} /> Đăng ký nhận Áo Polo gửi ship tận nơi (tùy chọn)
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
@@ -1217,12 +1185,12 @@ export default function ProfileModal({
               </div>
             )}
 
-            {/* Button Actions của Tab 2 (Yêu cầu bước 7) */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+            {/* Button Actions của Tab 2 */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={() => setActiveTab("info")}
-                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 active:scale-98 transition-all"
               >
                 ← Quay lại Thông tin cá nhân
               </button>
@@ -1232,23 +1200,23 @@ export default function ProfileModal({
                   type="button"
                   onClick={handleRegisterAttendance}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 transition-all"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 active:scale-98 transition-all"
                 >
                   {saving ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={15} className="animate-spin" />
                   ) : (
-                    <QrCode size={16} className="text-ueh-gold" />
+                    <QrCode size={15} className="text-ueh-gold" />
                   )}
-                  <span>Đăng ký tham gia & Nhận mã QR chuyển khoản</span>
+                  <span>Đăng ký tham gia & Nhận mã QR</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleDeclineAndSendWish}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg transition-all"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all"
                 >
-                  <MessageSquare size={16} />
+                  <MessageSquare size={15} />
                   <span>Gửi lời nhắn nhủ & Lời chúc</span>
                 </button>
               )}

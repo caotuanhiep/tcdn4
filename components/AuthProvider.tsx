@@ -122,8 +122,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setTimeout(() => loadProfile(u), 0);
 
-      // Khi người dùng đăng nhập thành công: lập tức mở popup Cập nhật thông tin điểm danh
-      if (event === "SIGNED_IN" && u) {
+      // Chỉ tự động mở popup hồ sơ nếu người dùng VỪA MỚI đăng nhập từ Google
+      // (nhận diện qua cờ trong sessionStorage hoặc URL callback có chứa ?code=)
+      // Khi F5 hoặc tải lại trang bình thường, popup sẽ KHÔNG tự động bật lên.
+      const isFreshLogin =
+        typeof window !== "undefined" &&
+        (sessionStorage.getItem("tcdn4_auto_open_profile") === "1" ||
+          sessionStorage.getItem("tcdn4_just_logged_in") === "1" ||
+          window.location.search.includes("code="));
+
+      if (u && isFreshLogin) {
+        try {
+          sessionStorage.removeItem("tcdn4_auto_open_profile");
+          sessionStorage.removeItem("tcdn4_just_logged_in");
+        } catch {}
         setProfileInitialTab("info");
         setProfileOpen(true);
         setLoginOpen(false);
@@ -134,9 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete("code");
         window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ""));
-        setProfileInitialTab("info");
-        setProfileOpen(true);
-        setLoginOpen(false);
       }
     });
 
