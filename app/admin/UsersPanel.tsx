@@ -21,6 +21,7 @@ import {
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 import type { Profile } from "@/types/database";
+import { getAvatarInitials } from "@/lib/avatar";
 
 const USERS_CACHE_KEY = "tcdn4_admin_users_cache";
 
@@ -324,7 +325,7 @@ export default function UsersPanel() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={u.avatar_url} alt={u.full_name || ""} className="h-full w-full object-cover" />
                           ) : (
-                            u.full_name?.charAt(0) || "U"
+                            getAvatarInitials(u.full_name)
                           )}
                         </div>
                         <div>

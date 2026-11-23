@@ -5,10 +5,9 @@ let client: SupabaseClient | undefined;
 
 export function getSupabase(): SupabaseClient {
   if (!client) {
-    client = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    ) as unknown as SupabaseClient;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    client = createBrowserClient(url, key) as unknown as SupabaseClient;
   }
   return client;
 }

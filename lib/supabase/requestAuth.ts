@@ -6,8 +6,8 @@ export const SUPER_ADMIN_EMAIL = "caotuanhiep@gmail.com";
 
 /** Lấy user đang đăng nhập từ cookie phiên (hoặc header Authorization: Bearer ...). */
 export async function getRequestUser(req: NextRequest): Promise<User | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
   try {
     const authHeader = req.headers.get("authorization");
     if (authHeader?.toLowerCase().startsWith("bearer ")) {
@@ -35,11 +35,12 @@ export async function isAdminUser(user: User | null, req: NextRequest): Promise<
   if (email === SUPER_ADMIN_EMAIL || email.includes("admin")) return true;
 
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const client: SupabaseClient = serviceKey
       ? createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
-      : (createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      : (createServerClient(url, anon, {
           cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} },
         }) as unknown as SupabaseClient);
     const { data } = await client.from("profiles").select("role").eq("id", user.id).maybeSingle();

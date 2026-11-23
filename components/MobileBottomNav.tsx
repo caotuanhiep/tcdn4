@@ -8,7 +8,8 @@ import {
   Calendar, 
   UserCircle2, 
   LogIn,
-  Sparkles
+  Sparkles,
+  UserCheck
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -117,7 +118,7 @@ export default function MobileBottomNav() {
           {/* 5. Tài khoản / Đăng nhập */}
           {user ? (
             <button
-              onClick={openProfile}
+              onClick={() => openProfile()}
               className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-700 font-semibold transition-all"
             >
               <UserCircle2 size={18} className="stroke-[2.2] text-ueh" />
@@ -128,8 +129,8 @@ export default function MobileBottomNav() {
               onClick={openLogin}
               className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-700 font-semibold transition-all"
             >
-              <LogIn size={18} className="stroke-[2.2] text-ueh" />
-              <span className="text-[10px] mt-0.5">Đăng nhập</span>
+              <UserCheck size={18} className="stroke-[2.2] text-ueh" />
+              <span className="text-[10px] mt-0.5">Điểm danh</span>
             </button>
           )}
 

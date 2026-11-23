@@ -17,6 +17,7 @@ export interface Profile {
   attendance_status?: "attending" | "not_attending" | "pending" | string | null;
   shirt_size?: string | null;
   delivery_address?: string | null;
+  has_checked_in?: boolean | null;
   role: UserRole;
 }
 

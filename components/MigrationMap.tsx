@@ -223,7 +223,7 @@ export default function MigrationMap({
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            Toàn cầu ({totalCount})
+            Tất cả ({totalCount})
           </button>
           {dynamicRegions.map((r) => (
             <button

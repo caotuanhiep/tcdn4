@@ -13,6 +13,7 @@ import {
 import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers } from "@/lib/committee";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getAvatarInitials } from "@/lib/avatar";
 
 export default function CommitteeSection() {
   const { user, openLogin } = useAuth();
@@ -58,7 +59,7 @@ export default function CommitteeSection() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span>{member.name.charAt(member.name.lastIndexOf(" ") + 1)}</span>
+                    <span>{getAvatarInitials(member.name)}</span>
                   )}
 
                   {/* Floating Badges trên ảnh vuông */}

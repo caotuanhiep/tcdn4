@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getAvatarInitials } from "@/lib/avatar";
 
 export interface CommentItem {
   id: string;
@@ -1546,7 +1547,7 @@ export default function MemoriesGallery() {
               <div className="rounded-2xl bg-gradient-to-r from-blue-50/80 via-sky-50/50 to-slate-50 border border-blue-200/80 p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-2xs">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ueh text-white font-black text-xs shadow-2xs">
-                    {(profile?.full_name || user?.email || "SV").charAt(0).toUpperCase()}
+                    {getAvatarInitials(profile?.full_name || user?.email || "SV")}
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-medium text-slate-500">Đóng góp với tư cách:</p>

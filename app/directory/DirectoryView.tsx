@@ -5,6 +5,7 @@ import { Briefcase, GraduationCap, Loader2, MapPin, Search } from "lucide-react"
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
 import type { Profile } from "@/types/database";
+import { getAvatarInitials } from "@/lib/avatar";
 
 export default function DirectoryView() {
   const toast = useToast();
@@ -104,7 +105,7 @@ export default function DirectoryView() {
             >
               <div className="mb-5 flex items-start justify-between">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-xl font-bold text-ueh transition-colors group-hover:bg-ueh group-hover:text-white">
-                  {(p.full_name ?? "?").trim().charAt(0).toUpperCase()}
+                  {getAvatarInitials(p.full_name)}
                 </div>
                 {p.class_name && (
                   <span className="inline-flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">

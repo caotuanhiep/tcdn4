@@ -28,6 +28,11 @@ export default function AdminShell() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("registrations");
   const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set<Tab>([tab]));
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -38,22 +43,15 @@ export default function AdminShell() {
     });
   }, [tab]);
 
-  const isDevAdmin =
-    process.env.NODE_ENV === "development" &&
-    typeof window !== "undefined" &&
-    (localStorage.getItem("tcdn4_dev_mode") === "admin" ||
-      document.cookie.includes("tcdn4_dev_mode=admin") ||
-      new URLSearchParams(window.location.search).get("dev_admin") === "1");
-
   // Client-side guard
   useEffect(() => {
-    if (isDevAdmin) return;
+    if (!mounted) return;
     if (!loading && (!user || (profile && !isAdmin) || (!profile && user))) {
       router.replace("/");
     }
-  }, [loading, user, profile, isAdmin, router, isDevAdmin]);
+  }, [mounted, loading, user, profile, isAdmin, router]);
 
-  if (!isDevAdmin && (loading || !isAdmin)) {
+  if (!mounted || loading || !isAdmin) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-ueh">
         <Loader2 className="h-8 w-8 animate-spin" />

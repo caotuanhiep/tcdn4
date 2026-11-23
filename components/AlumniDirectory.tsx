@@ -23,6 +23,7 @@ import {
 import { getSupabase } from "@/lib/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
+import { getAvatarInitials } from "@/lib/avatar";
 
 const ZALO_GROUP_URL = "https://zalo.me/g/yodibu606";
 
@@ -70,6 +71,7 @@ export default function AlumniDirectory({
     async function loadMembers() {
       const combinedMembers: AlumniMember[] = [];
       const seenNames = new Set<string>();
+      const seenIds = new Set<string | number>();
 
       try {
         const { data, error } = await getSupabase()
@@ -80,8 +82,12 @@ export default function AlumniDirectory({
         if (active && !error && data && data.length > 0) {
           data.forEach((p: any) => {
             const memberName = p.full_name || "Thành viên K33";
+            const memberId = p.id;
+            if (memberId && seenIds.has(memberId)) return;
+            if (memberId) seenIds.add(memberId);
+
             combinedMembers.push({
-              id: p.id,
+              id: memberId,
               name: memberName,
               class: (p.class_name as any) || "TC10",
               job: p.job_title || "Cựu sinh viên",
@@ -112,14 +118,17 @@ export default function AlumniDirectory({
           const regs = JSON.parse(stored);
           regs.forEach((r: any) => {
             const rName = (r.fullName || "").trim();
+            const rId = r.id || `reg-${rName}`;
+            if (seenIds.has(rId)) return;
             if (rName && !seenNames.has(rName.toLowerCase())) {
+              seenIds.add(rId);
               const regRegion: "hcm" | "hn" | "other" | "overseas" = 
                 /Hà Nội|hn/i.test(r.address) ? "hn" :
                 /Đà Nẵng|dn|Huế|Nha Trang|Cần Thơ|Hải Phòng|Bình Dương|Đồng Nai|Vũng Tàu|Lâm Đồng|Đà Lạt|Quảng Nam|Quy Nhơn/i.test(r.address) ? "other" :
                 /Úc|Mỹ|USA|Singapore|Canada|Đức|Pháp|Nhật|Hàn|Australia/i.test(r.address) ? "overseas" : "hcm";
 
               combinedMembers.push({
-                id: r.id || `reg-${rName}`,
+                id: rId,
                 name: rName,
                 class: (r.className as any) || "TC10",
                 job: "Cựu sinh viên",
@@ -265,7 +274,7 @@ export default function AlumniDirectory({
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/70 whitespace-nowrap">
               {[
-                { id: "all", label: "Tất cả các lớp", count: classCounts.all },
+                { id: "all", label: "Tất cả", count: classCounts.all },
                 { id: "TC10", label: "Lớp TC10", count: classCounts.TC10 },
                 { id: "TC11", label: "Lớp TC11", count: classCounts.TC11 },
                 { id: "TC12", label: "Lớp TC12", count: classCounts.TC12 },
@@ -303,7 +312,7 @@ export default function AlumniDirectory({
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/70 whitespace-nowrap">
               {[
-                { id: "all", label: "Toàn cầu", count: regionCounts.all, icon: Globe },
+                { id: "all", label: "Tất cả", count: regionCounts.all, icon: Globe },
                 { id: "hcm", label: "TP. Hồ Chí Minh", count: regionCounts.hcm, icon: MapPin },
                 { id: "hn", label: "Hà Nội", count: regionCounts.hn, icon: MapPin },
                 { id: "other", label: "Tỉnh khác", count: regionCounts.other, icon: MapPin },
@@ -403,7 +412,7 @@ export default function AlumniDirectory({
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        member.name.charAt(member.name.lastIndexOf(" ") + 1)
+                        getAvatarInitials(member.name)
                       )}
                       {user && user.id === member.id && (
                         <span className="absolute bottom-0.5 right-0.5 rounded-md bg-emerald-600 px-1 py-0.2 text-[8px] font-black text-white shadow-2xs">
@@ -531,7 +540,7 @@ export default function AlumniDirectory({
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  viewingMember.name.charAt(viewingMember.name.lastIndexOf(" ") + 1)
+                  getAvatarInitials(viewingMember.name)
                 )}
               </div>
               <div>

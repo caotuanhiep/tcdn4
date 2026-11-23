@@ -14,12 +14,13 @@ import {
   UserCircle2, 
   Users, 
   X,
-  Smartphone,
-  HeartHandshake
+  HeartHandshake,
+  UserCheck
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import ProfileModal from "@/components/ProfileModal";
+import { getAvatarInitials } from "@/lib/avatar";
 
 interface NavItem {
   href: string;
@@ -44,41 +45,12 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // PWA Install Prompt State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
-
   useEffect(() => {
     // Register Service Worker
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-    };
   }, []);
-
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) {
-      toast.success("Để cài đặt trên iPhone/iPad: Nhấn nút Chia sẻ (Share) trên Safari -> chọn 'Thêm vào MH chính' (Add to Home Screen)!");
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setIsInstallable(false);
-      toast.success("Đã cài đặt TCDN4 Alumni Hub vào màn hình chính!");
-    }
-    setDeferredPrompt(null);
-  };
 
   useEffect(() => {
     function onScroll() {
@@ -113,7 +85,7 @@ export default function Navbar() {
     user?.email ??
     "Alumni";
   const avatarUrl = profile?.avatar_url ?? (user?.user_metadata?.avatar_url as string | undefined) ?? null;
-  const initial = name.trim().charAt(0).toUpperCase();
+  const initial = getAvatarInitials(name);
 
   return (
     <>
@@ -153,16 +125,6 @@ export default function Navbar() {
             ))}
 
             <div className="h-4 w-px bg-slate-200 mx-1" />
-
-            {/* 8. Nút Icon Cài Đặt PWA trên Header cực kỳ gọn gàng */}
-            <button
-              onClick={handleInstallApp}
-              title="Cài đặt App lên màn hình điện thoại / máy tính"
-              className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-ueh hover:text-ueh hover:bg-white transition-all shadow-2xs"
-            >
-              <Smartphone size={14} className="text-[#0068FF]" />
-              <span className="hidden lg:inline">Cài App</span>
-            </button>
 
             {/* User Auth Info or Login Button */}
             {loading ? (
@@ -244,25 +206,18 @@ export default function Navbar() {
                 onClick={openLogin}
                 className="flex items-center gap-2 rounded-full bg-ueh px-5 py-2 text-xs font-bold text-white shadow-md shadow-blue-900/20 transition-all hover:bg-ueh-light hover:shadow-lg"
               >
-                <LogIn size={15} /> Đăng nhập
+                <UserCheck size={16} className="text-ueh-gold" />
+                <span>Điểm danh TC4-ers</span>
               </button>
             )}
           </div>
 
-          {/* Mobile Right Controls: Install Icon + Login Icon/Avatar + Hamburger */}
+          {/* Mobile Right Controls: Login Icon/Avatar + Hamburger */}
           <div className="flex items-center gap-1.5 md:hidden">
-            <button
-              onClick={handleInstallApp}
-              title="Cài đặt App"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[#0068FF] shadow-2xs"
-            >
-              <Smartphone size={17} />
-            </button>
-
             {/* Icon Login hoặc Avatar trên Mobile Header */}
             {user ? (
               <button
-                onClick={openProfile}
+                onClick={() => openProfile()}
                 className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-ueh text-white font-bold text-xs shadow-2xs"
               >
                 {avatarUrl ? (
@@ -275,10 +230,10 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openLogin}
-                title="Đăng nhập"
+                title="Điểm danh TC4-ers"
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-ueh text-white shadow-2xs"
               >
-                <LogIn size={17} />
+                <UserCheck size={17} className="text-ueh-gold" />
               </button>
             )}
 
@@ -355,8 +310,8 @@ export default function Navbar() {
                   }}
                   className="flex items-center justify-center gap-2 rounded-xl bg-ueh py-3 text-center text-sm font-bold text-white shadow-md shadow-blue-900/20"
                 >
-                  <LogIn size={17} />
-                  <span>Đăng nhập Alumni Hub</span>
+                  <UserCheck size={18} className="text-ueh-gold" />
+                  <span>Điểm danh TC4-ers</span>
                 </button>
               )}
             </div>

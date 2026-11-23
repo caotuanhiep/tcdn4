@@ -670,6 +670,15 @@ export async function POST(request: Request) {
           }
         }
       }
+
+      // Dự phòng: Nếu chưa phân loại nhưng có nhóm đã kết nối chatId -> gửi vào nhóm đã kết nối
+      if (targetChatIds.length === 0) {
+        for (const grp of currentGroups) {
+          if (grp.chatId) {
+            targetChatIds.push({ chatId: grp.chatId, groupName: grp.name });
+          }
+        }
+      }
     }
 
     // THỰC HIỆN GỬI TIN QUA ZALO BOT PLATFORM TỚI CÁC NHÓM

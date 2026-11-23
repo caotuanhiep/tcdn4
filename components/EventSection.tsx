@@ -140,12 +140,32 @@ export default function EventSection() {
           .select("id, full_name, class_name, phone, shirt_size, delivery_address, specific_location, location_region, avatar_url, attendance_status, created_at");
 
         if (dbProfiles && dbProfiles.length > 0) {
-          const seen = new Set(combined.map((r) => (r.phone || r.fullName || r.id).toLowerCase().trim()));
+          const seenPhones = new Set<string>();
+          const seenNames = new Set<string>();
+          const seenIds = new Set<string>();
+
+          combined.forEach((r) => {
+            if (r.id) seenIds.add(String(r.id).toLowerCase());
+            if (r.phone) seenPhones.add(r.phone.replace(/[^0-9]/g, ""));
+            if (r.fullName) seenNames.add(r.fullName.trim().toLowerCase());
+          });
+
           for (const p of dbProfiles) {
             if (!p.full_name || p.attendance_status === "not_attending") continue;
-            const key = (p.phone || p.full_name || p.id).toLowerCase().trim();
-            if (!seen.has(key)) {
-              seen.add(key);
+            const pId = p.id ? String(p.id).toLowerCase() : "";
+            const pPhone = p.phone ? p.phone.replace(/[^0-9]/g, "") : "";
+            const pName = p.full_name.trim().toLowerCase();
+
+            const isDuplicate = 
+              (pId && seenIds.has(pId)) ||
+              (pPhone && seenPhones.has(pPhone)) ||
+              (pName && seenNames.has(pName));
+
+            if (!isDuplicate) {
+              if (pId) seenIds.add(pId);
+              if (pPhone) seenPhones.add(pPhone);
+              if (pName) seenNames.add(pName);
+
               combined.push({
                 id: p.id,
                 fullName: p.full_name.trim(),
@@ -759,7 +779,7 @@ export default function EventSection() {
                   </tr>
                 ) : (
                   filteredRegistrations.map((reg, idx) => (
-                    <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`${reg.id || "reg"}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       {/* 1. Họ và tên: whitespace-nowrap */}
                       <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
                         <div className="inline-flex items-center gap-2">

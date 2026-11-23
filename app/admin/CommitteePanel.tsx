@@ -16,12 +16,11 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { CommitteeMember, DEFAULT_COMMITTEE_MEMBERS, getCommitteeMembers, saveCommitteeMembers } from "@/lib/committee";
+import { getAvatarInitials } from "@/lib/avatar";
 
 export default function CommitteePanel() {
   const toast = useToast();
-  const [members, setMembers] = useState<CommitteeMember[]>(() =>
-    typeof window !== "undefined" ? getCommitteeMembers() : DEFAULT_COMMITTEE_MEMBERS
-  );
+  const [members, setMembers] = useState<CommitteeMember[]>(DEFAULT_COMMITTEE_MEMBERS);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentMember, setCurrentMember] = useState<Partial<CommitteeMember>>({});
 
@@ -120,7 +119,7 @@ export default function CommitteePanel() {
                   />
                 ) : (
                   <div className={`h-full w-full ${m.avatarColor || "bg-ueh"} text-white flex items-center justify-center font-black text-3xl`}>
-                    {m.name.charAt(m.name.lastIndexOf(" ") + 1) || "B"}
+                    {getAvatarInitials(m.name)}
                   </div>
                 )}
                 <span className="absolute top-2 right-2 rounded-lg bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-black text-ueh shadow-xs border border-white/80">

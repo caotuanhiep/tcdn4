@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { getAvatarInitials } from "@/lib/avatar";
 
 interface GuestbookEntry {
   id: string;
@@ -253,7 +254,7 @@ export default function GuestbookSection() {
                         <div className="flex items-start justify-between mb-2.5">
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-xs font-black text-white shadow-xs">
-                              {item.name.charAt(item.name.lastIndexOf(" ") + 1)}
+                              {getAvatarInitials(item.name)}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">

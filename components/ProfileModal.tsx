@@ -24,11 +24,17 @@ import {
   ChevronRight,
   ShieldCheck,
   Upload,
-  Loader2
+  Loader2,
+  Copy,
+  CheckCheck,
+  ArrowRight,
+  UserCheck
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
+import { DEFAULT_BANK_INFO, getBankInfo, fetchBankInfo, BankConfig } from "@/lib/bank";
+import { getAvatarInitials } from "@/lib/avatar";
 
 const DEFAULT_AVATARS = [
   { id: "boy", src: "/images/avatar-boy.png", label: "Mặc định 1" },
@@ -58,19 +64,31 @@ const OVERSEAS_PRESETS = [
   "Châu Âu",
 ];
 
-import { DEFAULT_BANK_INFO, getBankInfo, fetchBankInfo, BankConfig } from "@/lib/bank";
-
 const SHIRT_SIZES = [
   "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
   "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)"
 ];
 
-export default function ProfileModal({ onClose }: { onClose: () => void }) {
+function removeVietnameseTones(str: string) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+
+export default function ProfileModal({
+  onClose,
+  initialTab = "info",
+}: {
+  onClose: () => void;
+  initialTab?: "info" | "attendance";
+}) {
   const { user, profile, updateProfile } = useAuth();
   const toast = useToast();
   const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
 
-  const [activeTab, setActiveTab] = useState<"info" | "attendance">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "attendance">(initialTab);
 
   // Thông tin cá nhân
   const [fullName, setFullName] = useState(profile?.full_name || "");
@@ -97,6 +115,20 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const [guestsCount, setGuestsCount] = useState(0);
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Lời nhắn lưu bút nếu không tham gia trực tiếp
+  const [guestbookMessage, setGuestbookMessage] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Đọc thông tin phiếu đăng ký hiện tại (nếu có)
+  const [myRegistration, setMyRegistration] = useState<any>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     setBankInfo(getBankInfo());
@@ -109,12 +141,99 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Lời nhắn lưu bút & Ảnh kỷ niệm (nếu không đi trực tiếp)
-  const [guestbookMessage, setGuestbookMessage] = useState("");
-  const [memoryPhotoUrl, setMemoryPhotoUrl] = useState("");
+  // Đọc trạng thái đăng ký của user hiện tại & đồng bộ với localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("tcdn4_registrations");
+      const list = stored ? JSON.parse(stored) : [];
+      const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
+      const userName = (fullName || profile?.full_name || "").toLowerCase().trim();
+      const myReg = list.find((r: any) => {
+        if (user?.id && r.id === user.id) return true;
+        if (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
+        if (userName && (r.fullName || "").toLowerCase().trim() === userName) return true;
+        return false;
+      });
+      if (myReg) {
+        setMyRegistration(myReg);
+        if (myReg.shirtSize) setShirtSize(myReg.shirtSize);
+        if (myReg.address) setDeliveryAddress(myReg.address);
+      }
+    } catch {}
+  }, [user, profile, phone, fullName]);
 
-  const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  // Luôn tự động kiểm tra đối soát SePay trực tiếp từ Server để cập nhật tức thì
+  useEffect(() => {
+    let active = true;
+
+    async function checkServerRegistration() {
+      try {
+        const res = await fetch(`/api/registrations?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        const list = data?.registrations || data?.items || [];
+        if (!Array.isArray(list)) return;
+
+        const userPhone = (phone || profile?.phone || "").replace(/[^0-9]/g, "");
+        const userName = (fullName || profile?.full_name || "").toLowerCase().trim();
+
+        const serverReg = list.find((r: any) => {
+          if (user?.id && r.id === user.id) return true;
+          if (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) return true;
+          if (userName && (r.fullName || "").toLowerCase().trim() === userName) return true;
+          return false;
+        });
+
+        if (serverReg && active) {
+          setMyRegistration((prev: any) => {
+            // Khi trạng thái chuyển thành confirmed (SePay webhook vừa khớp lệnh)
+            if (prev?.status !== "confirmed" && serverReg.status === "confirmed") {
+              toast.success("Tuyệt vời! Hệ thống SePay đã xác nhận thanh toán thành công! 🎉");
+              setShowQrModal(false);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("tcdn4_registration_updated"));
+              }
+            }
+            return serverReg;
+          });
+          if (serverReg.shirtSize) setShirtSize(serverReg.shirtSize);
+          if (serverReg.address) setDeliveryAddress(serverReg.address);
+
+          // Cập nhật lại localStorage để toàn app đồng bộ
+          try {
+            const stored = localStorage.getItem("tcdn4_registrations");
+            const localList: any[] = stored ? JSON.parse(stored) : [];
+            const idx = localList.findIndex((r: any) =>
+              (user?.id && r.id === user.id) ||
+              (userPhone && (r.phone || "").replace(/[^0-9]/g, "") === userPhone) ||
+              (userName && (r.fullName || "").toLowerCase().trim() === userName)
+            );
+            if (idx >= 0) {
+              localList[idx] = { ...localList[idx], ...serverReg };
+            } else {
+              localList.unshift(serverReg);
+            }
+            localStorage.setItem("tcdn4_registrations", JSON.stringify(localList));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn("Lỗi kiểm tra đối soát SePay:", err);
+      }
+    }
+
+    checkServerRegistration();
+
+    // Nếu đang mở popup VietQR hoặc trạng thái đăng ký là pending, polling mỗi 3 giây
+    let interval: NodeJS.Timeout | null = null;
+    if (showQrModal || myRegistration?.status === "pending") {
+      interval = setInterval(checkServerRegistration, 3000);
+    }
+
+    return () => {
+      active = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [showQrModal, myRegistration?.status, phone, fullName, user?.id, profile?.phone, profile?.full_name]);
 
   // Xử lý upload avatar từ máy / điện thoại trực tiếp lên Supabase Storage
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,7 +257,6 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
-        // Fallback đọc dạng data URL nếu bucket chưa cấp quyền upload client
         const reader = new FileReader();
         reader.onload = (ev) => {
           setAvatarUrl(ev.target?.result as string);
@@ -161,42 +279,29 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const cleanName = fullName ? fullName.trim().toUpperCase() : "TÊN";
-  const cleanPhone = phone ? phone.trim() : "SĐT";
-  const transferSyntax = `TCDN4 - ${cleanName} - ${cleanPhone}`;
-  // Không cố định nội dung chuyển khoản trong mã QR
-  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
+  const cleanNameNoTones = fullName 
+    ? removeVietnameseTones(fullName.trim().toUpperCase()).replace(/[^A-Z0-9 ]/g, "") 
+    : "TEN";
+  const cleanPhoneDigits = phone ? phone.trim().replace(/[^0-9]/g, "") : "SDT";
+  const transferSyntax = `TCDN4 ${cleanNameNoTones} ${cleanPhoneDigits}`;
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(transferSyntax)}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fullName.trim()) {
-      toast.error("Vui lòng nhập họ và tên của bạn!");
-      return;
-    }
+  const copyToClipboard = (text: string, key: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    toast.success(`Đã sao chép ${label}!`);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
-    setSaving(true);
+  // Helper gửi thông báo điểm danh thành viên mới vào Zalo Bot (chỉ gửi lần đầu, không spam)
+  const triggerCheckinNotificationIfNeeded = () => {
+    const checkinKey = `tcdn4_zalo_checkin_${user?.id || phone.trim()}`;
+    const alreadyNotified = Boolean(
+      profile?.has_checked_in ||
+      (typeof window !== "undefined" && localStorage.getItem(checkinKey))
+    );
 
-    try {
-      // 1. Cập nhật hồ sơ cá nhân vào Supabase Profiles
-      await updateProfile({
-        full_name: fullName.trim(),
-        class_name: className,
-        job_title: jobTitle.trim(),
-        company: company.trim(),
-        location_region: location,
-        specific_location: location === "overseas" ? (specificLocation.trim() || "Quốc tế") : specificLocation.trim(),
-        birthday: birthday,
-        phone: phone.trim(),
-        avatar_url: avatarUrl,
-        bio: bio.trim(),
-        marital_status: maritalStatus,
-        children_count: Number(childrenCount),
-        attendance_status: attendanceStatus,
-        shirt_size: shirtSize,
-        delivery_address: deliveryAddress.trim(),
-      });
-
-      // Bắn thông báo Điểm danh thành viên mới vào Zalo Bot
+    if (!alreadyNotified) {
       try {
         fetch("/api/zalo-bot", {
           method: "POST",
@@ -210,69 +315,204 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
             location: specificLocation.trim() || (location === "hcm" ? "TP.HCM" : location === "hn" ? "Hà Nội" : "Tỉnh khác"),
           }),
         });
-      } catch {}
-
-      // 2. Nếu đăng ký tham gia -> cập nhật vào danh sách sự kiện EventSection
-      if (attendanceStatus === "attending") {
-        const regEntry = {
-          id: user?.id || `reg-${Date.now()}`,
-          fullName: fullName.trim(),
-          className,
-          phone: phone.trim(),
-          shirtSize,
-          address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
-          guestsCount,
-          status: "pending",
-          paidAmount: bankInfo.amount,
-          createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-        };
-
-        try {
-          const stored = localStorage.getItem("tcdn4_registrations");
-          const list = stored ? JSON.parse(stored) : [];
-          const existingIdx = list.findIndex((x: any) => x.phone === phone.trim() || x.fullName === fullName.trim() || (user?.id && x.id === user.id));
-          if (existingIdx >= 0) {
-            list[existingIdx] = { ...list[existingIdx], ...regEntry };
-          } else {
-            list.unshift(regEntry);
-          }
-          localStorage.setItem("tcdn4_registrations", JSON.stringify(list));
-        } catch {}
-
-        // Gửi lên API server để lưu vào hệ thống đăng ký
-        try {
-          await fetch("/api/registrations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(regEntry),
-          });
-        } catch {}
-
         if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("tcdn4_registration_updated"));
+          localStorage.setItem(checkinKey, "true");
         }
+      } catch {}
+    }
+  };
 
-        // Gửi thông báo đến Bot Zalo
-        try {
-          fetch("/api/zalo-bot", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "registration",
-              fullName: fullName.trim(),
-              className,
-              shirtSize,
-              phone: phone.trim(),
-              address: deliveryAddress.trim() || "Tại sự kiện",
-              paidAmount: bankInfo.amount,
-              guestsCount,
-            }),
-          });
-        } catch {}
+  // 1. Chỉ lưu thông tin cá nhân (Tab 1) & đóng modal
+  const handleSaveProfileOnly = async () => {
+    if (!fullName.trim()) {
+      toast.error("Vui lòng nhập họ và tên của bạn!");
+      return;
+    }
+    if (!phone.trim()) {
+      toast.error("Vui lòng nhập số điện thoại / Zalo để liên hệ!");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateProfile({
+        full_name: fullName.trim(),
+        class_name: className,
+        job_title: jobTitle.trim(),
+        company: company.trim(),
+        location_region: location,
+        specific_location: location === "overseas" ? (specificLocation.trim() || "Quốc tế") : specificLocation.trim(),
+        birthday: birthday,
+        phone: phone.trim(),
+        avatar_url: avatarUrl,
+        bio: bio.trim(),
+        marital_status: maritalStatus,
+        children_count: Number(childrenCount),
+        has_checked_in: true,
+      });
+
+      triggerCheckinNotificationIfNeeded();
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_profile_updated"));
       }
 
-      // 3. Nếu không tham gia trực tiếp và có gửi lời nhắn Lưu bút -> lưu vào Sổ lưu bút
-      if (attendanceStatus === "not_attending" && guestbookMessage.trim()) {
+      toast.success("Cập nhật thông tin điểm danh thành công!");
+      onClose();
+    } catch (err: any) {
+      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 2. Lưu thông tin cá nhân & Tự động bật sang Tab 2 Đăng ký gặp mặt 15 năm (Yêu cầu bước 6 & 7)
+  const handleSaveAndContinue = async () => {
+    if (!fullName.trim()) {
+      toast.error("Vui lòng nhập họ và tên của bạn!");
+      return;
+    }
+    if (!phone.trim()) {
+      toast.error("Vui lòng nhập số điện thoại / Zalo để liên hệ!");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateProfile({
+        full_name: fullName.trim(),
+        class_name: className,
+        job_title: jobTitle.trim(),
+        company: company.trim(),
+        location_region: location,
+        specific_location: location === "overseas" ? (specificLocation.trim() || "Quốc tế") : specificLocation.trim(),
+        birthday: birthday,
+        phone: phone.trim(),
+        avatar_url: avatarUrl,
+        bio: bio.trim(),
+        marital_status: maritalStatus,
+        children_count: Number(childrenCount),
+        has_checked_in: true,
+      });
+
+      triggerCheckinNotificationIfNeeded();
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_profile_updated"));
+      }
+
+      toast.success("Đã cập nhật thông tin điểm danh! Mời bạn đăng ký tham gia 15 năm & chọn áo");
+      setActiveTab("attendance");
+    } catch (err: any) {
+      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 3. Đăng ký tham gia sự kiện 15 năm & Nhận mã QR thanh toán (Tab 2)
+  const handleRegisterAttendance = async () => {
+    if (!fullName.trim() || !phone.trim()) {
+      toast.error("Vui lòng hoàn tất Họ tên và Số điện thoại ở Bước 1!");
+      setActiveTab("info");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const regEntry = {
+        id: user?.id || `reg-${Date.now()}`,
+        fullName: fullName.trim(),
+        className,
+        phone: phone.trim(),
+        shirtSize,
+        address: deliveryAddress.trim() || (location === "hcm" ? "TP.HCM" : location),
+        guestsCount,
+        status: "pending",
+        paidAmount: bankInfo.amount,
+        createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+      };
+
+      // Cập nhật profile
+      await updateProfile({
+        attendance_status: "attending",
+        shirt_size: shirtSize,
+        delivery_address: deliveryAddress.trim(),
+        has_checked_in: true,
+      });
+
+      // Lưu localStorage
+      try {
+        const stored = localStorage.getItem("tcdn4_registrations");
+        const list = stored ? JSON.parse(stored) : [];
+        const existingIdx = list.findIndex(
+          (x: any) =>
+            x.phone === phone.trim() ||
+            x.fullName === fullName.trim() ||
+            (user?.id && x.id === user.id)
+        );
+        if (existingIdx >= 0) {
+          list[existingIdx] = { ...list[existingIdx], ...regEntry };
+        } else {
+          list.unshift(regEntry);
+        }
+        localStorage.setItem("tcdn4_registrations", JSON.stringify(list));
+        setMyRegistration(regEntry);
+      } catch {}
+
+      // Gửi lên API server
+      try {
+        await fetch("/api/registrations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(regEntry),
+        });
+      } catch {}
+
+      // Bắn thông báo Zalo Bot thông báo có người đăng ký tham gia họp lớp
+      try {
+        fetch("/api/zalo-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "registration",
+            fullName: fullName.trim(),
+            className,
+            shirtSize,
+            phone: phone.trim(),
+            address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
+            paidAmount: bankInfo.amount,
+            guestsCount,
+          }),
+        });
+      } catch {}
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_profile_updated"));
+        window.dispatchEvent(new Event("tcdn4_registration_updated"));
+      }
+
+      toast.success("Đăng ký thành công! Đang mở mã VietQR để hoàn tất chuyển khoản...");
+      setShowQrModal(true);
+    } catch (err: any) {
+      toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 4. Không tham gia trực tiếp -> gửi lời nhắn nhủ vào Sổ lưu bút
+  const handleDeclineAndSendWish = async () => {
+    setSaving(true);
+    try {
+      await updateProfile({
+        attendance_status: "not_attending",
+        shirt_size: shirtSize,
+        delivery_address: deliveryAddress.trim(),
+        has_checked_in: true,
+      });
+
+      if (guestbookMessage.trim()) {
         try {
           const storedGb = localStorage.getItem("tcdn4_guestbook");
           const gbList = storedGb ? JSON.parse(storedGb) : [];
@@ -293,7 +533,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         window.dispatchEvent(new Event("tcdn4_registration_updated"));
       }
 
-      toast.success("Cập nhật thông tin & điểm danh thành công!");
+      toast.success("Cảm ơn bạn! Lời nhắn nhủ đã được lưu vào Sổ Lưu Bút K33.");
       onClose();
     } catch (err: any) {
       toast.error(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại"}`);
@@ -313,22 +553,100 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
       >
         <button
           onClick={onClose}
+          aria-label="Đóng"
           className="absolute right-4 top-4 rounded-full bg-slate-100 p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
         >
           <X size={18} />
         </button>
 
-        {/* Header */}
-        <div className="mb-5 text-center">
+        {/* Header Tiêu đề */}
+        <div className="mb-4 text-center">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-bold text-ueh border border-blue-100 mb-1.5">
             <Sparkles size={13} className="text-ueh-orange" /> Kỷ niệm 15 năm TCDN4 - K33 UEH
           </div>
           <h3 className="text-xl font-black text-ueh sm:text-2xl">
-            Điểm Danh & Hồ Sơ Thành Viên
+            Điểm Danh & Hồ Sơ Thành Viên TC4-ers
           </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-            Đồng bộ thông tin cá nhân vào Danh bạ K33 và xác nhận tham dự hội ngộ ngày 12/12/2026.
+            Cập nhật thông tin vào Danh bạ K33 và đăng ký tham dự ngày hội ngộ 12/12/2026.
           </p>
+        </div>
+
+        {/* Thẻ Trạng thái Tham gia 15 Năm (Yêu cầu Bước 8) */}
+        <div className="mb-4">
+          {myRegistration?.status === "confirmed" ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50/90 p-3 sm:p-3.5 text-emerald-900 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-xs">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                    <span>ĐÃ XÁC NHẬN THAM GIA & THANH TOÁN THÀNH CÔNG</span>
+                    <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800">100% OK</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-800 mt-0.5">
+                    Áo Polo: <strong>{myRegistration.shirtSize || shirtSize}</strong> • Hẹn gặp bạn ngày 12/12/2026 tại Cơ sở B!
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (myRegistration?.status === "pending" || (attendanceStatus === "attending" && myRegistration)) ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl border border-amber-300 bg-amber-50/90 p-3 sm:p-3.5 text-amber-900 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs mt-0.5 sm:mt-0">
+                  <QrCode size={19} />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-amber-950">
+                    ĐÃ ĐĂNG KÝ THAM GIA • CHỜ CHUYỂN KHOẢN ({bankInfo.amountText})
+                  </div>
+                  <div className="text-[11px] text-amber-800 mt-0.5">
+                    Quét mã VietQR để hệ thống SePay tự động xác nhận slot họp mặt & size áo {myRegistration?.shirtSize || shirtSize}.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(true)}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-ueh transition-colors"
+              >
+                <QrCode size={14} className="text-ueh-gold" />
+                <span>Mở Mã VietQR</span>
+              </button>
+            </div>
+          ) : attendanceStatus === "not_attending" ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <div>
+                <div className="font-bold text-slate-800">Trạng thái: Đã gửi lời chúc mừng (Không tham gia)</div>
+                <div className="text-[11px] text-slate-500">Bạn có thể đổi ý bất cứ lúc nào trước ngày 12/12.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAttendanceStatus("attending");
+                  setActiveTab("attendance");
+                }}
+                className="rounded-xl bg-ueh px-3 py-1.5 text-xs font-bold text-white hover:bg-ueh-light"
+              >
+                Đổi ý tham gia
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200/80 bg-blue-50/60 p-3 text-xs text-slate-700">
+              <div>
+                <div className="font-bold text-ueh">Bạn chưa đăng ký tham gia gặp mặt 15 năm</div>
+                <div className="text-[11px] text-slate-500">Hãy cập nhật thông tin và chọn áo Polo để giữ slot nhé!</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("attendance")}
+                className="rounded-xl bg-ueh px-3 py-1.5 text-xs font-bold text-white hover:bg-ueh-light"
+              >
+                Đăng ký ngay →
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 2 Tabs Chuyển đổi mượt mà */}
@@ -342,8 +660,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <User size={15} />
-            <span>1. Hồ sơ Danh bạ</span>
+            <UserCheck size={15} className={activeTab === "info" ? "text-ueh" : ""} />
+            <span>1. Thông tin cá nhân (Điểm danh)</span>
           </button>
           <button
             type="button"
@@ -354,569 +672,590 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Shirt size={15} />
-            <span>2. Điểm danh & Áo</span>
-            {attendanceStatus === "attending" && (
+            <Shirt size={15} className={activeTab === "attendance" ? "text-ueh-orange" : ""} />
+            <span>2. Đăng ký gặp mặt 15 năm</span>
+            {myRegistration?.status === "confirmed" ? (
               <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
-            )}
+            ) : myRegistration?.status === "pending" ? (
+              <span className="flex h-2 w-2 rounded-full bg-amber-500" />
+            ) : null}
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-4">
-          
-          {/* TAB 1: THÔNG TIN HỒ SƠ DANH BẠ */}
-          {activeTab === "info" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Khuyến khích đổi ảnh đại diện cá nhân rõ mặt */}
-              <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 p-3 text-xs text-amber-900 flex items-start gap-2.5">
-                <Sparkles size={17} className="text-amber-600 shrink-0 mt-0.5" />
-                <div className="text-[11px] leading-relaxed">
-                  <strong className="text-amber-800">Khuyến khích:</strong> Bạn hãy tải lên ảnh đại diện cá nhân rõ mặt để bạn bè cùng khóa TC10, TC11, TC12 dễ dàng nhận ra nhau sau 15 năm nhé!
-                </div>
+        {/* ========================================================= */}
+        {/* TAB 1: THÔNG TIN CÁ NHÂN (ĐIỂM DANH)                      */}
+        {/* ========================================================= */}
+        {activeTab === "info" && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Khuyến khích đổi ảnh đại diện cá nhân rõ mặt */}
+            <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 p-3 text-xs text-amber-900 flex items-start gap-2.5">
+              <Sparkles size={17} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <strong className="text-amber-800">Khuyến khích:</strong> Bạn hãy tải lên ảnh đại diện cá nhân rõ mặt để bạn bè cùng khóa TC10, TC11, TC12 dễ dàng nhận ra nhau sau 15 năm nhé!
               </div>
+            </div>
 
-              {/* Avatar Section: Chạm vào avatar để đổi ảnh ngay, gợi ý 2 option mặc định gọn gàng */}
-              <div className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/70">
-                <label className="relative shrink-0 cursor-pointer group" title="Chạm vào để tải ảnh từ máy / điện thoại">
-                  <div className="h-20 w-20 sm:h-22 sm:w-22 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl relative">
-                    {uploadingAvatar ? (
-                      <Loader2 size={24} className="animate-spin text-white" />
-                    ) : avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarUrl} alt={fullName} className="h-full w-full object-cover" />
-                    ) : (
-                      fullName.trim().charAt(0) || "A"
-                    )}
+            {/* Avatar Section: Chạm vào avatar để đổi ảnh ngay, gợi ý 2 option mặc định */}
+            <div className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/70">
+              <label className="relative shrink-0 cursor-pointer group" title="Chạm vào để tải ảnh từ máy / điện thoại">
+                <div className="h-20 w-20 sm:h-22 sm:w-22 overflow-hidden rounded-full ring-4 ring-blue-100 shadow-md bg-gradient-to-br from-blue-600 to-ueh flex items-center justify-center text-white font-black text-2xl relative">
+                  {uploadingAvatar ? (
+                    <Loader2 size={24} className="animate-spin text-white" />
+                  ) : avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarUrl} alt={fullName} className="h-full w-full object-cover" />
+                  ) : (
+                    getAvatarInitials(fullName)
+                  )}
 
-                    {/* Lớp phủ đổi ảnh khi hover */}
-                    <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-                      <Camera size={20} className="text-ueh-gold mb-0.5" />
-                      <span className="text-[10px] font-bold">Đổi ảnh</span>
-                    </div>
+                  {/* Lớp phủ đổi ảnh khi hover */}
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                    <Camera size={20} className="text-ueh-gold mb-0.5" />
+                    <span className="text-[10px] font-bold">Đổi ảnh</span>
                   </div>
+                </div>
 
-                  {/* Icon Camera góc dưới */}
-                  <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ueh text-white shadow-md border-2 border-white group-hover:scale-110 transition-transform">
-                    <Camera size={12} className="text-ueh-gold" />
+                {/* Icon Camera góc dưới */}
+                <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ueh text-white shadow-md border-2 border-white group-hover:scale-110 transition-transform">
+                  <Camera size={12} className="text-ueh-gold" />
+                </span>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarFileChange}
+                  disabled={uploadingAvatar}
+                />
+              </label>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-800">
+                  {uploadingAvatar ? "Đang tải ảnh lên..." : "Ảnh đại diện thành viên"}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-2.5">
+                  Chạm trực tiếp vào ảnh để tải ảnh từ máy hoặc điện thoại.
+                </p>
+
+                {/* 2 Option ảnh mặc định gợi ý duy nhất */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">
+                    Ảnh mặc định:
                   </span>
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarFileChange}
-                    disabled={uploadingAvatar}
-                  />
-                </label>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800">
-                    {uploadingAvatar ? "Đang tải ảnh lên..." : "Ảnh đại diện thành viên"}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5 mb-2.5">
-                    Chạm trực tiếp vào ảnh để tải ảnh từ máy hoặc điện thoại.
-                  </p>
-
-                  {/* 2 Option ảnh mặc định gợi ý duy nhất */}
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">
-                      Ảnh mặc định:
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {DEFAULT_AVATARS.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setAvatarUrl(item.src)}
-                          title={`Chọn ${item.label}`}
-                          className={`h-9 w-9 overflow-hidden rounded-full border-2 transition-all hover:scale-105 ${
-                            avatarUrl === item.src
-                              ? "border-ueh ring-2 ring-blue-200 scale-105 shadow-xs"
-                              : "border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300"
-                          }`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.src} alt={item.label} className="h-full w-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Họ tên & Lớp */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Họ và Tên *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="VD: Cao Tuấn Hiệp"
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none focus:ring-1 focus:ring-ueh"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Lớp sinh viên
-                  </label>
-                  <select
-                    value={className}
-                    onChange={(e) => setClassName(e.target.value as any)}
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
-                  >
-                    <option value="TC10">Lớp TC10 - K33 UEH</option>
-                    <option value="TC11">Lớp TC11 - K33 UEH</option>
-                    <option value="TC12">Lớp TC12 - K33 UEH</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* KHU VỰC SINH SỐNG & QUỐC TẾ */}
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5">
-                <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-2">
-                  <MapPin size={14} className="text-rose-500" /> Khu vực sinh sống hiện tại
-                </label>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mb-2.5">
-                  {[
-                    { id: "hcm", label: "TP. Hồ Chí Minh" },
-                    { id: "hn", label: "Hà Nội" },
-                    { id: "other", label: "Tỉnh khác" },
-                    { id: "overseas", label: "Xuất Ngoại" },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setLocation(item.id)}
-                      className={`rounded-xl py-2 px-2.5 text-xs font-bold text-center border transition-all ${
-                        location === item.id
-                          ? "bg-ueh text-white border-ueh shadow-xs"
-                          : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Nếu chọn Tỉnh khác -> Hiện danh sách chọn Tỉnh lớn + ô điền thêm */}
-                {location === "other" ? (
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
-                    <span className="text-[11px] font-bold text-ueh block mb-1.5">
-                      📍 Chọn nhanh tỉnh / thành phố:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {OTHER_PROVINCES_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setSpecificLocation(preset)}
-                          className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
-                            specificLocation === preset
-                              ? "bg-ueh text-white border-ueh shadow-2xs"
-                              : "bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-ueh"
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      value={specificLocation}
-                      onChange={(e) => setSpecificLocation(e.target.value)}
-                      placeholder="Hoặc điền thêm tỉnh thành của bạn (VD: Đà Nẵng, Nha Trang, Huế...)"
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                    />
-                  </div>
-                ) : location === "overseas" ? (
-                  /* Nếu chọn Xuất Ngoại -> Hiện danh sách Quốc gia */
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
-                    <span className="text-[11px] font-bold text-ueh-orange block mb-1.5">
-                      🌏 Bạn đang sinh sống / làm việc tại quốc gia nào?
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {OVERSEAS_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setSpecificLocation(preset)}
-                          className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
-                            specificLocation === preset
-                              ? "bg-orange-500 text-white border-orange-500 shadow-2xs"
-                              : "bg-white text-slate-600 border-slate-200 hover:bg-orange-50"
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      value={specificLocation}
-                      onChange={(e) => setSpecificLocation(e.target.value)}
-                      placeholder="Hoặc nhập cụ thể: VD: Sydney, Úc hoặc California, Mỹ..."
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                    />
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    value={specificLocation}
-                    onChange={(e) => setSpecificLocation(e.target.value)}
-                    placeholder="Quận / Huyện cụ thể (VD: Quận 1, Quận 7, Cầu Giấy...)"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                  />
-                )}
-              </div>
-
-              {/* HÔN NHÂN & SỐ LƯỢNG CON CÁI (F1) */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    <Heart size={14} className="text-rose-500" /> Tình trạng hôn nhân
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMaritalStatus("married")}
-                      className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
-                        maritalStatus === "married"
-                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      💍 Đã kết hôn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMaritalStatus("single")}
-                      className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
-                        maritalStatus === "single"
-                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      🌟 Độc thân vui tính
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    <Baby size={14} className="text-emerald-600" /> Số con cái (F1 & Nhóc tì)
-                  </label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[0, 1, 2, 3].map((num) => (
+                    {DEFAULT_AVATARS.map((item) => (
                       <button
-                        key={num}
+                        key={item.id}
                         type="button"
-                        onClick={() => setChildrenCount(num)}
-                        className={`rounded-xl py-2 text-xs font-bold text-center border transition-all ${
-                          childrenCount === num
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        onClick={() => setAvatarUrl(item.src)}
+                        title={`Chọn ${item.label}`}
+                        className={`h-9 w-9 overflow-hidden rounded-full border-2 transition-all hover:scale-105 ${
+                          avatarUrl === item.src
+                            ? "border-ueh ring-2 ring-blue-200 scale-105 shadow-xs"
+                            : "border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300"
                         }`}
                       >
-                        {num === 3 ? "3+ bé" : `${num} bé`}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.src} alt={item.label} className="h-full w-full object-cover" />
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Nghề nghiệp, Công ty & SĐT */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Chức danh / Nghề nghiệp
-                  </label>
-                  <input
-                    type="text"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                    placeholder="VD: Giám đốc Tài chính, CEO..."
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Công ty / Doanh nghiệp
-                  </label>
-                  <input
-                    type="text"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="VD: SMLIFE, VinaCapital..."
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Số điện thoại / Zalo *
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="VD: 0972555211"
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Ngày sinh nhật của bạn
-                  </label>
-                  <input
-                    type="date"
-                    value={birthday}
-                    onChange={(e) => setBirthday(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
-                  />
-                </div>
+            {/* Họ tên & Lớp */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Họ và Tên *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="VD: Cao Tuấn Hiệp"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none focus:ring-1 focus:ring-ueh"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Đôi dòng chia sẻ ngắn (Bio)
+                  Lớp sinh viên
+                </label>
+                <select
+                  value={className}
+                  onChange={(e) => setClassName(e.target.value as any)}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                >
+                  <option value="TC10">Lớp TC10 - K33 UEH</option>
+                  <option value="TC11">Lớp TC11 - K33 UEH</option>
+                  <option value="TC12">Lớp TC12 - K33 UEH</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Số điện thoại & Ngày sinh */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Số điện thoại / Zalo *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="VD: 0972555211 (Dùng đối soát SePay)"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Ngày sinh nhật của bạn
+                </label>
+                <input
+                  type="date"
+                  value={birthday}
+                  onChange={(e) => setBirthday(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Khu vực sinh sống */}
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5">
+              <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-2">
+                <MapPin size={14} className="text-rose-500" /> Khu vực sinh sống hiện tại
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mb-2.5">
+                {[
+                  { id: "hcm", label: "TP. Hồ Chí Minh" },
+                  { id: "hn", label: "Hà Nội" },
+                  { id: "other", label: "Tỉnh khác" },
+                  { id: "overseas", label: "Xuất Ngoại" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setLocation(item.id)}
+                    className={`rounded-xl py-2 px-2.5 text-xs font-bold text-center border transition-all ${
+                      location === item.id
+                        ? "bg-ueh text-white border-ueh shadow-xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {location === "other" ? (
+                <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
+                  <span className="text-[11px] font-bold text-ueh block mb-1.5">
+                    📍 Chọn nhanh tỉnh / thành phố:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {OTHER_PROVINCES_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setSpecificLocation(preset)}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                          specificLocation === preset
+                            ? "bg-ueh text-white border-ueh shadow-2xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-ueh"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={specificLocation}
+                    onChange={(e) => setSpecificLocation(e.target.value)}
+                    placeholder="Hoặc điền thêm tỉnh thành của bạn (VD: Đà Nẵng, Nha Trang, Huế...)"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+              ) : location === "overseas" ? (
+                <div className="mt-2.5 pt-2.5 border-t border-slate-200/80">
+                  <span className="text-[11px] font-bold text-ueh-orange block mb-1.5">
+                    🌏 Bạn đang sinh sống / làm việc tại quốc gia nào?
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {OVERSEAS_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setSpecificLocation(preset)}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                          specificLocation === preset
+                            ? "bg-orange-500 text-white border-orange-500 shadow-2xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-orange-50"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={specificLocation}
+                    onChange={(e) => setSpecificLocation(e.target.value)}
+                    placeholder="Hoặc nhập cụ thể: VD: Sydney, Úc hoặc California, Mỹ..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={specificLocation}
+                  onChange={(e) => setSpecificLocation(e.target.value)}
+                  placeholder="Quận / Huyện cụ thể (VD: Quận 1, Quận 7, Cầu Giấy...)"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                />
+              )}
+            </div>
+
+            {/* Hôn nhân & F1 */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
+                <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
+                  <Heart size={14} className="text-rose-500" /> Tình trạng hôn nhân
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMaritalStatus("married")}
+                    className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                      maritalStatus === "married"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    💍 Đã kết hôn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMaritalStatus("single")}
+                    className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                      maritalStatus === "single"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    🌟 Độc thân vui tính
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
+                <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-1.5">
+                  <Baby size={14} className="text-emerald-600" /> Số con cái (F1 & Nhóc tì)
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[0, 1, 2, 3].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setChildrenCount(num)}
+                      className={`rounded-xl py-2 text-xs font-bold text-center border transition-all ${
+                        childrenCount === num
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {num === 3 ? "3+ bé" : `${num} bé`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Chức danh & Công ty */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Chức danh / Nghề nghiệp
                 </label>
                 <input
                   type="text"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="VD: Rất vui được gặp lại mọi người sau 15 năm!"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  placeholder="VD: Giám đốc Tài chính, CEO..."
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
                 />
               </div>
 
-              <div className="pt-2 flex justify-between items-center">
-                <span className="text-[11px] text-slate-400">Bước tiếp theo: Điểm danh & Áo kỷ niệm</span>
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Công ty / Doanh nghiệp
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="VD: SMLIFE, VinaCapital..."
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Tiểu sử ngắn */}
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                Đôi dòng chia sẻ ngắn (Bio)
+              </label>
+              <input
+                type="text"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="VD: Rất vui được gặp lại mọi người sau 15 năm!"
+                className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
+              />
+            </div>
+
+            {/* Nút hành động chuyên nghiệp cho Tab 1 (Yêu cầu bước 6) */}
+            <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleSaveProfileOnly}
+                disabled={saving}
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                {saving ? "Đang lưu..." : "Chỉ lưu thông tin (Đóng)"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAndContinue}
+                disabled={saving}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 transition-all"
+              >
+                {saving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Sparkles size={16} className="text-ueh-gold" />
+                )}
+                <span>Cập nhật thông tin & Tiếp tục đăng ký 15 năm →</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 2: ĐĂNG KÝ CHƯƠNG TRÌNH GẶP MẶT 15 NĂM (BƯỚC 7)       */}
+        {/* ========================================================= */}
+        {activeTab === "attendance" && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Lựa chọn Tham gia hoặc Không tham gia */}
+            <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5">
+              <div className="text-xs font-bold uppercase text-ueh mb-2.5 flex items-center justify-between">
+                <span>Bạn có tham gia gặp mặt Thứ 7 ngày 12/12 không?</span>
+                <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                  Hạn chốt: 30/11
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("attendance")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-ueh transition-colors"
+                  onClick={() => setAttendanceStatus("attending")}
+                  className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
+                    attendanceStatus === "attending"
+                      ? "bg-white border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
+                      : "bg-white/80 border-slate-200 hover:bg-white"
+                  }`}
                 >
-                  Tiếp theo: Điểm danh 15 Năm <ChevronRight size={14} />
+                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                    attendanceStatus === "attending" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"
+                  }`}>
+                    {attendanceStatus === "attending" && <Check size={12} strokeWidth={3} />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">🟢 Tôi sẽ tham gia</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng Thứ 7 ngày 12/12/2026. Kèo này 15 năm mới hội ngộ một lần, không say không về, không gặp không tha nha anh em! 🍻🎉
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAttendanceStatus("not_attending")}
+                  className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
+                    attendanceStatus === "not_attending"
+                      ? "bg-white border-orange-500 shadow-md ring-2 ring-orange-500/20"
+                      : "bg-white/80 border-slate-200 hover:bg-white"
+                  }`}
+                >
+                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                    attendanceStatus === "not_attending" ? "border-orange-500 bg-orange-500 text-white" : "border-slate-300"
+                  }`}>
+                    {attendanceStatus === "not_attending" && <Check size={12} strokeWidth={3} />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">🟠 Rất tiếc không thể tham gia</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Gửi lời nhắn nhủ thân thương và chúc mừng vào Sổ lưu bút K33
+                    </div>
+                  </div>
                 </button>
               </div>
             </div>
-          )}
 
-          {/* TAB 2: ĐIỂM DANH & ÁO KỶ NIỆM 15 NĂM */}
-          {activeTab === "attendance" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Lựa chọn Có đi hoặc Không đi */}
-              <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5">
-                <div className="text-xs font-bold uppercase text-ueh mb-2.5 flex items-center justify-between">
-                  <span>Bạn có tham gia gặp mặt Thứ 7 ngày 12/12 không?</span>
-                  <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                    Hạn chốt: 30/11
-                  </span>
+            {/* NẾU ĐI: CHỌN ÁO, SỐ NGƯỜI, ĐỊA CHỈ NHẬN ÁO & KINH PHÍ */}
+            {attendanceStatus === "attending" && (
+              <div className="space-y-3.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 uppercase">
+                    <Shirt size={15} className="text-ueh-gold" />
+                    <span>Chọn size Áo Polo Kỷ Niệm 15 Năm (Tặng kèm)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowShirtSizePopup(true)}
+                    className="text-[11px] font-bold text-ueh hover:underline"
+                  >
+                    Xem bảng số đo size áo ↗
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setAttendanceStatus("attending")}
-                    className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
-                      attendanceStatus === "attending"
-                        ? "bg-white border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
-                        : "bg-white/80 border-slate-200 hover:bg-white"
-                    }`}
-                  >
-                    <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                      attendanceStatus === "attending" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"
-                    }`}>
-                      {attendanceStatus === "attending" && <Check size={12} strokeWidth={3} />}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">🟢 Sẽ tham gia trực tiếp</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Tại Làng Nướng Nam Bộ (302A Tô Hiến Thành, Q.10) lúc 11:30 ngày 12/12
-                      </div>
-                    </div>
-                  </button>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {SHIRT_SIZES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setShirtSize(s)}
+                      className={`rounded-xl py-2 px-2 text-xs font-bold text-center border transition-all ${
+                        shirtSize === s
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-102"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
 
+                <div className="pt-1">
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Địa chỉ nhận áo (hoặc nhận tại tiệc)
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+
+                {/* Box Kinh phí & VietQR */}
+                <div className="rounded-xl border border-emerald-300 bg-white p-3.5 flex items-center justify-between shadow-2xs">
+                  <div>
+                    <div className="text-[11px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
+                    <div className="text-base font-black text-slate-900">{bankInfo.amountText} / thành viên</div>
+                    <div className="text-[10px] text-emerald-700 font-medium">Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm</div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setAttendanceStatus("not_attending")}
-                    className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
-                      attendanceStatus === "not_attending"
-                        ? "bg-white border-orange-500 shadow-md ring-2 ring-orange-500/20"
-                        : "bg-white/80 border-slate-200 hover:bg-white"
-                    }`}
+                    onClick={() => setShowQrModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-ueh transition-colors"
                   >
-                    <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                      attendanceStatus === "not_attending" ? "border-orange-500 bg-orange-500 text-white" : "border-slate-300"
-                    }`}>
-                      {attendanceStatus === "not_attending" && <Check size={12} strokeWidth={3} />}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">🟠 Tiếc quá, mình ở xa / bận</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Gửi lời chúc Lưu bút & nhận áo kỷ niệm gửi ship tận nơi
-                      </div>
-                    </div>
+                    <QrCode size={14} className="text-ueh-gold" /> Mã VietQR
                   </button>
                 </div>
               </div>
+            )}
 
-              {/* NẾU ĐI: CHỌN SIZE ÁO & KINH PHÍ */}
-              {attendanceStatus === "attending" && (
-                <div className="space-y-3.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4">
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-emerald-800">
-                      <Shirt size={15} /> Chọn Size áo Polo Kỷ niệm
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowShirtSizePopup(true)}
-                      className="text-[11px] font-bold text-ueh underline hover:text-ueh-light"
+            {/* NẾU KHÔNG ĐI: GỬI LƯU BÚT */}
+            {attendanceStatus === "not_attending" && (
+              <div className="space-y-3.5 rounded-2xl border border-orange-200/80 bg-orange-50/40 p-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-orange-900 uppercase">
+                  <MessageSquare size={15} className="text-ueh-orange" />
+                  <span>Gửi lời nhắn thân thương vào Sổ Lưu Bút K33</span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={guestbookMessage}
+                  onChange={(e) => setGuestbookMessage(e.target.value)}
+                  placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười! Hẹn gặp mọi người vào dịp gần nhất..."
+                  className="w-full rounded-xl border border-orange-200 bg-white p-3 text-xs focus:border-ueh focus:outline-none"
+                />
+
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-600 mb-1">
+                    <Shirt size={14} /> Đăng ký nhận Áo Polo gửi ship tận nơi (tùy chọn)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <select
+                      value={shirtSize}
+                      onChange={(e) => setShirtSize(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                     >
-                      Bảng thông số size áo 📐
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {SHIRT_SIZES.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setShirtSize(s)}
-                        className={`rounded-xl py-1.5 text-[11px] font-bold text-center border transition-all ${
-                          shirtSize === s
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                        Số người đi cùng / F1
-                      </label>
-                      <select
-                        value={guestsCount}
-                        onChange={(e) => setGuestsCount(Number(e.target.value))}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
-                      >
-                        <option value={0}>Đi 1 mình (35+ bạn cùng khóa)</option>
-                        <option value={1}>Dắt theo 1 người thân / bé</option>
-                        <option value={2}>Dắt theo cả gia đình (2 người)</option>
-                        <option value={3}>Dắt theo 3 người</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                        Địa chỉ nhận áo (hoặc nhận tại tiệc)
-                      </label>
-                      <input
-                        type="text"
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="VD: Nhận trực tiếp tại Cơ sở B"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Box Kinh phí & VietQR */}
-                  <div className="rounded-xl border border-emerald-300 bg-white p-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
-                      <div className="text-base font-black text-slate-900">1.000.000 VNĐ / thành viên</div>
-                      <div className="text-[10px] text-emerald-700 font-medium">Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowQrModal(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-ueh"
-                    >
-                      <QrCode size={14} /> Mã VietQR
-                    </button>
+                      {SHIRT_SIZES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Địa chỉ nhận ship áo tận nhà..."
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
+                    />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Button Actions của Tab 2 (Yêu cầu bước 7) */}
+            <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("info")}
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ← Quay lại Thông tin cá nhân
+              </button>
+
+              {attendanceStatus === "attending" ? (
+                <button
+                  type="button"
+                  onClick={handleRegisterAttendance}
+                  disabled={saving}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 transition-all"
+                >
+                  {saving ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <QrCode size={16} className="text-ueh-gold" />
+                  )}
+                  <span>Đăng ký tham gia & Nhận mã QR chuyển khoản</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDeclineAndSendWish}
+                  disabled={saving}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg transition-all"
+                >
+                  <MessageSquare size={16} />
+                  <span>Gửi lời nhắn nhủ & Lời chúc</span>
+                </button>
               )}
-
-              {/* NẾU KHÔNG ĐI: GỬI LƯU BÚT & ẢNH KỶ NIỆM */}
-              {attendanceStatus === "not_attending" && (
-                <div className="space-y-3.5 rounded-2xl border border-orange-200/80 bg-orange-50/40 p-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-orange-900 uppercase">
-                    <MessageSquare size={15} className="text-ueh-orange" />
-                    <span>Gửi lời nhắn thân thương vào Sổ Lưu Bút K33</span>
-                  </div>
-                  <textarea
-                    rows={3}
-                    value={guestbookMessage}
-                    onChange={(e) => setGuestbookMessage(e.target.value)}
-                    placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười! Hẹn gặp mọi người vào dịp gần nhất..."
-                    className="w-full rounded-xl border border-orange-200 bg-white p-3 text-xs focus:border-ueh focus:outline-none"
-                  />
-
-                  <div>
-                    <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-600 mb-1">
-                      <Shirt size={14} /> Đăng ký nhận Áo Polo gửi ship tận nơi (tùy chọn)
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <select
-                        value={shirtSize}
-                        onChange={(e) => setShirtSize(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                      >
-                        {SHIRT_SIZES.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Địa chỉ nhận ship áo tận nhà..."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
             </div>
-          )}
-
-          {/* Bottom Actions */}
-          <div className="mt-6 flex items-center justify-between pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-6 py-2.5 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
-            >
-              <Check size={15} />
-              <span>{saving ? "Đang đồng bộ..." : "Lưu & Xác Nhận Điểm Danh"}</span>
-            </button>
           </div>
-        </form>
+        )}
 
-        {/* POPUP BẢNG SIZE ÁO */}
+        {/* ========================================================= */}
+        {/* POPUP BẢNG THÔNG SỐ SIZE ÁO POLO                          */}
+        {/* ========================================================= */}
         {showShirtSizePopup && (
           <div
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
@@ -959,7 +1298,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={() => setShowShirtSizePopup(false)}
-                className="mt-4 w-full rounded-xl bg-ueh py-2 text-xs font-bold text-white"
+                className="mt-4 w-full rounded-xl bg-ueh py-2 text-xs font-bold text-white hover:bg-ueh-light"
               >
                 Đã hiểu, quay lại chọn size
               </button>
@@ -967,7 +1306,9 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* POPUP VIETQR */}
+        {/* ========================================================= */}
+        {/* POPUP VIETQR & SEPAY TỰ ĐỘNG XÁC MINH (BƯỚC 7)           */}
+        {/* ========================================================= */}
         {showQrModal && (
           <div
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
@@ -983,28 +1324,104 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
               >
                 <X size={16} />
               </button>
-              <div className="text-base font-bold text-ueh mb-1">Mã Chuyển Khoản VietQR</div>
-              <div className="text-xs text-slate-500 mb-3">Quét mã bằng ứng dụng ngân hàng</div>
-              <div className="mx-auto w-52 overflow-hidden rounded-2xl border-2 border-slate-200 bg-white p-2 shadow-sm">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrUrl} alt="VietQR" className="w-full h-auto" />
+
+              <div className="flex h-11 w-11 mx-auto mb-2 items-center justify-center rounded-2xl bg-ueh text-white shadow-xs">
+                <QrCode size={22} className="text-ueh-gold" />
               </div>
-              <div className="mt-3 text-xs font-semibold text-slate-700 space-y-1">
-                <div>{bankInfo.bankName}</div>
-                <div className="font-mono font-bold text-slate-900">{bankInfo.accountNumber} - {bankInfo.accountName}</div>
-                <div className="text-emerald-600 font-black mt-1">Số tiền: {bankInfo.amountText}</div>
-                <div className="rounded-xl bg-blue-50/80 p-2 text-left border border-blue-200 mt-2">
-                  <div className="text-[10px] uppercase font-bold text-ueh">Cú pháp gợi ý:</div>
-                  <div className="font-mono text-xs font-bold text-ueh">{transferSyntax}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Không khóa cứng, gợi ý ghi rõ Tên & SĐT để đối soát</div>
+              <div className="text-base font-black text-slate-900">Mã Chuyển Khoản VietQR</div>
+              <div className="text-xs text-slate-500 mb-3">Mở ứng dụng ngân hàng bất kỳ để quét mã</div>
+
+              {/* Ảnh QR Code tự động điền sẵn nội dung & số tiền */}
+              <div className="mx-auto w-52 overflow-hidden rounded-2xl border-2 border-emerald-300 bg-white p-2 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrUrl} alt="VietQR TCDN4" className="w-full h-auto rounded-lg" />
+              </div>
+
+              {/* Thông tin chuyển khoản chi tiết */}
+              <div className="mt-3.5 text-xs text-slate-700 space-y-2 text-left bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Ngân hàng:</span>
+                  <span className="font-bold text-slate-900">{bankInfo.bankName}</span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Số tài khoản:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-slate-900">{bankInfo.accountNumber}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(bankInfo.accountNumber, "account", "Số tài khoản")}
+                      className="p-1 rounded-md text-ueh hover:bg-blue-100"
+                      title="Sao chép số tài khoản"
+                    >
+                      {copiedKey === "account" ? <CheckCheck size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Người thụ hưởng:</span>
+                  <span className="font-bold text-slate-900">{bankInfo.accountName}</span>
+                </div>
+
+                <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                  <span className="text-slate-500">Số tiền:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black text-emerald-600">{bankInfo.amountText}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(String(bankInfo.amount), "amount", "Số tiền")}
+                      className="p-1 rounded-md text-ueh hover:bg-blue-100"
+                      title="Sao chép số tiền"
+                    >
+                      {copiedKey === "amount" ? <CheckCheck size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-blue-50/90 p-2.5 border border-blue-200 mt-2">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <span className="text-[10px] uppercase font-bold text-ueh">Cú pháp chuyển khoản:</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(transferSyntax, "syntax", "Cú pháp chuyển khoản")}
+                      className="text-[10px] font-bold text-ueh flex items-center gap-1 hover:underline"
+                    >
+                      {copiedKey === "syntax" ? <CheckCheck size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                      <span>Sao chép</span>
+                    </button>
+                  </div>
+                  <div className="font-mono text-xs font-bold text-ueh break-all">{transferSyntax}</div>
                 </div>
               </div>
+
+              {/* Thông báo SePay tự động & Live Polling indicator */}
+              <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-left flex items-start gap-2 shadow-2xs">
+                <span className="relative flex h-2.5 w-2.5 mt-1 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <div className="space-y-0.5">
+                  <div className="font-bold text-emerald-950 flex items-center gap-1">
+                    <span>Đối soát tự động qua SePay</span>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded">Trực tiếp</span>
+                  </div>
+                  <div className="text-[10.5px] text-emerald-800 leading-snug">
+                    Hệ thống đang lắng nghe giao dịch 24/7 và sẽ tự động duyệt ngay khi tiền về tài khoản mà không cần gửi biên lai!
+                  </div>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setShowQrModal(false)}
-                className="mt-4 w-full rounded-xl bg-slate-900 py-2 text-xs font-bold text-white hover:bg-ueh"
+                onClick={() => {
+                  setShowQrModal(false);
+                  onClose();
+                  toast.success("Cảm ơn bạn! Hệ thống SePay sẽ tự động cập nhật trạng thái khi giao dịch thành công.");
+                }}
+                className="mt-3.5 w-full rounded-xl bg-ueh py-2.5 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-md"
               >
-                Đóng
+                Tôi đã chuyển khoản xong
               </button>
             </div>
           </div>

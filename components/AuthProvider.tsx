@@ -21,7 +21,7 @@ interface AuthContextValue {
   loading: boolean;
   isAdmin: boolean;
   openLogin: () => void;
-  openProfile: () => void;
+  openProfile: (initialTab?: "info" | "attendance" | unknown) => void;
   closeProfile: () => void;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<boolean>;
@@ -35,38 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loginOpen, setLoginOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileInitialTab, setProfileInitialTab] = useState<"info" | "attendance">("info");
 
   useEffect(() => {
-    if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
-      if (new URLSearchParams(window.location.search).get("dev_admin") === "1") {
-        localStorage.setItem("tcdn4_dev_mode", "admin");
-        document.cookie = "tcdn4_dev_mode=admin; path=/";
-      }
-      const devMode = localStorage.getItem("tcdn4_dev_mode");
-      if (devMode === "admin" || document.cookie.includes("tcdn4_dev_mode=admin")) {
-        document.cookie = "tcdn4_dev_mode=admin; path=/";
-        setUser({
-          id: "dev-admin-id",
-          email: "caotuanhiep@gmail.com",
-          app_metadata: {},
-          user_metadata: { full_name: "Cao Tuấn Hiệp" },
-          aud: "authenticated",
-          created_at: new Date().toISOString(),
-        } as any);
-        setProfile({
-          id: "dev-admin-id",
-          full_name: "Cao Tuấn Hiệp",
-          class_name: "TC10",
-          job_title: "Trưởng Ban Liên Lạc",
-          company: "UEH Alumni",
-          location_region: "hcm",
-          avatar_url: "/images/avatar-boy.png",
-          birthday: "1989-11-20",
-          role: "admin",
-        });
-        setLoading(false);
-        return;
-      }
+    // Tự động dọn dẹp dev mode mock nếu còn sót trong browser
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("tcdn4_dev_mode");
+      document.cookie = "tcdn4_dev_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     }
 
     const supabase = getSupabase();
@@ -142,16 +117,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadProfile(data.user).finally(() => active && setLoading(false));
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       setTimeout(() => loadProfile(u), 0);
+
+      // Khi người dùng đăng nhập thành công: lập tức mở popup Cập nhật thông tin điểm danh
+      if (event === "SIGNED_IN" && u) {
+        setProfileInitialTab("info");
+        setProfileOpen(true);
+        setLoginOpen(false);
+      }
 
       // Tự động dọn dẹp URL param ?code= sau khi hoàn tất đăng nhập
       if (typeof window !== "undefined" && window.location.search.includes("code=")) {
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete("code");
         window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ""));
+        setProfileInitialTab("info");
+        setProfileOpen(true);
+        setLoginOpen(false);
       }
     });
 
@@ -171,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (typeof window !== "undefined") {
         localStorage.removeItem("tcdn4_dev_mode");
+        document.cookie = "tcdn4_dev_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       }
       await getSupabase().auth.signOut();
     } catch {
@@ -181,7 +167,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
-  const openProfile = useCallback(() => setProfileOpen(true), []);
+  const openProfile = useCallback((tab?: "info" | "attendance" | unknown) => {
+    setProfileInitialTab(tab === "attendance" ? "attendance" : "info");
+    setProfileOpen(true);
+  }, []);
   const closeProfile = useCallback(() => setProfileOpen(false), []);
 
   const updateProfile = useCallback(
@@ -207,10 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`profile_${user.id}`, JSON.stringify(merged));
       } catch {}
 
-      // Try persisting to Supabase
+      // Try persisting to Supabase (bỏ qua nếu là dev-mock user để không báo lỗi UUID 400)
       try {
-        const supabase = getSupabase();
-        await supabase.from("profiles").upsert(merged);
+        if (!user.id.startsWith("dev-")) {
+          const supabase = getSupabase();
+          await supabase.from("profiles").upsert(merged);
+        }
       } catch {
         // Table might need column schema migration
       }
@@ -244,7 +235,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={value}>
       {children}
       {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
-      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
+      {profileOpen && (
+        <ProfileModal
+          onClose={() => setProfileOpen(false)}
+          initialTab={profileInitialTab}
+        />
+      )}
     </AuthContext.Provider>
   );
 }

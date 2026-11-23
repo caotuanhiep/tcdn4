@@ -110,7 +110,7 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
       verifyCode: "#TCDN4-BLL",
       status: "verified",
       isDefault: false,
-      receiveCheckin: false,
+      receiveCheckin: true,
       receiveRegistration: true,
       receiveBirthday: false,
       createdAt: "18/11/2026",

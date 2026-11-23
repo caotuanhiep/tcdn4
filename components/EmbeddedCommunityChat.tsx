@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
+import { getAvatarInitials } from "@/lib/avatar";
 
 interface ChatMessage {
   id: string;
@@ -243,7 +244,7 @@ export default function EmbeddedCommunityChat() {
                   <div
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${msg.avatarColor} text-[10px] font-black text-white shadow-xs`}
                   >
-                    {msg.sender.charAt(msg.sender.lastIndexOf(" ") + 1)}
+                    {getAvatarInitials(msg.sender)}
                   </div>
 
                   {/* Bubble */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile } from "lucide-react";
+import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getSupabase } from "@/lib/supabase/client";
 
@@ -180,11 +180,19 @@ export default function Hero() {
     }
   };
 
+  const handleCheckinClick = () => {
+    if (!user) {
+      openLogin();
+    } else {
+      openProfile("info");
+    }
+  };
+
   const handleRegisterClick = () => {
     if (!user) {
       openLogin();
     } else {
-      openProfile();
+      openProfile("attendance");
     }
   };
 
@@ -335,23 +343,25 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* Nút bấm Button Đăng ký và Khám phá danh bạ (To lớn, nổi bật trên Desktop) */}
+        {/* Nút bấm Button Điểm danh TC4-ers và Đăng ký gặp mặt 15 năm (To lớn, nổi bật trên Desktop) */}
         <div className="flex flex-col items-center justify-center gap-3.5 sm:flex-row sm:gap-5 mb-10">
+          {/* Nút 1: Điểm danh TC4-ers (Chính, to lớn, rực rỡ nhất để khuyến khích cập nhật danh bạ) */}
           <button
-            onClick={handleRegisterClick}
+            onClick={handleCheckinClick}
             className="group flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-full bg-ueh px-8 py-3.5 sm:px-10 sm:py-4.5 text-base sm:text-lg font-black text-white shadow-xl shadow-blue-900/30 transition-all hover:bg-ueh-light hover:-translate-y-1 hover:shadow-2xl active:translate-y-0"
           >
-            <Calendar size={20} className="text-ueh-gold" />
-            <span>Đăng ký Gặp mặt 15 năm</span>
-            <ChevronRight size={20} className="transition-transform group-hover:translate-x-1.5" />
+            <UserCheck size={22} className="text-ueh-gold" />
+            <span>Điểm danh TC4-ers</span>
+            <ChevronRight size={20} className="transition-transform group-hover:translate-x-1.5 text-ueh-gold" />
           </button>
 
+          {/* Nút 2: Đăng ký gặp mặt 15 năm (Trang trọng, sắc nét) */}
           <button
-            onClick={() => scrollTo("directory")}
-            className="flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-full border-2 border-slate-300 bg-white px-8 py-3.5 sm:px-10 sm:py-4.5 text-base sm:text-lg font-bold text-slate-700 shadow-sm transition-all hover:border-ueh hover:text-ueh hover:-translate-y-1 hover:shadow-md active:translate-y-0"
+            onClick={handleRegisterClick}
+            className="group flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-full border-2 border-ueh/30 bg-white px-8 py-3.5 sm:px-10 sm:py-4.5 text-base sm:text-lg font-bold text-ueh shadow-md transition-all hover:border-ueh hover:bg-blue-50/50 hover:-translate-y-1 hover:shadow-xl active:translate-y-0"
           >
-            <Users size={20} className="text-ueh" />
-            <span>Khám phá Danh bạ</span>
+            <Calendar size={20} className="text-ueh-orange" />
+            <span>Đăng ký Gặp mặt 15 năm</span>
           </button>
         </div>
 
