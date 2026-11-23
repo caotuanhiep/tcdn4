@@ -96,7 +96,47 @@ export default function UsersPanel() {
 
   useEffect(() => {
     fetchUsers();
+
+    const handleLocal = () => fetchUsers();
+    window.addEventListener("tcdn4_profile_updated", handleLocal);
+
+    let channel: any = null;
+    try {
+      const supabase = getSupabase();
+      channel = supabase.channel("tcdn4-realtime-users")
+        .on("broadcast", { event: "profile_updated" }, () => {
+          fetchUsers();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+          fetchUsers();
+        })
+        .subscribe();
+    } catch {}
+
+    return () => {
+      window.removeEventListener("tcdn4_profile_updated", handleLocal);
+      if (channel) {
+        try {
+          const supabase = getSupabase();
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
   }, []);
+
+  const broadcastSync = () => {
+    try {
+      const supabase = getSupabase();
+      supabase.channel("tcdn4-realtime-users").send({
+        type: "broadcast",
+        event: "profile_updated",
+        payload: { time: Date.now() },
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("tcdn4_profile_updated"));
+      }
+    } catch {}
+  };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
     const previous = [...users];
@@ -116,6 +156,7 @@ export default function UsersPanel() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Lỗi lưu quyền lên máy chủ");
       }
+      broadcastSync();
       toast.success(
         `Đã cập nhật vai trò thành ${
           newRole === "admin" ? "Super Admin" : newRole === "committee" ? "Ban liên lạc" : "Thành viên"
@@ -167,6 +208,7 @@ export default function UsersPanel() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Lỗi cập nhật máy chủ");
       }
+      broadcastSync();
       toast.success("Đã cập nhật thông tin thành viên thành công trên máy chủ!");
       setIsEditModalOpen(false);
     } catch (err: any) {
@@ -198,6 +240,7 @@ export default function UsersPanel() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Lỗi xóa thành viên");
       }
+      broadcastSync();
       toast.success("Đã xóa thành viên khỏi danh bạ!");
     } catch (err: any) {
       setUsers(previous);

@@ -37,6 +37,7 @@ export interface ZaloBotConfig {
   botName: string;
   isTokenValid: boolean;
   aiApiKey?: string;
+  aiModel?: string;
   autoCheckin?: boolean;
   autoRegistration?: boolean;
   autoBirthday?: boolean;
@@ -57,6 +58,7 @@ export const DEFAULT_ZALO_CONFIG: ZaloBotConfig = {
   botName: "TCDN4 K33 Bot",
   isTokenValid: true,
   aiApiKey: "",
+  aiModel: "claude-3-5-sonnet-20241022",
   autoCheckin: true,
   autoRegistration: true,
   autoBirthday: true,

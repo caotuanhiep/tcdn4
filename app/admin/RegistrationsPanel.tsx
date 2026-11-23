@@ -11,9 +11,22 @@ import {
   Users, 
   DollarSign, 
   Check, 
-  Trash2 
+  Trash2,
+  Calendar
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { getSupabase } from "@/lib/supabase/client";
+
+function formatRegistrationDate(val?: string) {
+  if (!val) return "—";
+  if (val.includes("T")) {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+  }
+  return val;
+}
 
 interface Registration {
   id: string;
@@ -45,17 +58,48 @@ export default function RegistrationsPanel() {
       }
     } catch {}
 
-    fetch("/api/registrations", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.success && Array.isArray(data.registrations)) {
-          setList(data.registrations);
-          try {
-            localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
-          } catch {}
-        }
-      })
-      .catch(() => {});
+    const fetchLatest = () => {
+      fetch("/api/registrations", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.success && Array.isArray(data.registrations)) {
+            setList(data.registrations);
+            try {
+              localStorage.setItem("tcdn4_registrations", JSON.stringify(data.registrations));
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchLatest();
+
+    // Lắng nghe sự kiện cục bộ và Realtime Supabase
+    const handleLocal = () => fetchLatest();
+    window.addEventListener("tcdn4_registration_updated", handleLocal);
+
+    let channel: any = null;
+    try {
+      const supabase = getSupabase();
+      channel = supabase.channel("tcdn4-realtime-sync")
+        .on("broadcast", { event: "registration_updated" }, () => {
+          fetchLatest();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+          fetchLatest();
+        })
+        .subscribe();
+    } catch {}
+
+    return () => {
+      window.removeEventListener("tcdn4_registration_updated", handleLocal);
+      if (channel) {
+        try {
+          const supabase = getSupabase();
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
   }, []);
 
   const saveList = (data: Registration[]) => {
@@ -65,6 +109,12 @@ export default function RegistrationsPanel() {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("tcdn4_registration_updated"));
       }
+      const supabase = getSupabase();
+      supabase.channel("tcdn4-realtime-sync").send({
+        type: "broadcast",
+        event: "registration_updated",
+        payload: { time: Date.now() },
+      });
     } catch {}
   };
 
@@ -218,14 +268,15 @@ export default function RegistrationsPanel() {
 
       {/* Registrations Table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-xs">
-        <table className="w-full min-w-[700px] text-left text-xs">
+        <table className="w-full min-w-[780px] text-left text-xs">
           <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
             <tr>
               <th className="px-4 py-3">Họ và tên</th>
               <th className="px-4 py-3">Lớp</th>
               <th className="px-4 py-3">SĐT</th>
               <th className="px-4 py-3">Size Áo</th>
-              <th className="px-4 py-3">Địa chỉ giao áo</th>
+              <th className="px-4 py-3">Địa chỉ nhận áo</th>
+              <th className="px-4 py-3">Ngày ĐK</th>
               <th className="px-4 py-3 text-center">Trạng thái</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
@@ -249,10 +300,13 @@ export default function RegistrationsPanel() {
                 <td className="px-4 py-3 text-slate-600">{item.phone}</td>
                 <td className="px-4 py-3 font-semibold text-slate-800">{item.shirtSize}</td>
                 <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{item.address}</td>
+                <td className="px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                  {formatRegistrationDate(item.createdAt)}
+                </td>
                 <td className="px-4 py-3 text-center">
                   <button
                     onClick={() => toggleStatus(item.id)}
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 ${
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 cursor-pointer ${
                       item.status === "confirmed"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : "bg-amber-50 text-amber-700 border border-amber-200"
@@ -272,7 +326,7 @@ export default function RegistrationsPanel() {
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => removeReg(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                   >
                     <Trash2 size={14} />
                   </button>

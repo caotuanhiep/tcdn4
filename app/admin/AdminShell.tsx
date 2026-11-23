@@ -12,14 +12,14 @@ import ZaloBotSettings from "./ZaloBotSettings";
 import PaymentSettingsPanel from "./PaymentSettingsPanel";
 import CommitteePanel from "./CommitteePanel";
 
-type Tab = "registrations" | "zalobot" | "payment" | "committee" | "users" | "images";
+type Tab = "registrations" | "users" | "zalobot" | "payment" | "committee" | "images";
 
 const TABS = [
-  { id: "registrations" as Tab, label: "Đăng ký 15 Năm & Áo", icon: CalendarCheck },
+  { id: "registrations" as Tab, label: "Đăng ký 15 Năm", icon: CalendarCheck },
+  { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
   { id: "zalobot" as Tab, label: "Đấu nối Bot Zalo", icon: Bot },
   { id: "payment" as Tab, label: "Cấu hình Ngân hàng & QR", icon: CreditCard },
   { id: "committee" as Tab, label: "Ban Liên Lạc", icon: HeartHandshake },
-  { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
   { id: "images" as Tab, label: "Quản lý hình ảnh", icon: ImageIcon },
 ];
 
@@ -104,6 +104,11 @@ export default function AdminShell() {
             <RegistrationsPanel />
           </div>
         )}
+        {visitedTabs.has("users") && (
+          <div className={tab === "users" ? "block" : "hidden"}>
+            <UsersPanel />
+          </div>
+        )}
         {visitedTabs.has("zalobot") && (
           <div className={tab === "zalobot" ? "block" : "hidden"}>
             <ZaloBotSettings />
@@ -117,11 +122,6 @@ export default function AdminShell() {
         {visitedTabs.has("committee") && (
           <div className={tab === "committee" ? "block" : "hidden"}>
             <CommitteePanel />
-          </div>
-        )}
-        {visitedTabs.has("users") && (
-          <div className={tab === "users" ? "block" : "hidden"}>
-            <UsersPanel />
           </div>
         )}
         {visitedTabs.has("images") && (

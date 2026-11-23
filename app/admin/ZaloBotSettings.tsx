@@ -38,7 +38,9 @@ import {
   ChevronRight,
   Settings,
   Save,
-  DollarSign
+  DollarSign,
+  Cpu,
+  Database
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { getSupabase } from "@/lib/supabase/client";
@@ -219,6 +221,13 @@ const AI_TONE_OPTIONS = [
   { id: "birthday", label: "🎂 Mừng sinh nhật", desc: "Lời chúc sinh nhật đồng môn dí dỏm, tài lộc dồi dào" },
 ];
 
+const AI_MODELS = [
+  { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", tag: "Mới nhất", desc: "Tư duy sâu & phân tích database siêu thông minh" },
+  { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", tag: "Khuyên dùng", desc: "Hài hước, sắc sảo, tự nhiên, trả lời siêu chuẩn" },
+  { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", tag: "Siêu tốc", desc: "Phản hồi nhanh chớp mắt, tiết kiệm token" },
+  { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", tag: "Google AI", desc: "Tốc độ nhanh, ổn định từ hệ sinh thái Google" },
+];
+
 export default function ZaloBotSettings() {
   const toast = useToast();
 
@@ -238,6 +247,10 @@ export default function ZaloBotSettings() {
   const [editingChatIdGroup, setEditingChatIdGroup] = useState<ZaloGroupItem | null>(null);
   const [customChatIdInput, setCustomChatIdInput] = useState("");
   const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [aiModel, setAiModel] = useState("claude-3-5-sonnet-20241022");
+  const [aiChatQuery, setAiChatQuery] = useState("");
+  const [aiChatResponse, setAiChatResponse] = useState<string | null>(null);
+  const [isAiChatLoading, setIsAiChatLoading] = useState(false);
   const [isSavingGroups, setIsSavingGroups] = useState(false);
 
   // Groups Management (SMLIFE Kit Model)
@@ -317,6 +330,7 @@ export default function ZaloBotSettings() {
         if (p.birthdayTemplate) setBirthdayTemplate(p.birthdayTemplate);
         if (p.paymentTemplate) setPaymentTemplate(p.paymentTemplate);
         if (p.aiApiKey || p.claudeApiKey || p.geminiApiKey) setClaudeApiKey(p.aiApiKey || p.claudeApiKey || p.geminiApiKey);
+        if (p.aiModel) setAiModel(p.aiModel);
       }
 
       const savedGroups = localStorage.getItem("tcdn4_zalo_groups");
@@ -338,6 +352,7 @@ export default function ZaloBotSettings() {
           if (d.config.webhookUrl) setWebhookUrl(d.config.webhookUrl);
           if (d.config.botName) setBotName(d.config.botName);
           if (d.config.aiApiKey) setClaudeApiKey(d.config.aiApiKey);
+          if (d.config.aiModel) setAiModel(d.config.aiModel);
           if (typeof d.config.autoCheckin === "boolean") setAutoCheckin(d.config.autoCheckin);
           if (typeof d.config.autoRegistration === "boolean") setAutoRegistration(d.config.autoRegistration);
           if (typeof d.config.autoBirthday === "boolean") setAutoBirthday(d.config.autoBirthday);
@@ -740,13 +755,14 @@ export default function ZaloBotSettings() {
           topic: aiTopic.trim(),
           tone: aiTone,
           apiKey: claudeApiKey.trim() || undefined,
+          model: aiModel,
         }),
       });
       const data = await res.json();
       if (data.success && data.content) {
         setAiGeneratedResult(data.content);
         const engineLabel =
-          data.provider === "claude" ? "Claude AI" : data.provider === "gemini" ? "Gemini AI" : "K33 Engine";
+          data.provider === "claude" ? `Claude AI (${data.model || aiModel})` : data.provider === "gemini" ? "Gemini AI" : "K33 Engine";
         toast.success(`Trợ lý ${engineLabel} đã tạo nội dung thành công!`);
       } else {
         toast.error("Không thể tạo nội dung, vui lòng thử lại!");
@@ -755,6 +771,40 @@ export default function ZaloBotSettings() {
       toast.error("Lỗi kết nối tới máy chủ AI!");
     } finally {
       setIsAiGenerating(false);
+    }
+  };
+
+  const handleAiChatQuery = async (customQuery?: string) => {
+    const query = (customQuery || aiChatQuery).trim();
+    if (!query) {
+      toast.error("Vui lòng nhập câu hỏi để tra cứu thông tin!");
+      return;
+    }
+    if (customQuery) setAiChatQuery(customQuery);
+    setIsAiChatLoading(true);
+    setAiChatResponse(null);
+    try {
+      const res = await fetch("/api/ai-writer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: query,
+          tone: "chat",
+          apiKey: claudeApiKey.trim() || undefined,
+          model: aiModel,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.content) {
+        setAiChatResponse(data.content);
+        toast.success("AI đã trả lời từ dữ liệu thời gian thực!");
+      } else {
+        toast.error(data.error || "Không thể lấy phản hồi từ AI");
+      }
+    } catch {
+      toast.error("Lỗi khi kết nối tới AI");
+    } finally {
+      setIsAiChatLoading(false);
     }
   };
 
@@ -1345,40 +1395,191 @@ export default function ZaloBotSettings() {
             </div>
           </div>
 
-          {/* Card 3: Cấu Hình Khóa API Claude (Anthropic AI) */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs">
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2 mb-1">
-              <Wand2 size={18} className="text-ueh-orange" /> Cấu Hình Khóa API Claude (Anthropic AI)
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Mặc định hệ thống đã tích hợp sẵn bộ máy K33 dí dỏm. Dán Anthropic Claude API Key (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-mono text-purple-700 font-bold">sk-ant-...</code>) để kích hoạt trí tuệ nhân tạo Claude soạn tin nhắn sắc sảo, tự nhiên và thông minh nhất.
-            </p>
-
-            <div className="flex gap-2 max-w-xl">
-              <input
-                type="password"
-                value={claudeApiKey}
-                onChange={(e) => setClaudeApiKey(e.target.value)}
-                placeholder="Dán Anthropic Claude API Key (sk-ant-api...)"
-                className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-mono focus:border-ueh focus:outline-none"
-              />
-              <button
-                onClick={async () => {
-                  if (!claudeApiKey.trim()) {
-                    toast.error("Vui lòng nhập API Key của Claude!");
-                    return;
-                  }
-                  await saveBotConfig({ aiApiKey: claudeApiKey.trim() });
-                  toast.success("Đã lưu khóa Claude API lên máy chủ! Dùng chung cho cả máy tính & điện thoại.");
-                }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 shrink-0"
-              >
-                Lưu Khóa
-              </button>
+          {/* Card 3: Cấu Hình Khóa API Claude (Anthropic AI) & Database K33 */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Wand2 size={18} className="text-ueh-orange" /> Cấu Hình Claude AI & Tra Cứu Database K33
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tích hợp Claude 3.7 / 3.5 Sonnet truy cập dữ liệu thời gian thực từ Supabase để trả lời hỏi đáp và soạn thảo văn bản.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 shrink-0 self-start sm:self-auto">
+                <Database size={13} className="text-emerald-600" />
+                <span>Supabase Realtime Live</span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400 mt-2">
-              Khóa API được lưu tập trung trên máy chủ, khi bạn mở trên điện thoại sẽ tự động có hiệu lực ngay mà không cần nhập lại.
-            </p>
+
+            {/* API Key */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Khóa Anthropic Claude API Key (hoặc Gemini API Key):
+              </label>
+              <div className="flex gap-2 max-w-xl">
+                <input
+                  type="password"
+                  value={claudeApiKey}
+                  onChange={(e) => setClaudeApiKey(e.target.value)}
+                  placeholder="Dán Anthropic Claude API Key (sk-ant-api...)"
+                  className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-mono focus:border-ueh focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!claudeApiKey.trim()) {
+                      toast.error("Vui lòng nhập API Key của Claude!");
+                      return;
+                    }
+                    await saveBotConfig({ aiApiKey: claudeApiKey.trim(), aiModel });
+                    toast.success("Đã lưu khóa API và Model lên máy chủ! Dùng chung cho cả máy tính & điện thoại.");
+                  }}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 shrink-0 cursor-pointer"
+                >
+                  Lưu Khóa
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                Khóa API được lưu tập trung trên Supabase Storage máy chủ, mọi thiết bị Admin đều sử dụng chung mà không cần cấu hình lại.
+              </p>
+            </div>
+
+            {/* Model Selector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Cpu size={14} className="text-purple-600" /> Chọn Model AI Kích Hoạt:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {AI_MODELS.map((m) => {
+                  const isSelected = aiModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setAiModel(m.id);
+                        saveBotConfig({ aiModel: m.id });
+                        toast.success(`Đã kích hoạt model: ${m.name}`);
+                      }}
+                      className={`text-left p-3 rounded-2xl border transition-all cursor-pointer relative ${
+                        isSelected
+                          ? "bg-purple-50/80 border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
+                          : "bg-slate-50/60 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${isSelected ? "text-purple-900" : "text-slate-800"}`}>
+                          {m.name}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            isSelected
+                              ? "bg-purple-200 text-purple-800"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {m.tag}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-tight">{m.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Khung Hỏi Thử Trí Tuệ Nhân Tạo K33 (Tra Cứu Database Trực Tiếp) */}
+            <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-purple-50/30 p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles size={14} className="text-ueh-gold" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                      Hỏi Đáp Thử Nghiệm AI K33 (Tra Cứu Database Trực Tiếp)
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Kiểm tra khả năng AI trích xuất dữ liệu thực từ tcdn4.top: thành viên, khu vực, đăng ký, sinh nhật...
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 hidden sm:inline-block">
+                  Model: {AI_MODELS.find((m) => m.id === aiModel)?.name || aiModel}
+                </span>
+              </div>
+
+              {/* Câu hỏi gợi ý nhanh */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[
+                  { text: "📊 Có bao nhiêu người đã đăng ký 15 năm?", query: "Có bao nhiêu người đã đăng ký tham gia họp mặt 15 năm và danh sách gồm những ai?" },
+                  { text: "📍 Có những ai đang ở Hà Nội hoặc Nước ngoài?", query: "Có những cựu sinh viên nào đang ở khu vực Hà Nội hoặc Nước ngoài?" },
+                  { text: "🔍 Tìm thông tin bạn Cao Tuấn Hiệp", query: "Thông tin của bạn Cao Tuấn Hiệp trong danh bạ là gì?" },
+                  { text: "🎂 Ai có sinh nhật trong tháng này?", query: "Những ai có ngày sinh nhật trong tháng này?" },
+                ].map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleAiChatQuery(item.query)}
+                    className="inline-flex items-center gap-1 rounded-xl bg-white border border-blue-200 hover:border-ueh hover:bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition-all shadow-2xs cursor-pointer"
+                  >
+                    {item.text}
+                  </button>
+                ))}
+              </div>
+
+              {/* Ô nhập câu hỏi custom */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={aiChatQuery}
+                  onChange={(e) => setAiChatQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAiChatQuery();
+                    }
+                  }}
+                  placeholder="Nhập câu hỏi bất kỳ (VD: Ai ở Quận 7?, Có bạn nào làm ngân hàng không?)..."
+                  className="flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-ueh focus:outline-none shadow-2xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAiChatQuery()}
+                  disabled={isAiChatLoading}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-ueh hover:bg-ueh-light px-4 py-2 text-xs font-bold text-white shadow-xs transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                >
+                  {isAiChatLoading ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>{isAiChatLoading ? "AI đang tra cứu..." : "Hỏi AI"}</span>
+                </button>
+              </div>
+
+              {/* Khung hiển thị câu trả lời */}
+              {aiChatResponse && (
+                <div className="rounded-xl border border-blue-200 bg-white p-3.5 space-y-2 animate-in fade-in shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-ueh">Phản Hồi Từ AI K33:</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(aiChatResponse);
+                        toast.success("Đã copy phản hồi của AI!");
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-ueh cursor-pointer"
+                    >
+                      <Copy size={12} /> Sao chép
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-sans">
+                    {aiChatResponse}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1847,18 +2048,6 @@ export default function ZaloBotSettings() {
               )}
             </div>
           </div>
-
-          {/* Nút lưu cuối trang cho tab Mẫu tin tự động */}
-          <div className="flex justify-end pt-2">
-            <button
-              onClick={handleSaveAutoTemplates}
-              disabled={isSavingAutoTemplates}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
-            >
-              {isSavingAutoTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-              <span>{isSavingAutoTemplates ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Điểm Danh, 15 Năm & Chuyển Khoản"}</span>
-            </button>
-          </div>
         </div>
       )}
 
@@ -2048,24 +2237,54 @@ export default function ZaloBotSettings() {
                     </span>
                   ) : null}
                 </div>
-                <select
-                  value={testBirthdayGroupId}
-                  onChange={(e) => setTestBirthdayGroupId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-pink-500 focus:outline-none"
-                >
-                  <option value="all">📢 Tất cả nhóm (bật nhận tin sinh nhật)</option>
-                  {groups.map((grp) => (
-                    <option key={grp.id} value={grp.id}>
-                      {grp.name} {grp.chatId ? "(✓ Đã nối Bot)" : "(Chưa nối Chat ID)"}
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTestBirthdayGroupId("all")}
+                    className={`col-span-2 flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                      testBirthdayGroupId === "all"
+                        ? "bg-pink-600 text-white border-pink-600 shadow-xs ring-2 ring-pink-600/20"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-pink-300 hover:bg-pink-50/50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>📢</span>
+                      <span>Tất cả nhóm (nhận sinh nhật)</span>
+                    </span>
+                    {testBirthdayGroupId === "all" && <Check size={14} />}
+                  </button>
+
+                  {groups.map((grp) => {
+                    const isSelected = testBirthdayGroupId === grp.id;
+                    return (
+                      <button
+                        key={grp.id}
+                        type="button"
+                        onClick={() => setTestBirthdayGroupId(grp.id)}
+                        className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-left ${
+                          isSelected
+                            ? "bg-pink-600 text-white border-pink-600 shadow-xs ring-2 ring-pink-600/20"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-pink-300 hover:bg-pink-50/50"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <div className="truncate font-bold leading-tight">{grp.name.replace(" - K33 UEH", "").replace(" - Toàn Khóa K33", "")}</div>
+                          <div className={`text-[9px] font-medium flex items-center gap-1 mt-0.5 ${isSelected ? "text-pink-100" : grp.chatId ? "text-emerald-600" : "text-amber-500"}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${grp.chatId ? (isSelected ? "bg-emerald-300" : "bg-emerald-500") : (isSelected ? "bg-amber-200" : "bg-amber-400")}`}></span>
+                            <span>{grp.chatId ? "Đã nối Bot" : "Chưa nối"}</span>
+                          </div>
+                        </div>
+                        {isSelected && <Check size={13} className="shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
                 {(() => {
                   const curr = groups.find((g) => g.id === testBirthdayGroupId);
                   if (curr && !curr.chatId && testBirthdayGroupId !== "all") {
                     return (
-                      <p className="text-[10px] text-amber-800 mt-1.5 bg-amber-50 rounded-xl p-2.5 border border-amber-200 leading-relaxed">
-                        ⚠ Nhóm này chưa kết nối Chat ID. Hãy mời <strong>Bot Elephant</strong> vào nhóm, bổ nhiệm làm Phó nhóm và soạn tin: <code className="font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">/verify {curr.verifyCode}</code>
+                      <p className="text-[10px] text-amber-800 mt-2 bg-amber-50 rounded-xl p-2.5 border border-amber-200 leading-relaxed">
+                        ⚠ Nhóm <strong>{curr.name}</strong> chưa kết nối Chat ID. Hãy mời <strong>Bot Elephant</strong> vào nhóm, bổ nhiệm làm Phó nhóm và soạn tin: <code className="font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">/verify {curr.verifyCode}</code>
                       </p>
                     );
                   }
@@ -2134,18 +2353,6 @@ export default function ZaloBotSettings() {
               </button>
             </div>
           </div>
-        </div>
-
-        {/* Nút lưu cuối trang cho tab Sinh nhật */}
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={handleSaveBirthdayTemplate}
-            disabled={isSavingBirthdayTemplate}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
-          >
-            {isSavingBirthdayTemplate ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-            <span>{isSavingBirthdayTemplate ? "Đang lưu..." : "Lưu Cấu Hình Mẫu Tin Sinh Nhật"}</span>
-          </button>
         </div>
       </div>
     )}
@@ -2311,6 +2518,28 @@ export default function ZaloBotSettings() {
               >
                 ✕
               </button>
+            </div>
+
+            {/* Chọn Model AI */}
+            <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="flex items-center gap-1.5 font-bold text-slate-700 text-[11px]">
+                <Cpu size={13} className="text-purple-600" /> Model AI:
+              </span>
+              <select
+                value={aiModel}
+                onChange={(e) => {
+                  setAiModel(e.target.value);
+                  saveBotConfig({ aiModel: e.target.value });
+                  toast.success(`Đã chọn model: ${AI_MODELS.find((m) => m.id === e.target.value)?.name || e.target.value}`);
+                }}
+                className="bg-transparent font-bold text-slate-800 text-[11px] focus:outline-none cursor-pointer"
+              >
+                {AI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.tag})
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Chọn Tone */}

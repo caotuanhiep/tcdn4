@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadZaloBotConfig } from "@/app/api/settings/zalo/route";
+import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
 
 interface AiWriterRequest {
   topic?: string;
-  tone?: "funny" | "warm" | "urgent" | "formal" | "birthday" | "checkin" | "registration" | "payment";
+  tone?: "funny" | "warm" | "urgent" | "formal" | "birthday" | "checkin" | "registration" | "payment" | "chat";
   memberName?: string;
   className?: string;
   details?: string;
   apiKey?: string;
+  model?: string;
 }
 
 // Bộ máy sinh nội dung thông minh đặc thù cho Cựu sinh viên TCDN4 - K33 UEH
@@ -47,9 +49,9 @@ const SYNTHESIZERS: Record<string, (topic: string, name?: string, cls?: string) 
 export async function POST(req: NextRequest) {
   try {
     const body: AiWriterRequest = await req.json();
-    const { topic = "", tone = "funny", memberName, className, details, apiKey } = body;
+    const { topic = "", tone = "funny", memberName, className, details, apiKey, model: requestedModel } = body;
 
-    // Lấy API Key từ body gửi lên, hoặc từ cấu hình lưu trên server, hoặc từ env
+    // Lấy cấu hình đã lưu
     const savedConfig = await loadZaloBotConfig();
     const activeKey =
       apiKey ||
@@ -58,36 +60,62 @@ export async function POST(req: NextRequest) {
       process.env.CLAUDE_API_KEY ||
       process.env.GEMINI_API_KEY;
 
-    const prompt = `Bạn là một chuyên gia truyền thông và là cựu sinh viên lớp Tài chính doanh nghiệp 4 (TCDN4), Khóa 33 (K33) Đại học Kinh tế TP.HCM (UEH).
-Hãy viết một mẩu tin nhắn ngắn gọn (khoảng 3 - 6 câu), dí dỏm, thân tình, có icon emoji sinh động, dùng để gửi vào Nhóm Zalo của lớp/khóa.
-Thông tin:
-- Chủ đề/Ý tưởng: "${topic || "Nhắc họp mặt 15 năm ngày 12/12/2026 tại Cơ sở B và chốt size áo"}"
-- Phong cách viết: ${
-      tone === "funny"
-        ? "Hài hước, dí dỏm, đậm chất sinh viên UEH"
-        : tone === "warm"
-        ? "Ấm áp, xúc động, hoài niệm 15 năm thanh xuân"
-        : tone === "urgent"
-        ? "Giục giã, hào hứng, chốt sổ gấp"
-        : tone === "birthday"
-        ? "Chúc mừng sinh nhật thân tình, hài hước, tuổi 36-37"
-        : "Trang trọng, thông báo chính thức BLL"
-    }
+    // Chọn model AI phù hợp
+    const targetModel = requestedModel || savedConfig.aiModel || "claude-3-5-sonnet-20241022";
+
+    // 1. Trích xuất ngữ cảnh thời gian thực từ cơ sở dữ liệu Supabase
+    const dbContext = await getAlumniDatabaseContext(topic || memberName || "");
+
+    const systemPrompt = `Bạn là Trợ lý AI thông minh, dí dỏm và hào sảng của Ban Liên Lạc Cựu sinh viên TCDN4 - Khóa 33 (K33) Đại học Kinh tế TP.HCM (UEH) - niên khóa 2007 - 2011.
+Bạn có quyền truy cập trực tiếp vào Cơ sở dữ liệu thời gian thực của website tcdn4.top:
+${dbContext.rawTextContext}
+
+Phong cách trả lời:
+- Gần gũi, thân tình, hào sảng, đậm chất sinh viên UEH và giới tài chính doanh nghiệp.
+- Khi người dùng hỏi về dữ liệu (như: ai đang ở khu vực nào, có bao nhiêu người tham gia, tìm thông tin ai đó, sinh nhật ai), bạn hãy lấy số liệu chính xác từ cơ sở dữ liệu trên để trả lời rõ ràng, sinh động.
+- Trả lời ngắn gọn, súc tích (3-6 câu), có emoji phù hợp.
+- Link web tham khảo: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
+
+    let userPrompt = "";
+    if (tone === "chat") {
+      userPrompt = topic || "Xin chào Trợ lý AI K33!";
+    } else {
+      userPrompt = `Viết một mẩu tin nhắn gửi vào nhóm Zalo lớp/khóa:
+- Chủ đề/Ý tưởng: "${topic || "Họp mặt 15 năm TCDN4 K33 UEH"}"
+- Phong cách: ${
+        tone === "funny"
+          ? "Hài hước, dí dỏm, đậm chất sinh viên UEH"
+          : tone === "warm"
+          ? "Ấm áp, xúc động, hoài niệm 15 năm thanh xuân"
+          : tone === "urgent"
+          ? "Giục giã, hào hứng, chốt sổ gấp"
+          : tone === "birthday"
+          ? "Chúc mừng sinh nhật thân tình, hài hước, tuổi 36-37"
+          : "Trang trọng, thông báo chính thức BLL"
+      }
 ${memberName ? `- Tên thành viên: ${memberName}` : ""}
 ${className ? `- Lớp: ${className}` : ""}
 ${details ? `- Chi tiết thêm: ${details}` : ""}
-Quy tắc:
-- Chèn link tự nhiên: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory
-- Không dùng từ ngữ sáo rỗng. Hãy gần gũi như đồng môn nói chuyện với nhau.
-- Chỉ trả về duy nhất nội dung tin nhắn, không thêm lời dẫn hay giải thích.`;
+Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn giải thích.`;
+    }
 
     if (activeKey) {
-      // 1. NẾU LÀ KHÓA CLAUDE (Bắt đầu bằng sk-ant... hoặc dạng khóa thông thường)
-      const isClaudeKey = activeKey.startsWith("sk-ant") || (!activeKey.startsWith("AIza") && activeKey.startsWith("sk-"));
-      if (isClaudeKey || activeKey.startsWith("sk-ant")) {
-        try {
-          const claudeModels = ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
-          for (const model of claudeModels) {
+      // 1. NẾU LÀ KHÓA CLAUDE HOẶC YÊU CẦU MODEL CLAUDE
+      const isClaude =
+        activeKey.startsWith("sk-ant") ||
+        (!activeKey.startsWith("AIza") && activeKey.startsWith("sk-")) ||
+        targetModel.includes("claude");
+
+      if (isClaude && !targetModel.includes("gemini")) {
+        const candidateModels = [
+          targetModel,
+          "claude-3-7-sonnet-20250219",
+          "claude-3-5-sonnet-20241022",
+          "claude-3-5-haiku-20241022",
+        ].filter((v, i, a) => a.indexOf(v) === i);
+
+        for (const m of candidateModels) {
+          try {
             const res = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
               headers: {
@@ -96,40 +124,50 @@ Quy tắc:
                 "anthropic-version": "2023-06-01",
               },
               body: JSON.stringify({
-                model,
+                model: m,
                 max_tokens: 1024,
-                messages: [{ role: "user", content: prompt }],
+                system: systemPrompt,
+                messages: [{ role: "user", content: userPrompt }],
               }),
             });
 
             if (res.ok) {
               const data = await res.json();
               const generated = data?.content?.[0]?.text;
-              if (generated && generated.trim().length > 10) {
+              if (generated && generated.trim().length > 5) {
                 return NextResponse.json({
                   success: true,
                   content: generated.trim(),
                   provider: "claude",
-                  model,
+                  model: m,
                 });
               }
             }
+          } catch (e) {
+            console.warn(`Claude model ${m} call failed:`, e);
           }
-        } catch (e) {
-          console.warn("Claude API call failed:", e);
         }
       }
 
-      // 2. NẾU LÀ KHÓA GEMINI (Bắt đầu bằng AIza...)
-      if (activeKey.startsWith("AIza") || (!isClaudeKey && !activeKey.startsWith("sk-ant"))) {
+      // 2. NẾU LÀ KHÓA GEMINI HOẶC YÊU CẦU GEMINI
+      if (activeKey.startsWith("AIza") || targetModel.includes("gemini") || !isClaude) {
         try {
+          const geminiModel = targetModel.includes("gemini") ? targetModel : "gemini-1.5-flash";
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${activeKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `${systemPrompt}\n\nNgười dùng hỏi/yêu cầu: ${userPrompt}`,
+                      },
+                    ],
+                  },
+                ],
               }),
             }
           );
@@ -137,11 +175,12 @@ Quy tắc:
           if (res.ok) {
             const data = await res.json();
             const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (generated && generated.trim().length > 10) {
+            if (generated && generated.trim().length > 5) {
               return NextResponse.json({
                 success: true,
                 content: generated.trim(),
                 provider: "gemini",
+                model: geminiModel,
               });
             }
           }
@@ -151,7 +190,38 @@ Quy tắc:
       }
     }
 
-    // 3. Fallback: Sử dụng bộ máy AI tổng hợp thông minh nội bộ K33
+    // 3. Fallback thông minh: Sử dụng dữ liệu database thực tế K33
+    if (tone === "chat") {
+      const qLower = topic.toLowerCase();
+      let answer = "";
+      if (qLower.includes("đăng ký") || qLower.includes("tham gia") || qLower.includes("bao nhiêu")) {
+        answer = `📊 Hiện tại trên hệ thống tcdn4.top đã có ${dbContext.totalAttending} thành viên chính thức xác nhận tham dự Hội ngộ 15 Năm (trên tổng số ${dbContext.totalProfiles} thành viên đã điểm danh). Danh sách gồm: ${dbContext.attendingNames.slice(0, 10).join(", ")}${dbContext.attendingNames.length > 10 ? ` và ${dbContext.attendingNames.length - 10} bạn khác` : ""} 🎉!`;
+      } else if (qLower.includes("hà nội") || qLower.includes("hn")) {
+        answer = dbContext.hnMembers.length > 0
+          ? `📍 Đồng môn K33 tại Hà Nội hiện có: ${dbContext.hnMembers.join(", ")} 🗼!`
+          : `📍 Hiện tại trong hệ thống chưa có bạn nào cập nhật sinh sống ở Hà Nội. Cả nhà nhắc anh em vào tcdn4.top điểm danh nhé!`;
+      } else if (qLower.includes("hồ chí minh") || qLower.includes("hcm") || qLower.includes("sài gòn")) {
+        answer = `📍 Khu vực TP.HCM đang là đông nhất với ${dbContext.hcmMembers.length} cựu sinh viên: ${dbContext.hcmMembers.slice(0, 15).join(", ")}... 🥂`;
+      } else if (qLower.includes("nước ngoài") || qLower.includes("ngoại")) {
+        answer = dbContext.overseasMembers.length > 0
+          ? `✈️ Đồng môn đang ở Nước ngoài: ${dbContext.overseasMembers.join(", ")}!`
+          : `✈️ Hiện chưa có bạn nào lưu hồ sơ ở Nước ngoài.`;
+      } else if (qLower.includes("sinh nhật")) {
+        answer = dbContext.birthdayMembersThisMonth.length > 0
+          ? `🎂 Danh sách sinh nhật tháng này gồm: ${dbContext.birthdayMembersThisMonth.join(", ")} 🎉!`
+          : `🎂 Tháng này chưa có bạn nào ghi nhận sinh nhật trên hệ thống.`;
+      } else {
+        answer = `🤖 Trợ lý K33 xin chào! Dữ liệu hiện tại: Có ${dbContext.totalProfiles} bạn đã điểm danh (${dbContext.tc10Count} TC10, ${dbContext.tc11Count} TC11, ${dbContext.tc12Count} TC12), ${dbContext.totalAttending} bạn đã đăng ký tham gia họp mặt ngày 12/12/2026 tại Cơ sở B UEH! Bạn có thể nhập Claude API Key để trò chuyện tự nhiên hơn nữa nhé! ✨`;
+      }
+
+      return NextResponse.json({
+        success: true,
+        content: answer,
+        provider: "builtin-engine",
+        model: "k33-live-db",
+      });
+    }
+
     const synthFn = SYNTHESIZERS[tone] || SYNTHESIZERS.funny;
     const variants = synthFn(topic, memberName, className);
     const chosen = variants[Math.floor(Math.random() * variants.length)];
@@ -160,6 +230,7 @@ Quy tắc:
       success: true,
       content: chosen,
       provider: "builtin-engine",
+      model: "k33-templates",
     });
   } catch (error: any) {
     return NextResponse.json(

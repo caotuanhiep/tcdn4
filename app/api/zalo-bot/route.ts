@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadZaloBotConfig, saveZaloBotConfig, ZaloGroupConfigItem } from "@/app/api/settings/zalo/route";
 import { DEFAULT_BANK_INFO, normalizeBankConfig } from "@/lib/bank";
+import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
 import fs from "fs";
 import path from "path";
 
@@ -197,147 +198,72 @@ async function handleAlumniAiQuery(
     }
   } catch {}
 
-  // 2. TRUY VẤN CƠ SỞ DỮ LIỆU SUPABASE
-  let totalAttending = 0;
-  let attendeeHighlights: string[] = [];
-  let totalProfiles = 0;
-  let searchedMembers: string[] = [];
-  let searchKeyword = "";
-  let birthdayMembersThisMonth: string[] = [];
-
-  try {
-    const supabase = getSupabaseAdmin();
-
-    // Thống kê người tham gia họp mặt 15 năm
-    const { count: attCount, data: attData } = await supabase
-      .from("profiles")
-      .select("full_name, class_name", { count: "exact" })
-      .eq("attendance_status", "attending")
-      .limit(15);
-
-    if (typeof attCount === "number") totalAttending = attCount;
-    if (attData && attData.length > 0) {
-      attendeeHighlights = attData.map((d: any) => `${d.full_name} (${d.class_name || "K33"})`);
-    }
-
-    // Tổng số người đã tạo hồ sơ / điểm danh
-    const { count: profCount } = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
-    if (typeof profCount === "number") totalProfiles = profCount;
-
-    // Tìm kiếm bạn bè nếu câu hỏi có nhắc tới tên
-    const searchMatch = cleanQuery.match(
-      /(?:tìm\s+(?:bạn|anh|chị)?|thông\s*tin\s+(?:về|của)?|hỏi\s+về\s+(?:bạn|anh|chị)?|bạn|anh|chị)\s+([A-ZÀ-Ỹa-zà-ỹ0-9\s]{2,30})/i
-    );
-    let keyword = searchMatch ? searchMatch[1].trim() : "";
-    keyword = keyword.replace(/^(bạn|anh|chị)\s+/i, "").trim();
-    searchKeyword = keyword;
-
-    if (
-      keyword &&
-      keyword.length >= 2 &&
-      !["bot", "gì", "ai", "đâu", "nào", "họp lớp", "tiền", "khi nào"].includes(keyword.toLowerCase())
-    ) {
-      const { data: found } = await supabase
-        .from("profiles")
-        .select("full_name, class_name, job_title, company, location_region, attendance_status")
-        .ilike("full_name", `%${keyword}%`)
-        .limit(3);
-
-      if (found && found.length > 0) {
-        searchedMembers = found.map(
-          (m: any) =>
-            `• ${m.full_name} (${m.class_name || "K33"}): ${m.job_title || "Cựu SV"}${m.company ? ` tại ${m.company}` : ""}${m.location_region ? ` ở ${m.location_region}` : ""} - ${m.attendance_status === "attending" ? "Đã đăng ký họp mặt 15 năm 🎉" : "Chưa đăng ký"}`
-        );
-      }
-    }
-
-    // Tra cứu sinh nhật nếu hỏi về sinh nhật
-    if (/sinh\s*nh[aậ]t/i.test(cleanQuery)) {
-      const { data: bdays } = await supabase
-        .from("profiles")
-        .select("full_name, class_name, birthday")
-        .not("birthday", "is", null)
-        .limit(60);
-
-      const currentMonth = new Date().getMonth() + 1;
-      if (bdays) {
-        for (const b of bdays) {
-          const parts = (b.birthday || "").split("-");
-          if (parts.length >= 3 && parseInt(parts[1], 10) === currentMonth) {
-            birthdayMembersThisMonth.push(`${b.full_name} (${b.class_name || "K33"} - ngày ${parts[2]}/${parts[1]})`);
-          }
-        }
-      }
-    }
-  } catch {}
-
-  // 3. TỔNG HỢP NGỮ CẢNH DỮ LIỆU THỰC TẾ
-  const systemContext = `
-DỮ LIỆU CHÍNH XÁC VỀ HỘI KHÓA TCDN4 - K33 UEH TRÊN WEBSITE TCDN4.TOP:
-1. Thông tin sự kiện Họp mặt 15 Năm:
-- Sự kiện: Kỷ niệm 15 Năm Ngày Ra Trường TCDN4 K33 UEH (2011 - 2026).
-- Thời gian: Thứ Bảy, ngày 12/12/2026 (Bắt đầu từ 08:30 sáng).
-- Địa điểm: Giảng đường Cơ sở B, Đại học Kinh tế TP.HCM (279 Nguyễn Tri Phương, Phường 5, Quận 10, TP.HCM).
-- Lịch trình chi tiết:
-  + 08:30 - 09:30: Đón tiếp đồng môn, check-in nhận áo Polo K33, chụp ảnh Photobooth tại sảnh Cơ sở B.
-  + 09:30 - 11:30: Lễ kỷ niệm 15 năm tại Hội trường: Phim tư liệu K33, tri ân Thầy Cô, tâm sự đồng môn.
-  + 11:30 - 14:00: Đại tiệc trưa hội ngộ giao lưu, nâng ly họp mặt, văn nghệ và minigame vui nhộn.
-- Bảng size áo Polo: S (dưới 55kg), M (55-65kg), L (65-72kg), XL (72-80kg), XXL (80-88kg), 3XL (trên 88kg).
-- Link đăng ký tham dự và chốt size áo: https://tcdn4.top/#event
-
-2. Thông tin Ngân hàng đóng góp kinh phí họp mặt:
-- Ngân hàng: ${bankInfo.bankName}
-- Số tài khoản: ${bankInfo.accountNumber}
-- Chủ tài khoản: ${bankInfo.accountName}
-- Cú pháp chuyển khoản: ${bankInfo.syntaxPrefix} [Họ và Tên] [Lớp] (Ví dụ: ${bankInfo.syntaxPrefix} Nguyen Van A TC10)
-- Mức phí đóng góp: ${bankInfo.amountText} / người tham gia
-
-3. Dữ liệu thực tế từ Database:
-- Số lượng cựu sinh viên đã đăng ký tham gia họp mặt: ${totalAttending || 35} bạn (đã có: ${attendeeHighlights.slice(0, 6).join(", ") || "nhiều anh em TC10, TC11, TC12"}).
-- Tổng số cựu sinh viên đã điểm danh trên hệ thống: ${totalProfiles || 45} bạn.
-${searchedMembers.length > 0 ? `- Kết quả tra cứu đồng môn:\n${searchedMembers.join("\n")}` : ""}
-${birthdayMembersThisMonth.length > 0 ? `- Sinh nhật tháng này (${new Date().getMonth() + 1}): ${birthdayMembersThisMonth.slice(0, 5).join(", ")}` : ""}
-- Link tra cứu danh bạ đồng môn: https://tcdn4.top/#directory
-`;
+  // 2. TRUY VẤN CƠ SỞ DỮ LIỆU TỔNG HỢP VÀ DỮ LIỆU THỰC TẾ
+  const botConfig = await loadZaloBotConfig();
+  const dbSummary = await getAlumniDatabaseContext(cleanQuery);
+  const systemContext = dbSummary.rawTextContext;
+  const selectedModel = botConfig.aiModel || "claude-3-5-sonnet-20241022";
+  const activeKey = aiApiKey || botConfig.aiApiKey;
 
   let replyText = "";
 
-  // 4. GỌI CLAUDE AI NẾU CÓ KHÓA API
-  if (aiApiKey) {
-    try {
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": aiApiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 600,
-          system: `Bạn là Bot AI K33 của Hội cựu sinh viên Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
+  // 3. GỌI CLAUDE AI HOẶC GEMINI NẾU CÓ KHÓA API
+  if (activeKey) {
+    if (selectedModel.startsWith("claude") || activeKey.startsWith("sk-ant") || activeKey.startsWith("sk-")) {
+      try {
+        const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": activeKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            max_tokens: 800,
+            system: `Bạn là Bot AI K33 của Hội cựu sinh viên Tài chính Doanh nghiệp 4, Khóa 33 (TCDN4 - K33 UEH).
 Nhiệm vụ: Trả lời câu hỏi của thành viên trong nhóm Zalo một cách chính xác, thân tình, dí dỏm, hào sảng và đậm chất sinh viên UEH.
 Quy tắc quan trọng:
-- Sử dụng đúng thông tin trong phần DỮ LIỆU ĐƯỢC CUNG CẤP. Tuyệt đối không bịa đặt số tài khoản hay thời gian, địa điểm khác.
-- Trả lời ngắn gọn từ 2 - 4 câu, định dạng dễ đọc trên màn hình điện thoại, có emoji sinh động.
+- Sử dụng đúng thông tin trong phần DỮ LIỆU THỰC TẾ ĐƯỢC CUNG CẤP (Danh sách người tham gia, khu vực TP.HCM, Hà Nội, tỉnh khác, nước ngoài, size áo, ngân hàng...). Tuyệt đối không bịa đặt số tài khoản hay ngày giờ khác.
+- Khi được hỏi về khu vực sinh sống (Có những ai ở Hà Nội, TP.HCM, Tỉnh khác, Nước ngoài/Xuất ngoại...), hãy liệt kê chi tiết các bạn ở khu vực đó một cách vui vẻ.
+- Khi được hỏi về số lượng người tham gia, hãy báo chính xác số lượng đã xác nhận và một số bạn tiêu biểu.
+- Khi được hỏi về thông tin ai đó, hãy tra cứu đối chiếu trong danh sách thành viên để phản hồi đúng lớp, công ty, nghề nghiệp và tình trạng tham gia.
+- Trả lời ngắn gọn từ 2 - 5 câu, định dạng dễ đọc trên màn hình điện thoại, có emoji sinh động.
 - Xưng hô 'mình / bạn' hoặc 'em / anh chị', giữ tinh thần hào hứng hướng tới ngày hội ngộ 12/12.
-- Luôn kèm link https://tcdn4.top/#event hoặc https://tcdn4.top/#directory khi cần thiết.`,
-          messages: [
-            {
-              role: "user",
-              content: `${systemContext}\n\nCâu hỏi của thành viên trong nhóm Zalo: "${cleanQuery}"`,
-            },
-          ],
-        }),
-      });
+- Luôn kèm link https://tcdn4.top/#event hoặc https://tcdn4.top/#directory khi phù hợp.`,
+            messages: [
+              {
+                role: "user",
+                content: `${systemContext}\n\nCâu hỏi của thành viên trong nhóm Zalo: "${cleanQuery}"`,
+              },
+            ],
+          }),
+        });
 
-      const claudeData = await claudeRes.json().catch(() => null);
-      if (claudeData?.content?.[0]?.text) {
-        replyText = claudeData.content[0].text.trim();
-      }
-    } catch {}
+        const claudeData = await claudeRes.json().catch(() => null);
+        if (claudeData?.content?.[0]?.text) {
+          replyText = claudeData.content[0].text.trim();
+        }
+      } catch {}
+    } else if (selectedModel.startsWith("gemini") || activeKey.startsWith("AIza")) {
+      try {
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${systemContext}\n\nCâu hỏi: "${cleanQuery}"` }] }],
+            }),
+          }
+        );
+        if (geminiRes.ok) {
+          const gemData = await geminiRes.json();
+          const text = gemData?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) replyText = text.trim();
+        }
+      } catch {}
+    }
   }
 
   // 5. BỘ TẠO CÂU TRẢ LỜI DỰ PHÒNG THÔNG MINH (KHI CHƯA GẮN CLAUDE HOẶC LỖI MẠNG)
@@ -366,11 +292,25 @@ Quy tắc quan trọng:
     }
     // Hỏi về số lượng người đăng ký
     else if (/bao nhiêu|ai tham gia|ai đi|danh sách|đăng ký rồi|ai chốt/.test(qLower)) {
-      const attendeesSample = attendeeHighlights.slice(0, 5).join(", ") || "nhiều anh em TC10, TC11, TC12";
+      const attendeesSample = dbSummary.attendingNames.slice(0, 8).join(", ") || "nhiều anh em TC10, TC11, TC12";
       replyText =
-        `🔥 Đã có ${totalAttending || 35} đồng môn K33 chính thức chốt slot họp mặt 15 năm tại Cơ sở B!\n` +
+        `🔥 Đã có ${dbSummary.totalAttending || 35} đồng môn K33 chính thức chốt slot họp mặt 15 năm tại Cơ sở B!\n` +
         `🍻 Đã có: ${attendeesSample}... lên thuyền sẵn sàng.\n` +
         `👉 Ai chưa đăng ký thì vào chốt size áo ngay nhé kẻo hết bàn: https://tcdn4.top/#event`;
+    }
+    // Hỏi về khu vực sinh sống (Hà Nội, TP.HCM, nước ngoài, tỉnh khác)
+    else if (/hà nội|hn|hcm|sài gòn|khu vực|ở đâu|nước ngoài|ngoại|tỉnh/.test(qLower)) {
+      if (/hà nội|hn/.test(qLower)) {
+        replyText = dbSummary.hnMembers.length > 0
+          ? `📍 Đồng môn K33 tại Hà Nội hiện có: ${dbSummary.hnMembers.join(", ")} 🗼!\n👉 Kết nối tại: https://tcdn4.top/#directory`
+          : `📍 Hiện tại chưa có bạn nào cập nhật sinh sống ở Hà Nội. Cả nhà nhắc anh em vào tcdn4.top điểm danh nhé!`;
+      } else if (/nước ngoài|ngoại/.test(qLower)) {
+        replyText = dbSummary.overseasMembers.length > 0
+          ? `✈️ Đồng môn đang ở Nước ngoài: ${dbSummary.overseasMembers.join(", ")}!\n👉 Kết nối tại: https://tcdn4.top/#directory`
+          : `✈️ Hiện chưa có bạn nào lưu hồ sơ ở Nước ngoài.`;
+      } else {
+        replyText = `📍 Thống kê đồng môn theo khu vực:\n• TP.HCM: ${dbSummary.hcmMembers.length} bạn (${dbSummary.hcmMembers.slice(0, 10).join(", ")}...)\n• Hà Nội: ${dbSummary.hnMembers.length} bạn\n• Nước ngoài: ${dbSummary.overseasMembers.length} bạn\n• Tỉnh khác: ${dbSummary.otherMembers.length} bạn\n👉 Chi tiết danh bạ: https://tcdn4.top/#directory`;
+      }
     }
     // Hỏi về size áo Polo
     else if (/size|áo|áo polo|chọn size/.test(qLower)) {
@@ -379,29 +319,18 @@ Quy tắc quan trọng:
         `• Size S: Dưới 55kg\n• Size M: 55 - 65kg\n• Size L: 65 - 72kg\n• Size XL: 72 - 80kg\n• Size XXL: 80 - 88kg\n• Size 3XL: Trên 88kg\n` +
         `👉 Vào đăng ký và chốt size ngay tại: https://tcdn4.top/#event`;
     }
-    // Kết quả tìm kiếm đồng môn
-    else if (searchedMembers.length > 0) {
-      replyText =
-        `🔍 [KẾT QUẢ TÌM KIẾM ĐỒNG MÔN]\n` +
-        `${searchedMembers.join("\n")}\n\n` +
-        `👉 Xem thêm chi tiết tại danh bạ: https://tcdn4.top/#directory`;
-    } else if (/tìm|thông\s*tin\s+(?:về|của)|hồ\s*sơ\s+của/i.test(qLower) && searchKeyword) {
-      replyText =
-        `🔍 Không tìm thấy đồng môn nào có tên "${searchKeyword}" trong danh bạ.\n` +
-        `👉 Bạn có thể tra cứu toàn bộ danh bạ tại: https://tcdn4.top/#directory`;
-    }
     // Hỏi về sinh nhật
     else if (/sinh\s*nh[aậ]t/.test(qLower)) {
-      if (birthdayMembersThisMonth.length > 0) {
+      if (dbSummary.birthdayMembersThisMonth.length > 0) {
         replyText =
           `🎂 Danh sách đồng môn sinh nhật tháng ${new Date().getMonth() + 1} này:\n` +
-          birthdayMembersThisMonth.map((b) => `• ${b}`).join("\n") +
+          dbSummary.birthdayMembersThisMonth.map((b: string) => `• ${b}`).join("\n") +
           `\n👉 Cả nhà cùng gửi lời chúc mừng sinh nhật tại: https://tcdn4.top`;
       } else {
         replyText = `🎂 Tháng này chưa có bạn nào sinh nhật. Bạn có thể cập nhật ngày sinh tại: https://tcdn4.top`;
       }
     }
-    // Chào hỏi chung
+    // Chào hỏi chung hoặc câu hỏi khác
     else {
       replyText =
         `🤖 [TCDN4 K33 Alumni Hub Bot] Chào bạn!\n` +

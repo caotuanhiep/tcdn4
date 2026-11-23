@@ -199,9 +199,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Lắng nghe Supabase Realtime đa trình duyệt / đa thiết bị
+    const channel = supabase.channel("tcdn4-global-realtime")
+      .on("broadcast", { event: "profile_updated" }, () => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("tcdn4_profile_updated"));
+        }
+      })
+      .on("broadcast", { event: "registration_updated" }, () => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("tcdn4_registration_updated"));
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("tcdn4_profile_updated"));
+          window.dispatchEvent(new Event("tcdn4_registration_updated"));
+        }
+      })
+      .subscribe();
+
     return () => {
       active = false;
       sub.subscription.unsubscribe();
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
     };
   }, []);
 
@@ -310,6 +333,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (typeof window !== "undefined") {
           window.dispatchEvent(new Event("tcdn4_profile_updated"));
           window.dispatchEvent(new Event("tcdn4_registration_updated"));
+          try {
+            getSupabase().channel("tcdn4-global-realtime").send({
+              type: "broadcast",
+              event: "profile_updated",
+              payload: { id: user.id, time: Date.now() },
+            });
+          } catch {}
         }
       } catch (err) {
         console.warn("Lỗi lưu hồ sơ:", err);
