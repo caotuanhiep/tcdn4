@@ -83,6 +83,9 @@ export const metadata: Metadata = {
       "Hành trình 15 năm gắn kết cựu sinh viên TCDN4 - K33 UEH. Đăng ký tham gia họp mặt, nhận áo đồng phục và kết nối danh bạ.",
     images: ["/og-image.png"],
   },
+  verification: {
+    google: "wRuQrnY9qMCDcDLefupZXxBG4VTd8Q0f2MSam9GTysY",
+  },
   robots: {
     index: true,
     follow: true,

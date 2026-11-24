@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="mt-auto border-t border-slate-800 bg-[#001428] py-10 text-slate-400">
@@ -10,9 +12,20 @@ export default function Footer() {
             className="h-10 sm:h-12 w-auto max-w-[220px] object-contain brightness-110"
           />
         </div>
-        <p className="text-center text-xs sm:text-sm text-slate-400 md:text-right max-w-md">
-          Dành riêng cho cựu sinh viên TCDN4 - K33 UEH (TC10 • TC11 • TC12). Mạng lưới lưu giữ thanh xuân và kết nối tương lai.
-        </p>
+        <div className="flex flex-col items-center md:items-end gap-2">
+          <p className="text-center text-xs sm:text-sm text-slate-400 md:text-right max-w-md">
+            Dành riêng cho cựu sinh viên TCDN4 - K33 UEH (TC10 • TC11 • TC12). Mạng lưới lưu giữ thanh xuân và kết nối tương lai.
+          </p>
+          <div className="flex items-center gap-3 text-[11px] text-slate-500">
+            <Link href="/privacy" className="hover:text-slate-200 transition-colors underline-offset-2 hover:underline">
+              Chính sách quyền riêng tư
+            </Link>
+            <span>•</span>
+            <Link href="/terms" className="hover:text-slate-200 transition-colors underline-offset-2 hover:underline">
+              Điều khoản sử dụng
+            </Link>
+          </div>
+        </div>
       </div>
     </footer>
   );

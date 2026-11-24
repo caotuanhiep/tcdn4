@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { GraduationCap, ShieldCheck, Check, Sparkles, AlertCircle, HeartHandshake } from "lucide-react";
 
 interface TeacherOption {
@@ -42,6 +43,7 @@ const TEACHERS: TeacherOption[] = [
 const STORAGE_KEY = "tcdn4_teacher_verified";
 
 export default function TeacherSecurityModal() {
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -50,15 +52,19 @@ export default function TeacherSecurityModal() {
 
   useEffect(() => {
     setMounted(true);
+    if (pathname === "/privacy" || pathname === "/terms") {
+      setIsOpen(false);
+      return;
+    }
     try {
       const isVerified = localStorage.getItem(STORAGE_KEY);
       if (!isVerified) {
         setIsOpen(true);
       }
     } catch {}
-  }, []);
+  }, [pathname]);
 
-  if (!mounted || !isOpen) return null;
+  if (!mounted || !isOpen || pathname === "/privacy" || pathname === "/terms") return null;
 
   const toggleSelect = (id: string) => {
     setStatus("idle");
