@@ -80,20 +80,31 @@ export function normalizeRegion(
   const r = (region || "").trim().toLowerCase();
   const s = (specificLocation || "").trim().toLowerCase();
 
+  // 1. Ưu tiên tuyệt đối giá trị location_region rõ ràng từ DB (tránh nhầm "Thủ Đức" -> "Đức", "Mỹ Tho" -> "Mỹ"...)
+  if (r === "hcm" || r.includes("hồ chí minh") || r.includes("sài gòn")) return "hcm";
   if (r === "hn" || r.includes("hà nội")) return "hn";
-  if (
-    r === "overseas" ||
-    r.includes("nước ngoài") ||
-    r.includes("ngoại") ||
-    /úc|australia|mỹ|usa|singapore|canada|đức|pháp|nhật|hàn|châu âu/i.test(s)
-  ) {
+  if (r === "overseas" || r.includes("nước ngoài") || r.includes("ngoại") || r.includes("quốc tế")) {
     return "overseas";
   }
   if (r === "dn" || r === "other" || r.includes("đà nẵng") || r.includes("tỉnh")) {
     return "other";
   }
+
+  // 2. Chỉ suy đoán theo specificLocation khi location_region bị bỏ trống
   if (s.includes("hà nội")) return "hn";
-  if (/đà nẵng|nha trang|huế|cần thơ|hải phòng|bình dương|đồng nai|vũng tàu|đà lạt|lâm đồng|quảng nam|quy nhơn/i.test(s)) {
+  if (s.includes("hồ chí minh") || s.includes("sài gòn") || s.includes("thủ đức")) return "hcm";
+  if (
+    /quốc tế|nước ngoài|australia|singapore|canada|nhật bản|hàn quốc|châu âu|hoa kỳ|united states|\b(usa|uk|us|germany|france|japan|korea)\b/i.test(
+      s
+    )
+  ) {
+    return "overseas";
+  }
+  if (
+    /đà nẵng|nha trang|khánh hòa|huế|cần thơ|hải phòng|bình dương|đồng nai|vũng tàu|đà lạt|lâm đồng|quảng nam|quy nhơn|bình định/i.test(
+      s
+    )
+  ) {
     return "other";
   }
   return "hcm";

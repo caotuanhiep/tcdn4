@@ -127,7 +127,21 @@ export default function AlumniDirectory({
   const filteredList = useMemo(() => {
     return alumniList.filter((member) => {
       if (selectedRegion !== "all") {
-        if (selectedRegion === "other") {
+        if (selectedRegion.startsWith("province:")) {
+          const targetProvince = selectedRegion.slice("province:".length).trim().toLowerCase();
+          const locLower = (member.location || "").toLowerCase();
+          if (member.region !== "other" && (member.region as any) !== "dn") return false;
+          if (targetProvince && !locLower.includes(targetProvince) && !targetProvince.includes(locLower)) {
+            // Hỗ trợ khớp viết tắt phổ biến (Huế <-> Thừa Thiên Huế, Nha Trang <-> Khánh Hòa...)
+            const isHueMatch = targetProvince.includes("huế") && locLower.includes("huế");
+            const isKhanhHoaMatch = targetProvince.includes("khánh hòa") && locLower.includes("nha trang");
+            const isLamDongMatch = targetProvince.includes("lâm đồng") && locLower.includes("đà lạt");
+            const isVungTauMatch = targetProvince.includes("vũng tàu") && locLower.includes("vũng tàu");
+            if (!isHueMatch && !isKhanhHoaMatch && !isLamDongMatch && !isVungTauMatch) {
+              return false;
+            }
+          }
+        } else if (selectedRegion === "other") {
           if (member.region !== "other" && (member.region as any) !== "dn") return false;
         } else if (member.region !== selectedRegion) {
           return false;
@@ -276,6 +290,24 @@ export default function AlumniDirectory({
                   </button>
                 );
               })}
+              {selectedRegion.startsWith("province:") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleRegionClick("all");
+                    setVisibleCount(8);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-ueh-orange px-3.5 py-2 text-xs font-bold text-white shadow-md shrink-0 cursor-pointer"
+                  title="Bấm để bỏ lọc tỉnh này"
+                >
+                  <MapPin size={13} className="text-ueh-gold" />
+                  <span>{selectedRegion.slice("province:".length)}</span>
+                  <span className="rounded-md bg-white/20 px-1.5 py-0.2 text-[10px] font-black">
+                    {filteredList.length}
+                  </span>
+                  <span className="ml-0.5 text-white/80">×</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
