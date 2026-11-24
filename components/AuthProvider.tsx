@@ -194,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!active) return;
 
           // Tải lại danh bạ với token đăng nhập để mở khóa SĐT & quyền Admin
-          if (event === "SIGNED_IN") {
+          if (event === "SIGNED_IN" || isFreshLogin) {
             void refreshAlumniData();
           }
 

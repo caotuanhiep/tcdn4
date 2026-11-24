@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UserCheck, Loader2, X, ShieldCheck, Sparkles } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ToastProvider";
@@ -9,12 +9,49 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const authErr = params.get("auth_error");
+    if (authErr) {
+      if (authErr !== "access_denied") {
+        toast.error(`Đăng nhập Google chưa hoàn tất (${authErr}). Vui lòng thử lại!`);
+      }
+      params.delete("auth_error");
+      params.delete("login");
+      const clean = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+      window.history.replaceState({}, document.title, clean);
+    }
+  }, [toast]);
+
   async function signInWithGoogle() {
     setBusy(true);
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("tcdn4_auto_open_profile", "1");
       }
+
+      // Ưu tiên luồng Google OAuth chính chủ qua tcdn4.top (/api/auth/google -> signInWithIdToken)
+      // để màn hình đăng nhập Google hiển thị "Tiếp tục tới tcdn4.top" thay vì "*.supabase.co".
+      let useDirectOAuth = false;
+      try {
+        const checkRes = await fetch("/api/auth/google?check=1", { cache: "no-store" });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json().catch(() => null);
+          if (checkData?.configured === true) {
+            useDirectOAuth = true;
+          }
+        }
+      } catch {}
+
+      if (useDirectOAuth && typeof window !== "undefined") {
+        window.location.href = `/api/auth/google?next=${encodeURIComponent(
+          window.location.pathname && window.location.pathname !== "/" ? window.location.pathname : "/"
+        )}`;
+        return;
+      }
+
+      // Dự phòng: Nếu môi trường chưa cấu hình GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET -> dùng luồng Supabase mặc định
       const { error } = await getSupabase().auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: `${window.location.origin}/` },
