@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadZaloBotConfig, saveZaloBotConfig, ZaloGroupConfigItem } from "@/app/api/settings/zalo/route";
 import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
 import { loadMergedRegistrations } from "@/lib/alumni-server";
+import { formatPlainTextForZalo } from "@/lib/zalo-format";
+import { readPrivateJson, writePrivateJson } from "@/lib/private-storage";
 import fs from "fs";
 import path from "path";
 
@@ -80,18 +82,11 @@ async function markCheckedIn(identifiers: string[]): Promise<void> {
   return markCloudIdList(CHECKINS_PATH, identifiers, LOCAL_CHECKINS_PATH);
 }
 
-// Helper ghi nhận nhật ký webhook gần nhất (lưu cả Local + Cloud Storage để debug trên Vercel)
+// Helper ghi nhận nhật ký webhook gần nhất (lưu kín trong Private Bucket `alumni-private` + Local)
 async function loadWebhookLogs(): Promise<any[]> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data: pub } = supabase.storage.from("alumni-media").getPublicUrl(CLOUD_WEBHOOK_LOGS_PATH);
-    if (pub?.publicUrl) {
-      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (res.ok) {
-        const parsed = JSON.parse(await res.text());
-        if (Array.isArray(parsed)) return parsed;
-      }
-    }
+    const parsed = await readPrivateJson<any[]>(CLOUD_WEBHOOK_LOGS_PATH);
+    if (Array.isArray(parsed)) return parsed;
   } catch {}
   try {
     if (fs.existsSync(WEBHOOK_LOGS_PATH)) {
@@ -103,7 +98,7 @@ async function loadWebhookLogs(): Promise<any[]> {
 }
 
 function appendWebhookLog(entry: any) {
-  // Fire-and-forget lưu local ngay + lưu Cloud ngầm
+  // Fire-and-forget lưu local ngay + lưu Private Cloud ngầm
   try {
     const dir = path.dirname(WEBHOOK_LOGS_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -129,12 +124,7 @@ function appendWebhookLog(entry: any) {
       const cloudLogs = await loadWebhookLogs();
       cloudLogs.unshift({ time: new Date().toISOString(), ...entry });
       const trimmed = cloudLogs.slice(0, 20);
-      const supabase = getSupabaseAdmin();
-      await supabase.storage.from("alumni-media").upload(
-        CLOUD_WEBHOOK_LOGS_PATH,
-        Buffer.from(JSON.stringify(trimmed, null, 2), "utf-8"),
-        { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
-      );
+      await writePrivateJson(CLOUD_WEBHOOK_LOGS_PATH, trimmed);
     } catch {}
   };
 
@@ -151,7 +141,8 @@ export async function sendZaloBotMessage(
   chatId: string,
   text: string
 ): Promise<{ ok: boolean; status?: number; error?: string; responseData?: any }> {
-  if (!botToken || !chatId || !text) {
+  const cleanText = formatPlainTextForZalo(text);
+  if (!botToken || !chatId || !cleanText) {
     return { ok: false, error: "Thiếu botToken, chatId hoặc text" };
   }
 
@@ -162,7 +153,7 @@ export async function sendZaloBotMessage(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: String(chatId),
-        text: text,
+        text: cleanText,
       }),
     });
 
@@ -269,8 +260,8 @@ async function handleAlumniAiQuery(
 
 Quy tắc trả lời:
 1. TRẢ LỜI TỰ DO MỌI CHỦ ĐỀ BÊN NGOÀI: Nếu thành viên nhờ làm thơ (thất ngôn tứ tuyệt, lục bát...), viết lời khích lệ đi họp lớp, kể chuyện vui, tư vấn quán ăn/nhậu, giải đáp kiến thức đời sống, tài chính, công việc hay trò chuyện phiếm -> HÃY PHÁT HUY TỐI ĐA TRÍ TUỆ CỦA BẠN để trả lời sáng tạo, tự nhiên, đúng trọng tâm câu hỏi! Tuyệt đối KHÔNG ép trả lời bằng danh sách/thống kê database khi câu hỏi không hỏi về số liệu lớp.
-2. CHÍNH XÁC 100% KHI HỎI DỮ LIỆU LỚP: Nếu câu hỏi có liên quan đến thông tin tập thể TCDN4 (số người đăng ký, ai đã đóng tiền, số tài khoản, mức phí ${bankInfo.amountText}, cú pháp CK, lịch họp 12/12, địa điểm, size áo, Ban Liên Lạc, danh sách anh em ở TP.HCM / Hà Nội / Nước ngoài, thông tin bạn bè, sinh nhật...) -> PHẢI trích xuất chính xác từ phần DỮ LIỆU THỰC TẾ bên dưới, tuyệt đối không bịa số liệu hay STK.
-3. PHONG CÁCH: Ngắn gọn, súc tích, dễ đọc trên màn hình điện thoại Zalo (dùng emoji vừa phải, không lạm dụng dấu ** markdown rối mắt), thân tình, xưng hô tự nhiên 'mình / bạn' hoặc 'em / anh chị'.`;
+2. CHÍNH XÁC 100% KHI HỎI DỮ LIỆU LỚP: Nếu câu hỏi có liên quan đến thông tin tập thể TCDN4 (số người đăng ký, người thân đi cùng, ai đã đóng tiền, số tài khoản, mức phí ${bankInfo.amountText}, cú pháp CK, lịch họp 12/12, địa điểm, size áo, Ban Liên Lạc, danh sách anh em ở TP.HCM / Hà Nội / Nước ngoài, ai đang độc thân / tình trạng hôn nhân, thông tin bạn bè, sinh nhật...) -> PHẢI trích xuất chính xác từ phần DỮ LIỆU THỰC TẾ bên dưới, tuyệt đối không bịa số liệu hay STK.
+3. ĐỊNH DẠNG ZALO (BẮT BUỘC): TUYỆT ĐỐI KHÔNG dùng cú pháp Markdown (KHÔNG dùng **in đậm**, *in nghiêng*, ### tiêu đề, dấu backtick hay [text](url)). Zalo không hỗ trợ Markdown nên sẽ hiện nguyên ký tự ** rất xấu. Chỉ trả về văn bản thuần (plain text), xuống dòng thoáng, gạch đầu dòng bằng dấu "• " hoặc emoji vừa phải, thân tình, xưng hô tự nhiên 'mình / bạn' hoặc 'em / anh chị'.`;
 
   let replyText = "";
   let usedProvider = "builtin-db";
@@ -448,6 +439,20 @@ Quy tắc trả lời:
         `📊 Thống kê áo đã chọn: ${dbSummary.shirtSizeSummary}\n` +
         `👉 Vào chốt size áo ngay tại: https://tcdn4.top/#event`;
     }
+    // Hỏi về tình trạng hôn nhân / hội độc thân
+    else if (/độc thân|\bfa\b|còn ế|chưa kết hôn|chưa lập gia đình|hội độc thân|tình trạng hôn nhân/.test(qLower)) {
+      if (dbSummary.singleMembers.length > 0) {
+        replyText =
+          `💘 [HỘI ĐỘC THÂN VUI TÍNH TCDN4 - K33 UEH]\n` +
+          `Hiện có ${dbSummary.singleMembers.length} đồng môn đang cập nhật trạng thái độc thân trên danh bạ:\n` +
+          dbSummary.singleMembers.map((s: string) => `• ${s}`).join("\n") +
+          `\n\n👉 Vào danh bạ kết nối & làm mai ngay tại: https://tcdn4.top/#directory`;
+      } else {
+        replyText =
+          `💘 Hiện trên danh bạ chưa có bạn nào bật trạng thái Độc thân (đã ghi nhận ${dbSummary.marriedCount} bạn đã kết hôn).\n` +
+          `👉 Cả nhà nhắc anh em vào cập nhật hồ sơ tại: https://tcdn4.top/#directory`;
+      }
+    }
     // Hỏi về sinh nhật
     else if (/sinh\s*nh[aậ]t/.test(qLower)) {
       if (dbSummary.birthdayMembersThisMonth.length > 0) {
@@ -475,6 +480,9 @@ Quy tắc trả lời:
         `👉 Website: https://tcdn4.top/#event`;
     }
   }
+
+  // Làm sạch mọi ký tự Markdown (**, *, ###...) trước khi gửi sang Zalo
+  replyText = formatPlainTextForZalo(replyText);
 
   // Gửi tin nhắn trả lời qua Zalo Bot Platform API
   const sendRes = await sendZaloBotMessage(botToken, chatId, replyText);
@@ -604,7 +612,7 @@ export async function POST(request: Request) {
             `✅ [TCDN4 K33 ALUMNI HUB] KẾT NỐI THÀNH CÔNG!\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `🎉 Bot AI đã liên kết thành công với nhóm:\n` +
-            `👉 *${matchedGroup.name}*\n` +
+            `👉 ${matchedGroup.name}\n` +
             `📌 Mã xác minh: ${matchedGroup.verifyCode}\n` +
             `🆔 Chat ID: ${incomingChatId}\n\n` +
             `🔔 Từ bây giờ, Bot sẽ tự động cập nhật vào nhóm:\n` +
@@ -683,7 +691,7 @@ export async function POST(request: Request) {
           /^(alo|xin ch[aà]o|ch[aà]o bot|h[oỏ]i bot)/i.test(incomingText) ||
           /^\/(help|start|ping|info|stk|bank|list|event)/i.test(incomingText) ||
           /\?/.test(incomingText) ||
-          /(họp lớp|họp mặt|hội ngộ|15 năm|12\/12|đăng ký|tham gia|tiền quỹ|kinh phí|đóng tiền|chuyển khoản|cách thức|giá vé|mức phí|\bstk\b|số tài khoản|tài khoản|ngân hàng|vietqr|\bqr\b|size áo|áo polo|bảng size|ai tham gia|ai đi|ai đóng|đã đóng|bao nhiêu|mấy người|sinh nhật|tìm bạn|tìm anh|tìm chị|thông tin|danh bạ|danh sách|khu vực|hà nội|tp\.?hcm|sài gòn|nước ngoài|xuất ngoại|ban liên lạc|\bbll\b|địa điểm|ở đâu|mấy giờ|khi nào|lịch trình|tc10|tc11|tc12)/i.test(
+          /(họp lớp|họp mặt|hội ngộ|15 năm|12\/12|đăng ký|tham gia|tiền quỹ|kinh phí|đóng tiền|chuyển khoản|cách thức|giá vé|mức phí|\bstk\b|số tài khoản|tài khoản|ngân hàng|vietqr|\bqr\b|size áo|áo polo|bảng size|ai tham gia|ai đi|ai đóng|đã đóng|bao nhiêu|mấy người|sinh nhật|tìm bạn|tìm anh|tìm chị|thông tin|danh bạ|danh sách|khu vực|hà nội|tp\.?hcm|sài gòn|nước ngoài|xuất ngoại|ban liên lạc|\bbll\b|địa điểm|ở đâu|mấy giờ|khi nào|lịch trình|độc thân|\bfa\b|còn ế|kết hôn|hôn nhân|người thân|dẫn theo|đi cùng|tc10|tc11|tc12)/i.test(
             incomingText
           );
 

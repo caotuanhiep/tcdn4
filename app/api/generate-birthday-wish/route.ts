@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatPlainTextForZalo } from "@/lib/zalo-format";
 
 export async function POST(request: Request) {
   try {
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
                 role: "user",
                 content: `Hãy viết một lời chúc mừng sinh nhật thật đặc biệt, ấm áp và pha chút hài hước thân mật của thời sinh viên dành cho bạn ${name} (Cựu sinh viên lớp ${className || "TC4"}, khóa K33 Đại học Kinh tế TP.HCM - UEH). 
 Nhân dịp sinh nhật ngày ${date || "hôm nay"}, nhắc bạn ấy nhớ giữ gìn sức khỏe, thành công trong sự nghiệp và hẹn gặp lại đông đủ tại Đại lễ Kỷ niệm 15 Năm Hội Ngộ TCDN4 ngày 12/12/2026 tới đây!
-Sử dụng các emoji phù hợp (🎂, 🎉, 🍻, 🎓, ❤️). Độ dài khoảng 3-4 câu xúc tích, đậm chất bạn bè đồng môn.`,
+Sử dụng các emoji phù hợp (🎂, 🎉, 🍻, 🎓, ❤️). Độ dài khoảng 3-4 câu xúc tích, đậm chất bạn bè đồng môn. TUYỆT ĐỐI KHÔNG dùng dấu ** hay cú pháp Markdown vì tin nhắn gửi lên Zalo.`,
               },
             ],
           }),
@@ -35,7 +36,7 @@ Sử dụng các emoji phù hợp (🎂, 🎉, 🍻, 🎓, ❤️). Độ dài k
           if (aiText) {
             return NextResponse.json({
               success: true,
-              wish: aiText,
+              wish: formatPlainTextForZalo(aiText),
               provider: "claude-ai",
             });
           }

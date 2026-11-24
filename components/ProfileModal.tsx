@@ -17,6 +17,9 @@ import {
   Copy,
   CheckCheck,
   UserCheck,
+  Users,
+  Minus,
+  Plus,
   Save,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -134,6 +137,10 @@ export default function ProfileModal({
   const [deliveryAddress, setDeliveryAddress] = useState(
     profile?.delivery_address || myRegistration?.address || ""
   );
+  const initialGuestsCount = myRegistration?.guestsCount || 0;
+  const [bringGuests, setBringGuests] = useState<boolean>(initialGuestsCount > 0);
+  const [guestsCount, setGuestsCount] = useState<number>(initialGuestsCount > 0 ? initialGuestsCount : 1);
+  const guestsTouchedRef = useRef(false);
   const [guestbookMessage, setGuestbookMessage] = useState("");
 
   const [showShirtSizePopup, setShowShirtSizePopup] = useState(false);
@@ -155,6 +162,14 @@ export default function ProfileModal({
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  // Đồng bộ số người thân từ myRegistration nếu dữ liệu tải xong sau khi mở modal (chỉ khi user chưa tự chỉnh)
+  useEffect(() => {
+    if (guestsTouchedRef.current || !myRegistration) return;
+    const regGuests = Number(myRegistration.guestsCount) || 0;
+    setBringGuests(regGuests > 0);
+    setGuestsCount(regGuests > 0 ? regGuests : 1);
+  }, [myRegistration]);
 
   // Tải thông tin ngân hàng mới nhất từ server
   useEffect(() => {
@@ -322,15 +337,18 @@ export default function ProfileModal({
       return;
     }
 
+    const resolvedGuestsCount = bringGuests ? Math.max(1, Math.min(10, Math.floor(Number(guestsCount) || 1))) : 0;
+
     setSaving(true);
     try {
       // Ghi đè toàn bộ thông tin cá nhân + trạng thái tham gia + size áo + địa chỉ vào bảng profiles
-      // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json trên Cloud)
+      // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json kèm số người thân trên Cloud)
       await updateProfile({
         ...buildProfilePayload(),
         attendance_status: "attending",
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
+        guests_count: resolvedGuestsCount,
       });
 
       // Luôn gọi /api/zalo-bot — server tự chống trùng theo settings/zalo-registrations.json
@@ -348,7 +366,7 @@ export default function ProfileModal({
             phone: phone.trim(),
             address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
             paidAmount: bankInfo.amount,
-            guestsCount: 0,
+            guestsCount: resolvedGuestsCount,
           }),
         });
       } catch {}
@@ -846,6 +864,7 @@ export default function ProfileModal({
                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                   <div className="text-xs font-bold text-emerald-950 truncate">
                     ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
+                    {(myRegistration.guestsCount || 0) > 0 ? ` • +${myRegistration.guestsCount} người thân` : ""}
                   </div>
                 </div>
                 <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">
@@ -863,7 +882,8 @@ export default function ProfileModal({
                       ĐÃ ĐĂNG KÝ THAM GIA • Chờ chuyển khoản
                     </div>
                     <div className="text-[10px] text-amber-800 truncate">
-                      Size áo: {myRegistration?.shirtSize || shirtSize} • {bankInfo.amountText}
+                      Size áo: {myRegistration?.shirtSize || shirtSize}
+                      {(myRegistration?.guestsCount || 0) > 0 ? ` • +${myRegistration.guestsCount} người thân` : ""} • {bankInfo.amountText}
                     </div>
                   </div>
                 </div>
@@ -1000,6 +1020,113 @@ export default function ProfileModal({
                     placeholder="VD: Nhận trực tiếp tại ngày họp Cơ sở B hoặc địa chỉ nhà..."
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
                   />
+                </div>
+
+                {/* Dẫn theo người thân (vợ/chồng, con cái...) */}
+                <div className="rounded-xl border border-emerald-200 bg-white p-2.5 sm:p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-emerald-900">
+                      <Users size={14} className="text-emerald-600" />
+                      <span>Dẫn theo người thân (Vợ/Chồng, Con...)</span>
+                    </div>
+                    {bringGuests && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        +{guestsCount} người thân
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        guestsTouchedRef.current = true;
+                        setBringGuests(false);
+                      }}
+                      className={`rounded-lg py-1.5 px-2 text-xs font-bold text-center border transition-all ${
+                        !bringGuests
+                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Đi một mình
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        guestsTouchedRef.current = true;
+                        setBringGuests(true);
+                        if (guestsCount < 1) setGuestsCount(1);
+                      }}
+                      className={`rounded-lg py-1.5 px-2 text-xs font-bold text-center border transition-all ${
+                        bringGuests
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50"
+                      }`}
+                    >
+                      Có dẫn theo người thân
+                    </button>
+                  </div>
+
+                  {bringGuests && (
+                    <div className="pt-1.5 border-t border-slate-100 space-y-2 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-slate-600">
+                          Số lượng người thân đi cùng:
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label="Giảm số người thân"
+                            onClick={() => {
+                              guestsTouchedRef.current = true;
+                              setGuestsCount((prev) => Math.max(1, prev - 1));
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95"
+                          >
+                            <Minus size={13} />
+                          </button>
+                          <span className="min-w-[2.25rem] text-center text-sm font-black text-emerald-700">
+                            {guestsCount}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Tăng số người thân"
+                            onClick={() => {
+                              guestsTouchedRef.current = true;
+                              setGuestsCount((prev) => Math.min(10, prev + 1));
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-5 gap-1">
+                        {[1, 2, 3, 4, 5].map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              guestsTouchedRef.current = true;
+                              setGuestsCount(num);
+                            }}
+                            className={`rounded-lg py-1 text-[11px] font-bold border transition-all ${
+                              guestsCount === num
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50"
+                            }`}
+                          >
+                            +{num} người
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10.5px] text-slate-500 leading-snug">
+                        Tổng số chỗ ngồi gia đình bạn: <strong className="text-emerald-700">{1 + guestsCount} người</strong> (bao gồm bạn và {guestsCount} người thân) để BLL sắp xếp bàn tiệc chu đáo.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Box Kinh phí & VietQR */}

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, Search, Shirt, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock, QrCode, Search, Shirt, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAlumniData } from "@/components/AlumniDataProvider";
 import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import { DEFAULT_BANK_INFO, fetchBankInfo, getBankInfo, type BankConfig } from "@/lib/bank";
+import MemberQrModal, { type QrTargetMember } from "@/app/admin/MemberQrModal";
 
 function formatShortPaidAmount(amount?: number, fallback = 1000000): string {
   const val = Number(amount) > 0 ? Number(amount) : fallback;
@@ -36,6 +37,7 @@ export default function RegistrationsPanel() {
   const [searchTerm, setSearchTerm] = useState("");
   const [classFilter, setClassFilter] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [qrMember, setQrMember] = useState<QrTargetMember | null>(null);
 
   useEffect(() => {
     setBankInfo(getBankInfo());
@@ -131,6 +133,7 @@ export default function RegistrationsPanel() {
   const totalPaid = list
     .filter((r) => r.status === "confirmed")
     .reduce((sum, r) => sum + (Number(r.paidAmount) > 0 ? Number(r.paidAmount) : bankInfo.amount), 0);
+  const totalGuests = list.reduce((sum, r) => sum + (Number(r.guestsCount) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -157,7 +160,9 @@ export default function RegistrationsPanel() {
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
           <div className="text-[11px] font-bold uppercase text-slate-400">Tổng Đăng Ký</div>
           <div className="text-2xl font-black text-slate-900 mt-1">{list.length}</div>
-          <div className="text-[10px] text-slate-500">Thành viên & Khách</div>
+          <div className="text-[10px] text-slate-500">
+            {totalGuests > 0 ? `+${totalGuests} người thân (${list.length + totalGuests} khách)` : "Thành viên & Khách"}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
@@ -237,8 +242,8 @@ export default function RegistrationsPanel() {
                 <td className="px-4 py-3 font-bold text-slate-900">
                   {item.fullName}
                   {(item.guestsCount || 0) > 0 && (
-                    <span className="text-[10px] text-slate-400 block font-normal">
-                      +{item.guestsCount} F1
+                    <span className="text-[10px] text-emerald-600 block font-semibold">
+                      +{item.guestsCount} người thân
                     </span>
                   )}
                 </td>
@@ -274,20 +279,42 @@ export default function RegistrationsPanel() {
                     )}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => void removeReg(item.id)}
-                    disabled={busyId === item.id}
-                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQrMember({
+                          fullName: item.fullName,
+                          className: item.className,
+                          phone: item.phone,
+                          shirtSize: item.shirtSize,
+                          guestsCount: item.guestsCount,
+                          paidAmount: item.paidAmount,
+                        })
+                      }
+                      title="Lấy mã QR thanh toán gửi thành viên"
+                      className="p-1.5 rounded-lg text-ueh hover:bg-blue-50 transition-colors cursor-pointer"
+                    >
+                      <QrCode size={14} />
+                    </button>
+                    <button
+                      onClick={() => void removeReg(item.id)}
+                      disabled={busyId === item.id}
+                      title="Xóa phiếu đăng ký"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <MemberQrModal member={qrMember} onClose={() => setQrMember(null)} />
     </div>
   );
 }

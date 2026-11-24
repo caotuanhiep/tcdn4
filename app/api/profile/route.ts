@@ -159,9 +159,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Đồng bộ tên, lớp, size áo, địa chỉ, trạng thái tham gia sang danh sách đăng ký 15 năm
+    // Đồng bộ tên, lớp, size áo, địa chỉ, số người thân đi cùng, trạng thái tham gia sang danh sách đăng ký 15 năm
+    const rawGuests = body.guests_count ?? body.guestsCount;
+    const parsedGuestsCount =
+      rawGuests !== undefined && rawGuests !== null && rawGuests !== "" && Number.isFinite(Number(rawGuests))
+        ? Math.max(0, Math.min(20, Math.floor(Number(rawGuests))))
+        : undefined;
     try {
-      await syncProfileToRegistrations(savedProfile, supabase);
+      await syncProfileToRegistrations(savedProfile, supabase, {
+        guestsCount: parsedGuestsCount,
+      });
     } catch (syncErr) {
       console.warn("[POST /api/profile] syncProfileToRegistrations warning:", syncErr);
     }

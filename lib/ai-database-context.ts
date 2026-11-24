@@ -12,6 +12,7 @@ export interface DatabaseSummary {
   totalAttending: number;
   totalConfirmed: number;
   totalPending: number;
+  totalGuestsCount: number;
   totalCollectedAmount: number;
   attendingNames: string[];
   confirmedNames: string[];
@@ -20,6 +21,9 @@ export interface DatabaseSummary {
   hnMembers: string[];
   otherMembers: string[];
   overseasMembers: string[];
+  singleMembers: string[];
+  marriedCount: number;
+  totalChildrenCount: number;
   tc10Count: number;
   tc11Count: number;
   tc12Count: number;
@@ -66,15 +70,25 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
     (sum, r) => sum + (Number(r.paidAmount) || bankInfo.amount || 1000000),
     0
   );
+  const totalGuestsCount = registrations.reduce(
+    (sum, r) => sum + (Number(r.guestsCount) || 0),
+    0
+  );
+
+  const formatGuestTag = (guests?: number) =>
+    guests && guests > 0 ? ` • +${guests} người thân` : "";
 
   const confirmedNames = confirmedRegs.map(
-    (r) => `${r.fullName} (${r.className} - Áo ${r.shirtSize} - Đã đóng ${(Number(r.paidAmount) || bankInfo.amount).toLocaleString("vi-VN")}đ)`
+    (r) =>
+      `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Đã đóng ${(Number(r.paidAmount) || bankInfo.amount).toLocaleString("vi-VN")}đ)`
   );
   const pendingNames = pendingRegs.map(
-    (r) => `${r.fullName} (${r.className} - Áo ${r.shirtSize} - Chờ chuyển khoản)`
+    (r) =>
+      `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Chờ chuyển khoản)`
   );
   const attendingNames = registrations.map(
-    (r) => `${r.fullName} (${r.className}${r.status === "confirmed" ? " - Đã CK ✓" : " - Chờ CK"})`
+    (r) =>
+      `${r.fullName} (${r.className}${formatGuestTag(r.guestsCount)}${r.status === "confirmed" ? " - Đã CK ✓" : " - Chờ CK"})`
   );
 
   // Thống kê size áo
@@ -93,7 +107,10 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
   const hnMembers: string[] = [];
   const otherMembers: string[] = [];
   const overseasMembers: string[] = [];
+  const singleMembers: string[] = [];
   const allMembersList: string[] = [];
+  let marriedCount = 0;
+  let totalChildrenCount = 0;
   let tc10Count = 0;
   let tc11Count = 0;
   let tc12Count = 0;
@@ -119,15 +136,22 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
     const cls = m.class_name || "K33";
     const job = m.job_title ? ` (${m.job_title}${m.company ? ` - ${m.company}` : ""})` : "";
     const reg = findRegForProfile(m);
+    const guestTag = reg && (reg.guestsCount || 0) > 0 ? ` (+${reg.guestsCount} người thân)` : "";
     const statusTag = reg
       ? reg.status === "confirmed"
-        ? " [Đã ĐK & Đã CK ✓]"
-        : " [Đã ĐK 15 năm - Chờ CK]"
+        ? ` [Đã ĐK & Đã CK ✓${guestTag}]`
+        : ` [Đã ĐK 15 năm - Chờ CK${guestTag}]`
       : m.attendance_status === "attending"
       ? " [Đã ĐK 15 năm]"
       : "";
+    const maritalTag =
+      m.marital_status === "single"
+        ? " [Độc thân]"
+        : m.marital_status === "married"
+        ? " [Đã kết hôn]"
+        : "";
 
-    allMembersList.push(`${name} [${cls}]${job}${statusTag}`);
+    allMembersList.push(`${name} [${cls}]${job}${maritalTag}${statusTag}`);
 
     if (cls.includes("10")) tc10Count++;
     else if (cls.includes("11")) tc11Count++;
@@ -135,6 +159,32 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
 
     const regRegion = (m.location_region || "").toLowerCase();
     const loc = m.specific_location ? ` - ${m.specific_location}` : "";
+    const regionReadable =
+      regRegion === "hcm" || regRegion.includes("hồ chí minh") || regRegion.includes("hcm")
+        ? "TP.HCM"
+        : regRegion === "hn" || regRegion.includes("hà nội")
+        ? "Hà Nội"
+        : regRegion === "overseas" || regRegion.includes("ngoại") || regRegion.includes("nước ngoài")
+        ? "Nước ngoài"
+        : m.location_region || "";
+
+    if (m.marital_status === "single") {
+      const singleLoc = [m.specific_location, regionReadable].filter(Boolean).join(", ");
+      const singleExtra = [
+        cls,
+        m.job_title ? `${m.job_title}${m.company ? ` @ ${m.company}` : ""}` : m.company || "",
+        singleLoc,
+      ]
+        .filter(Boolean)
+        .join(" - ");
+      singleMembers.push(`${name} (${singleExtra})`);
+    } else if (m.marital_status === "married") {
+      marriedCount++;
+    }
+    if (typeof m.children_count === "number" && m.children_count > 0) {
+      totalChildrenCount += m.children_count;
+    }
+
     if (regRegion === "hcm" || regRegion.includes("hồ chí minh") || regRegion.includes("hcm")) {
       hcmMembers.push(`${name} (${cls}${loc})`);
     } else if (regRegion === "hn" || regRegion.includes("hà nội")) {
@@ -196,22 +246,29 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
             ? "Nước ngoài"
             : m.location_region || "";
         const locDetail = [m.specific_location, regionLabel].filter(Boolean).join(", ");
+        const regGuestInfo = reg && (reg.guestsCount || 0) > 0 ? `, đi cùng +${reg.guestsCount} người thân` : "";
         const regStatus = reg
           ? reg.status === "confirmed"
-            ? `Đã đăng ký & ĐÃ CHUYỂN KHOẢN ✓ (Size áo: ${reg.shirtSize})`
-            : `Đã đăng ký tham gia 15 năm - Chờ chuyển khoản (Size áo: ${reg.shirtSize})`
+            ? `Đã đăng ký & ĐÃ CHUYỂN KHOẢN ✓ (Size áo: ${reg.shirtSize}${regGuestInfo})`
+            : `Đã đăng ký tham gia 15 năm - Chờ chuyển khoản (Size áo: ${reg.shirtSize}${regGuestInfo})`
           : m.attendance_status === "attending"
           ? "Đã đăng ký tham gia 15 năm 🎉"
           : m.attendance_status === "not_attending"
           ? "Báo vắng mặt"
           : "Chưa đăng ký 15 năm";
+        const maritalLabel =
+          m.marital_status === "single"
+            ? "Độc thân"
+            : m.marital_status === "married"
+            ? `Đã kết hôn${Number(m.children_count) > 0 ? ` (${m.children_count} F1)` : ""}`
+            : "";
 
         matchedMembers.push(
           `• ${m.full_name} (${m.class_name || "K33"}): ${m.job_title || "Cựu SV"}${
             m.company ? ` tại ${m.company}` : ""
           }${locDetail ? ` | Khu vực: ${locDetail}` : ""}${
-            m.phone ? ` | SĐT: ${m.phone}` : ""
-          } | ${regStatus}`
+            maritalLabel ? ` | Hôn nhân: ${maritalLabel}` : ""
+          }${m.phone ? ` | SĐT: ${m.phone}` : ""} | ${regStatus}`
         );
         if (m.id) seenIds.add(m.id);
       }
@@ -263,27 +320,31 @@ ${bankInfo.phoneReceive ? `- SĐT hỗ trợ đối soát: ${bankInfo.phoneRecei
 
 3. THỐNG KÊ ĐĂNG KÝ 15 NĂM & QUỸ HIỆN TẠI (REALTIME):
 - Tổng số cựu sinh viên đã điểm danh trong danh bạ: ${profiles.length} bạn (TC10: ${tc10Count}, TC11: ${tc11Count}, TC12: ${tc12Count}).
-- Tổng số phiếu ĐÃ ĐĂNG KÝ tham dự 15 năm: ${registrations.length} bạn.
+- Tổng số phiếu ĐÃ ĐĂNG KÝ tham dự 15 năm: ${registrations.length} bạn (cùng ${totalGuestsCount} người thân đi kèm -> Tổng dự kiến ${registrations.length + totalGuestsCount} khách).
   + Đã chuyển khoản xác nhận (confirmed): ${confirmedRegs.length} bạn (Tổng quỹ đã thu: ${totalCollectedAmount.toLocaleString("vi-VN")} VNĐ).
     Danh sách đã CK: ${confirmedNames.join("; ") || "Chưa có"}.
   + Đang chờ chuyển khoản (pending): ${pendingRegs.length} bạn.
     Danh sách chờ CK: ${pendingNames.join("; ") || "Không có"}.
 - Thống kê size áo đã đăng ký: ${shirtSizeSummary}.
 
-4. PHÂN BỔ THÀNH VIÊN THEO KHU VỰC SINH SỐNG:
+4. TÌNH TRẠNG HÔN NHÂN & HỘI ĐỘC THÂN VUI TÍNH (REALTIME TỪ DATABASE):
+- Tổng số thành viên ĐANG ĐỘC THÂN (${singleMembers.length} bạn): ${singleMembers.join("; ") || "Hiện chưa có thành viên nào cập nhật trạng thái độc thân trong danh bạ"}.
+- Tổng số thành viên đã kết hôn: ${marriedCount} bạn (Tổng số con nhỏ / F1 đã ghi nhận: ${totalChildrenCount} bé).
+
+5. PHÂN BỔ THÀNH VIÊN THEO KHU VỰC SINH SỐNG:
 - TP. Hồ Chí Minh (${hcmMembers.length} bạn): ${hcmMembers.slice(0, 35).join(", ") || "Chưa có danh sách"}.
 - Hà Nội (${hnMembers.length} bạn): ${hnMembers.join(", ") || "Hiện chưa có bạn nào cập nhật ở Hà Nội"}.
 - Tỉnh thành khác (${otherMembers.length} bạn): ${otherMembers.slice(0, 25).join(", ") || "Chưa có danh sách"}.
 - Nước ngoài / Xuất ngoại (${overseasMembers.length} bạn): ${overseasMembers.join(", ") || "Hiện chưa có bạn nào cập nhật ở nước ngoài"}.
 
-5. BAN LIÊN LẠC TCDN4 - K33 UEH:
+6. BAN LIÊN LẠC TCDN4 - K33 UEH:
 ${committeeList.join("\n")}
 
-6. DANH SÁCH THÀNH VIÊN TRONG DANH BẠ (${allMembersList.length} bạn):
-${allMembersList.slice(0, 50).join("; ")}
+7. DANH SÁCH THÀNH VIÊN TRONG DANH BẠ (${allMembersList.length} bạn):
+${allMembersList.slice(0, 60).join("; ")}
 
-${birthdayMembersThisMonth.length > 0 ? `7. SINH NHẬT THÁNG NÀY (Tháng ${currentMonth}):\n${birthdayMembersThisMonth.join(", ")}\n` : ""}
-${matchedMembers.length > 0 ? `8. THÔNG TIN THÀNH VIÊN KHỚP TRỰC TIẾP VỚI CÂU HỎI:\n${matchedMembers.slice(0, 15).join("\n")}\n` : ""}
+${birthdayMembersThisMonth.length > 0 ? `8. SINH NHẬT THÁNG NÀY (Tháng ${currentMonth}):\n${birthdayMembersThisMonth.join(", ")}\n` : ""}
+${matchedMembers.length > 0 ? `9. THÔNG TIN THÀNH VIÊN KHỚP TRỰC TIẾP VỚI CÂU HỎI:\n${matchedMembers.slice(0, 15).join("\n")}\n` : ""}
 `;
 
   return {
@@ -291,6 +352,7 @@ ${matchedMembers.length > 0 ? `8. THÔNG TIN THÀNH VIÊN KHỚP TRỰC TIẾP V
     totalAttending: registrations.length,
     totalConfirmed: confirmedRegs.length,
     totalPending: pendingRegs.length,
+    totalGuestsCount,
     totalCollectedAmount,
     attendingNames,
     confirmedNames,
@@ -299,6 +361,9 @@ ${matchedMembers.length > 0 ? `8. THÔNG TIN THÀNH VIÊN KHỚP TRỰC TIẾP V
     hnMembers,
     otherMembers,
     overseasMembers,
+    singleMembers,
+    marriedCount,
+    totalChildrenCount,
     tc10Count,
     tc11Count,
     tc12Count,

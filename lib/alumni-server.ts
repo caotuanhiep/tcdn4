@@ -289,7 +289,8 @@ export async function loadMergedRegistrations(
  */
 export async function syncProfileToRegistrations(
   profile: Partial<Profile> & { id: string },
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  options?: { guestsCount?: number }
 ): Promise<void> {
   const manifest = await loadManifestRegistrations(client);
   const pId = profile.id.toLowerCase();
@@ -312,6 +313,10 @@ export async function syncProfileToRegistrations(
     }
   } else if (profile.attendance_status === "attending") {
     const existing = existingIdx >= 0 ? manifest[existingIdx] : null;
+    const resolvedGuestsCount =
+      typeof options?.guestsCount === "number" && Number.isFinite(options.guestsCount)
+        ? Math.max(0, Math.floor(options.guestsCount))
+        : existing?.guestsCount ?? 0;
     const entry: RegistrationItem = {
       id: profile.id,
       fullName: (profile.full_name || existing?.fullName || "Thành viên K33").trim(),
@@ -324,7 +329,7 @@ export async function syncProfileToRegistrations(
         (profile.specific_location || "").trim() ||
         "TP. Hồ Chí Minh",
       avatarUrl: profile.avatar_url || existing?.avatarUrl || undefined,
-      guestsCount: existing?.guestsCount ?? 0,
+      guestsCount: resolvedGuestsCount,
       status: existing?.status === "confirmed" ? "confirmed" : "pending",
       paidAmount: existing?.paidAmount || 1000000,
       createdAt: existing?.createdAt || formatShortDate(new Date().toISOString()),
@@ -347,6 +352,9 @@ export async function syncProfileToRegistrations(
     if (profile.phone !== undefined) item.phone = (profile.phone || "").trim();
     if (profile.avatar_url !== undefined) item.avatarUrl = profile.avatar_url || undefined;
     if (profile.shirt_size) item.shirtSize = profile.shirt_size.trim();
+    if (typeof options?.guestsCount === "number" && Number.isFinite(options.guestsCount)) {
+      item.guestsCount = Math.max(0, Math.floor(options.guestsCount));
+    }
     if (profile.delivery_address !== undefined && profile.delivery_address !== null) {
       const addr = profile.delivery_address.trim();
       if (addr) item.address = addr;

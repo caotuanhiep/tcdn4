@@ -66,6 +66,7 @@ export default function EventSection() {
       : registrations.filter((r) => r.className === filterClass);
 
   const confirmedCount = registrations.filter((r) => r.status === "confirmed").length;
+  const totalGuestsCount = registrations.reduce((sum, r) => sum + (Number(r.guestsCount) || 0), 0);
 
   // Xác định phiếu đăng ký của người dùng hiện tại từ nguồn dữ liệu gốc
   const currentUserReg = useMemo(() => {
@@ -137,6 +138,14 @@ export default function EventSection() {
                           <span>
                             Size áo: <strong className="text-ueh font-bold">{currentUserReg.shirtSize}</strong>
                           </span>
+                          {(currentUserReg.guestsCount || 0) > 0 && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                Đi cùng: <strong className="text-emerald-700 font-bold">+{currentUserReg.guestsCount} người thân</strong>
+                              </span>
+                            </>
+                          )}
                           <span>•</span>
                           <span className="text-slate-500 truncate max-w-xs">
                             Nơi nhận áo: {currentUserReg.address}
@@ -479,6 +488,11 @@ export default function EventSection() {
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Đã chuyển khoản: <strong className="text-emerald-600 font-bold">{confirmedCount}</strong> / {registrations.length} bạn
+                {totalGuestsCount > 0 && (
+                  <>
+                    {" "}• Người thân đi cùng: <strong className="text-ueh font-bold">+{totalGuestsCount}</strong> (Tổng {registrations.length + totalGuestsCount} khách)
+                  </>
+                )}
               </p>
             </div>
 
@@ -544,8 +558,8 @@ export default function EventSection() {
                           )}
                           <span className="whitespace-nowrap">{reg.fullName}</span>
                           {(reg.guestsCount || 0) > 0 && (
-                            <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">
-                              (+{reg.guestsCount})
+                            <span className="rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] text-emerald-700 font-bold whitespace-nowrap">
+                              +{reg.guestsCount} người thân
                             </span>
                           )}
                         </div>

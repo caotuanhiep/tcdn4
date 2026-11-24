@@ -173,7 +173,7 @@ export async function PUT(req: NextRequest) {
 
     const supabase = getServerSupabase(req);
     const body = await req.json();
-    const { id, status, paidAmount, paymentRef, note, shirtSize, address } = body;
+    const { id, status, paidAmount, paymentRef, note, shirtSize, address, guestsCount } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -199,6 +199,10 @@ export async function PUT(req: NextRequest) {
       paymentRef: paymentRef || target.paymentRef,
       shirtSize: shirtSize || target.shirtSize,
       address: address !== undefined ? address : target.address,
+      guestsCount:
+        typeof guestsCount === "number" && Number.isFinite(guestsCount)
+          ? Math.max(0, Math.min(20, Math.floor(guestsCount)))
+          : target.guestsCount,
       confirmedAt:
         status === "confirmed"
           ? body.confirmedAt || new Date().toISOString()

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { requireAdmin, getServerSupabase } from "@/lib/supabase/requestAuth";
+import { readPrivateJson, writePrivateJson } from "@/lib/private-storage";
 
-const BUCKET_NAME = "alumni-media";
 const CONFIG_PATH = "settings/zalo-bot-config.json";
 const LOCAL_CONFIG_PATH = path.join(process.cwd(), "data", "zalo-bot-config.json");
 
@@ -155,24 +154,7 @@ export async function loadZaloBotConfig(): Promise<ZaloBotConfig> {
   } catch {}
 
   const supabase = getStorageClient();
-  try {
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(CONFIG_PATH);
-    if (pub?.publicUrl) {
-      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (res.ok) {
-        remoteConfig = JSON.parse(await res.text());
-      }
-    }
-  } catch {}
-
-  if (!remoteConfig) {
-    try {
-      const { data, error } = await supabase.storage.from(BUCKET_NAME).download(CONFIG_PATH);
-      if (!error && data) {
-        remoteConfig = JSON.parse(await data.text());
-      }
-    } catch {}
-  }
+  remoteConfig = await readPrivateJson<ZaloBotConfig>(CONFIG_PATH, supabase);
 
   let chosen = DEFAULT_ZALO_CONFIG;
   if (localConfig && remoteConfig) {
@@ -209,12 +191,8 @@ export async function saveZaloBotConfig(
   let cloudOk = false;
   try {
     const supabase = getStorageClient(req);
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(CONFIG_PATH, Buffer.from(json, "utf-8"), {
-      contentType: "application/json; charset=utf-8",
-      upsert: true,
-      cacheControl: "0",
-    });
-    if (!error) cloudOk = true;
+    const saved = await writePrivateJson(CONFIG_PATH, updated, supabase);
+    if (saved.ok) cloudOk = true;
   } catch {}
 
   try {

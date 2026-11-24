@@ -2,25 +2,18 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { loadRegistrations, saveRegistrations } from "@/app/api/registrations/route";
 import { loadBankConfigServer } from "@/lib/bank-server";
+import { readPrivateJson, writePrivateJson } from "@/lib/private-storage";
 import fs from "fs";
 import path from "path";
 
-const BUCKET_NAME = "alumni-media";
 const CLOUD_SEPAY_LOGS_PATH = "settings/sepay-webhook-logs.json";
 const SEPAY_LOGS_PATH = path.join(process.cwd(), "data", "sepay-webhook-logs.json");
 
 async function loadSepayLogs(): Promise<any[]> {
-  // 1. Ưu tiên đọc từ Supabase Storage (hoạt động trên Vercel Production)
+  // 1. Ưu tiên đọc từ Private Bucket `alumni-private` (hoạt động trên Vercel Production)
   try {
-    const supabase = getSupabaseAdmin();
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(CLOUD_SEPAY_LOGS_PATH);
-    if (pub?.publicUrl) {
-      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (res.ok) {
-        const parsed = JSON.parse(await res.text());
-        if (Array.isArray(parsed)) return parsed;
-      }
-    }
+    const parsed = await readPrivateJson<any[]>(CLOUD_SEPAY_LOGS_PATH);
+    if (Array.isArray(parsed)) return parsed;
   } catch {}
 
   // 2. Fallback file local
@@ -51,14 +44,9 @@ async function appendSepayLog(entry: any) {
       fs.writeFileSync(SEPAY_LOGS_PATH, json, "utf-8");
     } catch {}
 
-    // Lưu lên Supabase Storage để xem được trên Vercel Production
+    // Lưu kín vào Private Bucket `alumni-private`
     try {
-      const supabase = getSupabaseAdmin();
-      await supabase.storage.from(BUCKET_NAME).upload(
-        CLOUD_SEPAY_LOGS_PATH,
-        Buffer.from(json, "utf-8"),
-        { contentType: "application/json; charset=utf-8", upsert: true, cacheControl: "0" }
-      );
+      await writePrivateJson(CLOUD_SEPAY_LOGS_PATH, trimmed);
     } catch {}
   } catch {}
 }

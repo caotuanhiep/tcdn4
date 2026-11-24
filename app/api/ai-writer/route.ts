@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadZaloBotConfig } from "@/app/api/settings/zalo/route";
 import { getAlumniDatabaseContext } from "@/lib/ai-database-context";
+import { formatPlainTextForZalo } from "@/lib/zalo-format";
 
 interface AiWriterRequest {
   topic?: string;
@@ -72,8 +73,8 @@ ${dbContext.rawTextContext}
 
 Quy tắc trả lời:
 - Nếu người dùng hỏi các câu hỏi ngoài database (làm thơ, khích lệ anh em, tư vấn quán ăn/nhậu, kiến thức tài chính, đời sống, trò chuyện vui...): trả lời sáng tạo, tự nhiên, đúng trọng tâm bằng đầy đủ trí tuệ của bạn.
-- Khi người dùng hỏi về dữ liệu lớp (ai ở khu vực nào, bao nhiêu người đăng ký/đóng tiền, STK ngân hàng, lịch họp 12/12, sinh nhật, tìm bạn...): lấy số liệu chính xác 100% từ cơ sở dữ liệu trên, tuyệt đối không bịa đặt.
-- Trả lời ngắn gọn, súc tích, thân tình, có emoji phù hợp. Link web tham khảo khi cần: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
+- Khi người dùng hỏi về dữ liệu lớp (ai ở khu vực nào, bao nhiêu người đăng ký/người thân đi cùng/đóng tiền, ai đang độc thân/tình trạng hôn nhân, STK ngân hàng, lịch họp 12/12, sinh nhật, tìm bạn...): lấy số liệu chính xác 100% từ cơ sở dữ liệu trên, tuyệt đối không bịa đặt.
+- ĐỊNH DẠNG ZALO (BẮT BUỘC): TUYỆT ĐỐI KHÔNG dùng Markdown (không dùng **in đậm**, *in nghiêng*, ### tiêu đề, dấu backtick hay [text](url)) vì Zalo không render Markdown sẽ hiện nguyên ký tự ** rất xấu. Chỉ dùng văn bản thuần (plain text), xuống dòng gọn gàng, gạch đầu dòng bằng dấu "• " và emoji phù hợp. Link web tham khảo khi cần: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
 
     let userPrompt = "";
     if (tone === "chat") {
@@ -138,7 +139,7 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
               if (generated && generated.trim().length > 5) {
                 return NextResponse.json({
                   success: true,
-                  content: generated.trim(),
+                  content: formatPlainTextForZalo(generated),
                   provider: "claude",
                   model: m,
                 });
@@ -179,7 +180,7 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
             if (generated && generated.trim().length > 5) {
               return NextResponse.json({
                 success: true,
-                content: generated.trim(),
+                content: formatPlainTextForZalo(generated),
                 provider: "gemini",
                 model: geminiModel,
               });
@@ -210,6 +211,11 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
         answer = dbContext.overseasMembers.length > 0
           ? `✈️ Đồng môn đang ở Nước ngoài: ${dbContext.overseasMembers.join(", ")}!`
           : `✈️ Hiện chưa có bạn nào lưu hồ sơ ở Nước ngoài.`;
+      } else if (/độc thân|\bfa\b|còn ế|chưa kết hôn|chưa lập gia đình|hội độc thân|tình trạng hôn nhân/.test(qLower)) {
+        answer =
+          dbContext.singleMembers.length > 0
+            ? `💘 Hội độc thân vui tính TCDN4 hiện có ${dbContext.singleMembers.length} bạn:\n${dbContext.singleMembers.map((s) => `• ${s}`).join("\n")}\n👉 Xem danh bạ tại: https://tcdn4.top/#directory`
+            : `💘 Hiện trên hệ thống chưa có bạn nào bật trạng thái Độc thân (${dbContext.marriedCount} bạn đã kết hôn).`;
       } else if (qLower.includes("sinh nhật")) {
         answer = dbContext.birthdayMembersThisMonth.length > 0
           ? `🎂 Danh sách sinh nhật tháng này gồm: ${dbContext.birthdayMembersThisMonth.join(", ")} 🎉!`

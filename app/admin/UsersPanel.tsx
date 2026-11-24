@@ -10,21 +10,44 @@ import {
   X,
   Check,
   MapPin,
+  UserPlus,
+  QrCode,
+  CheckCircle2,
+  Clock,
+  Shirt,
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAlumniData } from "@/components/AlumniDataProvider";
 import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import type { Profile } from "@/types/database";
 import { getAvatarInitials } from "@/lib/avatar";
+import MemberQrModal, { type QrTargetMember } from "@/app/admin/MemberQrModal";
 
 const SHIRT_SIZES = [
   "S (Nam)", "M (Nam)", "L (Nam)", "XL (Nam)", "2XL (Nam)", "3XL (Nam)",
   "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)",
 ];
 
+const INITIAL_NEW_MEMBER = {
+  full_name: "",
+  class_name: "TC10",
+  phone: "",
+  job_title: "",
+  company: "",
+  location_region: "hcm",
+  specific_location: "",
+  marital_status: "married",
+  children_count: 0,
+  register_event: true,
+  shirt_size: "L (Nam)",
+  guests_count: 0,
+  delivery_address: "",
+  notify_zalo: false,
+};
+
 export default function UsersPanel() {
   const toast = useToast();
-  const { lastUpdated, refresh: refreshAlumniData } = useAlumniData();
+  const { lastUpdated, registrations, refresh: refreshAlumniData } = useAlumniData();
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -32,9 +55,31 @@ export default function UsersPanel() {
   const [filterClass, setFilterClass] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
 
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editingUser, setEditingUser] = useState<(Profile & { guests_count?: number }) | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newMember, setNewMember] = useState(INITIAL_NEW_MEMBER);
+  const [creatingMember, setCreatingMember] = useState(false);
+
+  const [qrMember, setQrMember] = useState<QrTargetMember | null>(null);
+
+  const findRegistrationForUser = useCallback(
+    (u: Profile) => {
+      const uid = (u.id || "").toLowerCase();
+      const uphone = (u.phone || "").replace(/[^0-9]/g, "");
+      return (
+        registrations.find((r) => {
+          if (uid && r.id && r.id.toLowerCase() === uid) return true;
+          const rphone = (r.phone || "").replace(/[^0-9]/g, "");
+          if (uphone.length >= 9 && rphone === uphone) return true;
+          return false;
+        }) || null
+      );
+    },
+    [registrations]
+  );
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -87,11 +132,91 @@ export default function UsersPanel() {
   };
 
   const handleOpenEdit = (user: Profile) => {
+    const reg = findRegistrationForUser(user);
     setEditingUser({
       ...user,
       location_region: user.location_region === "dn" ? "other" : user.location_region || "hcm",
+      marital_status: user.marital_status || "married",
+      guests_count: reg?.guestsCount || 0,
     });
     setIsEditModalOpen(true);
+  };
+
+  const handleOpenCreate = () => {
+    setNewMember(INITIAL_NEW_MEMBER);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCreateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMember.full_name.trim()) {
+      toast.error("Vui lòng nhập Họ và Tên thành viên!");
+      return;
+    }
+
+    setCreatingMember(true);
+    try {
+      const res = await authFetch("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          ...newMember,
+          full_name: newMember.full_name.trim(),
+          phone: newMember.phone.trim(),
+          job_title: newMember.job_title.trim(),
+          company: newMember.company.trim(),
+          specific_location: newMember.specific_location.trim(),
+          delivery_address: newMember.delivery_address.trim(),
+          guests_count: newMember.register_event ? Number(newMember.guests_count) || 0 : 0,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Không tạo được hồ sơ trên máy chủ");
+      }
+
+      if (data.user) {
+        setUsers((prev) => [data.user, ...prev]);
+      }
+      await refreshAlumniData();
+      broadcastDataUpdate("profile");
+
+      if (newMember.register_event && newMember.notify_zalo) {
+        try {
+          await fetch("/api/zalo-bot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "registration",
+              userId: data.user?.id,
+              fullName: newMember.full_name.trim(),
+              className: newMember.class_name,
+              shirtSize: newMember.shirt_size,
+              phone: newMember.phone.trim(),
+              address: newMember.delivery_address.trim() || "Tại sự kiện Cơ sở B",
+              guestsCount: Number(newMember.guests_count) || 0,
+            }),
+          });
+        } catch {}
+      }
+
+      toast.success(data.message || "Đã tạo thành viên mới thành công!");
+      setIsCreateModalOpen(false);
+
+      // Nếu Admin chọn đẩy sang đăng ký 15 năm -> bật ngay popup mã QR để gửi cho bạn đó thanh toán!
+      if (newMember.register_event) {
+        setQrMember({
+          fullName: newMember.full_name.trim(),
+          className: newMember.class_name,
+          phone: newMember.phone.trim(),
+          shirtSize: newMember.shirt_size,
+          guestsCount: Number(newMember.guests_count) || 0,
+        });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi tạo thành viên mới");
+    } finally {
+      setCreatingMember(false);
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -113,10 +238,15 @@ export default function UsersPanel() {
           location_region: editingUser.location_region,
           specific_location: editingUser.specific_location,
           phone: editingUser.phone?.trim() || "",
+          marital_status: editingUser.marital_status || "married",
           role: editingUser.role,
           attendance_status: editingUser.attendance_status || null,
           shirt_size: editingUser.shirt_size || null,
           delivery_address: editingUser.delivery_address || "",
+          guests_count:
+            editingUser.attendance_status === "attending"
+              ? Math.max(0, Math.min(10, Number(editingUser.guests_count) || 0))
+              : 0,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -191,12 +321,23 @@ export default function UsersPanel() {
               Mọi thay đổi được ghi đè trực tiếp vào Database gốc (Supabase) và cập nhật tức thời trên toàn website.
             </p>
           </div>
-          <button
-            onClick={() => void fetchUsers()}
-            className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-          >
-            Làm mới danh sách
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95 active:scale-98 transition-all cursor-pointer"
+            >
+              <UserPlus size={14} className="text-ueh-gold" />
+              <span>Thêm & Đăng ký hộ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void fetchUsers()}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              Làm mới
+            </button>
+          </div>
         </div>
 
         {/* Search & Filter Toolbar */}
@@ -269,7 +410,9 @@ export default function UsersPanel() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => (
+                filteredUsers.map((u) => {
+                  const reg = findRegistrationForUser(u);
+                  return (
                   <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
@@ -282,10 +425,28 @@ export default function UsersPanel() {
                           )}
                         </div>
                         <div>
-                          <div>{u.full_name || "Chưa đặt tên"}</div>
-                          {u.id === "647fb28f-2ab7-415e-84cd-87329017a7e0" && (
-                            <span className="text-[10px] text-emerald-600 font-bold">Chủ sở hữu</span>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            <span>{u.full_name || "Chưa đặt tên"}</span>
+                            {reg?.status === "confirmed" ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                <CheckCircle2 size={10} /> Đã CK
+                              </span>
+                            ) : reg || u.attendance_status === "attending" ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                                <Clock size={10} /> Đã ĐK 15N
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {u.id === "647fb28f-2ab7-415e-84cd-87329017a7e0" && (
+                              <span className="text-[10px] text-emerald-600 font-bold">Chủ sở hữu</span>
+                            )}
+                            {(reg?.guestsCount || 0) > 0 && (
+                              <span className="text-[10px] text-emerald-700 font-semibold">
+                                +{reg?.guestsCount} người thân
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -341,17 +502,34 @@ export default function UsersPanel() {
                     </td>
 
                     <td className="py-3 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQrMember({
+                              fullName: u.full_name || "Thành viên K33",
+                              className: u.class_name,
+                              phone: u.phone,
+                              shirtSize: reg?.shirtSize || u.shirt_size,
+                              guestsCount: reg?.guestsCount || 0,
+                              paidAmount: reg?.paidAmount,
+                            })
+                          }
+                          className="p-1.5 rounded-lg text-ueh hover:bg-blue-50 transition-colors cursor-pointer"
+                          title="Lấy mã VietQR gửi thành viên thanh toán"
+                        >
+                          <QrCode size={15} />
+                        </button>
                         <button
                           onClick={() => handleOpenEdit(u)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-ueh hover:bg-slate-100 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-600 hover:text-ueh hover:bg-slate-100 transition-colors cursor-pointer"
                           title="Chỉnh sửa thông tin"
                         >
                           <Edit3 size={15} />
                         </button>
                         <button
                           onClick={() => handleDeleteUser(u.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Xóa thành viên"
                         >
                           <Trash2 size={15} />
@@ -359,7 +537,8 @@ export default function UsersPanel() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -508,6 +687,20 @@ export default function UsersPanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Tình trạng hôn nhân
+                  </label>
+                  <select
+                    value={editingUser.marital_status || "married"}
+                    onChange={(e) => setEditingUser({ ...editingUser, marital_status: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  >
+                    <option value="married">Đã kết hôn</option>
+                    <option value="single">Độc thân vui tính</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
                     Tham gia 15 năm
                   </label>
                   <select
@@ -522,7 +715,9 @@ export default function UsersPanel() {
                     <option value="not_attending">Không tham gia</option>
                   </select>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
                     Size Áo Polo
@@ -540,29 +735,351 @@ export default function UsersPanel() {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Người thân đi cùng
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={editingUser.guests_count ?? 0}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, guests_count: Math.max(0, Number(e.target.value) || 0) })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  Địa chỉ nhận áo
+                </label>
+                <input
+                  type="text"
+                  value={editingUser.delivery_address || ""}
+                  onChange={(e) => setEditingUser({ ...editingUser, delivery_address: e.target.value })}
+                  placeholder="Nhận tại Cơ sở B hoặc địa chỉ ship áo..."
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrMember({
+                      fullName: editingUser.full_name || "Thành viên K33",
+                      className: editingUser.class_name,
+                      phone: editingUser.phone,
+                      shirtSize: editingUser.shirt_size,
+                      guestsCount: editingUser.guests_count || 0,
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold text-ueh hover:bg-blue-100"
+                >
+                  <QrCode size={14} />
+                  <span>Lấy mã QR</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="flex items-center gap-1.5 rounded-xl bg-ueh px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-ueh-light disabled:opacity-50"
+                  >
+                    <Check size={14} />
+                    <span>{savingEdit ? "Đang lưu..." : "Lưu Thay Đổi"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL THÊM CỰU SINH VIÊN & ĐĂNG KÝ HỘ (KHÔNG CẦN EMAIL) */}
+      {isCreateModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+          onClick={() => setIsCreateModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(false)}
+              className="absolute right-4 top-4 rounded-full bg-slate-100 p-1.5 text-slate-400 hover:bg-slate-200"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-ueh text-white">
+                <UserPlus size={16} className="text-ueh-gold" />
+              </div>
+              <h3 className="text-lg font-black text-ueh">Thêm Thành Viên & Đăng Ký Hộ</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Không cần email! Tạo hồ sơ trực tiếp vào danh bạ, đẩy sang danh sách họp mặt 15 năm và lấy mã VietQR gửi ngay cho bạn đó.
+            </p>
+
+            <form onSubmit={handleCreateMember} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Họ và Tên *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newMember.full_name}
+                    onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value })}
+                    placeholder="VD: Nguyễn Văn A"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Lớp sinh viên
+                  </label>
+                  <select
+                    value={newMember.class_name}
+                    onChange={(e) => setNewMember({ ...newMember, class_name: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                  >
+                    <option value="TC10">Lớp TC10</option>
+                    <option value="TC11">Lớp TC11</option>
+                    <option value="TC12">Lớp TC12</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Số điện thoại / Zalo *
+                  </label>
+                  <input
+                    type="tel"
+                    required={newMember.register_event}
+                    value={newMember.phone}
+                    onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                    placeholder="VD: 0909123456 (tạo mã QR SePay)"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Tình trạng hôn nhân
+                  </label>
+                  <select
+                    value={newMember.marital_status}
+                    onChange={(e) => setNewMember({ ...newMember, marital_status: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  >
+                    <option value="married">Đã kết hôn</option>
+                    <option value="single">Độc thân vui tính</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Khu vực sinh sống
+                  </label>
+                  <select
+                    value={newMember.location_region}
+                    onChange={(e) => setNewMember({ ...newMember, location_region: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  >
+                    <option value="hcm">TP. Hồ Chí Minh</option>
+                    <option value="hn">Hà Nội</option>
+                    <option value="other">Tỉnh khác</option>
+                    <option value="overseas">Quốc tế / Nước ngoài</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Địa chỉ cụ thể (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={newMember.specific_location}
+                    onChange={(e) => setNewMember({ ...newMember, specific_location: e.target.value })}
+                    placeholder="VD: Quận 7, Đà Nẵng..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Chức danh (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={newMember.job_title}
+                    onChange={(e) => setNewMember({ ...newMember, job_title: e.target.value })}
+                    placeholder="VD: Giám đốc, Trưởng phòng..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Công ty (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={newMember.company}
+                    onChange={(e) => setNewMember({ ...newMember, company: e.target.value })}
+                    placeholder="VD: Vietcombank, FPT..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Khối đẩy sang đăng ký 15 năm */}
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-3">
+                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Shirt size={16} className="text-emerald-700 shrink-0" />
+                    <div>
+                      <div className="text-xs font-black text-emerald-950">
+                        Đẩy luôn sang danh sách Đăng ký 15 Năm & Tạo mã QR
+                      </div>
+                      <div className="text-[11px] text-emerald-700">
+                        Tự động ghi danh tham dự ngày 12/12 và mở ngay mã VietQR để gửi bạn thanh toán
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newMember.register_event}
+                    onChange={(e) => setNewMember({ ...newMember, register_event: e.target.checked })}
+                    className="h-4 w-4 accent-emerald-600 rounded"
+                  />
+                </label>
+
+                {newMember.register_event && (
+                  <div className="space-y-2.5 pt-2 border-t border-emerald-200/70">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                          Size Áo Polo
+                        </label>
+                        <select
+                          value={newMember.shirt_size}
+                          onChange={(e) => setNewMember({ ...newMember, shirt_size: e.target.value })}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                        >
+                          {SHIRT_SIZES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                          Dẫn theo người thân
+                        </label>
+                        <select
+                          value={newMember.guests_count}
+                          onChange={(e) =>
+                            setNewMember({ ...newMember, guests_count: Number(e.target.value) || 0 })
+                          }
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                        >
+                          <option value={0}>Đi một mình (0)</option>
+                          <option value={1}>+1 người thân</option>
+                          <option value={2}>+2 người thân</option>
+                          <option value={3}>+3 người thân</option>
+                          <option value={4}>+4 người thân</option>
+                          <option value={5}>+5 người thân</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                        Địa chỉ nhận áo (tùy chọn)
+                      </label>
+                      <input
+                        type="text"
+                        value={newMember.delivery_address}
+                        onChange={(e) => setNewMember({ ...newMember, delivery_address: e.target.value })}
+                        placeholder="VD: Nhận trực tiếp tại Cơ sở B hoặc địa chỉ ship..."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={newMember.notify_zalo}
+                        onChange={(e) => setNewMember({ ...newMember, notify_zalo: e.target.checked })}
+                        className="h-3.5 w-3.5 accent-ueh rounded"
+                      />
+                      <span>Đồng thời bắn tin báo đăng ký mới vào nhóm Zalo lớp</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 flex justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsEditModalOpen(false)}
+                  onClick={() => setIsCreateModalOpen(false)}
                   className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  disabled={savingEdit}
-                  className="flex items-center gap-1.5 rounded-xl bg-ueh px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-ueh-light disabled:opacity-50"
+                  disabled={creatingMember}
+                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-ueh to-ueh-light px-5 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
                 >
-                  <Check size={14} />
-                  <span>{savingEdit ? "Đang lưu..." : "Lưu Thay Đổi"}</span>
+                  {creatingMember ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : newMember.register_event ? (
+                    <QrCode size={14} className="text-ueh-gold" />
+                  ) : (
+                    <Check size={14} />
+                  )}
+                  <span>
+                    {creatingMember
+                      ? "Đang tạo..."
+                      : newMember.register_event
+                      ? "Tạo & Lấy mã QR thanh toán"
+                      : "Tạo hồ sơ thành viên"}
+                  </span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* POPUP VIETQR GỬI CHO THÀNH VIÊN */}
+      <MemberQrModal member={qrMember} onClose={() => setQrMember(null)} />
     </div>
   );
 }

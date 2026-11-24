@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { DEFAULT_BANK_INFO, normalizeBankConfig } from "@/lib/bank";
 import { requireAdmin, getRequestUser, isAdminUser, getServerSupabase } from "@/lib/supabase/requestAuth";
+import { readPrivateJson, writePrivateJson } from "@/lib/private-storage";
 
-// Cấu hình tài khoản ngân hàng được lưu tập trung trên Supabase Storage (dùng chung cho mọi thiết bị / mọi khách),
-// thay vì localStorage của riêng trình duyệt admin như trước.
-const BUCKET_NAME = "alumni-media";
+// Cấu hình tài khoản ngân hàng & SePay API Key được lưu kín trong Private Bucket `alumni-private`
 const CONFIG_PATH = "settings/bank-config.json";
 const LOCAL_CONFIG_PATH = path.join(process.cwd(), "data", "bank-config.json");
 
@@ -23,18 +21,7 @@ function getStorageClient(req: NextRequest): SupabaseClient {
 }
 
 async function loadCloudConfig(supabase: SupabaseClient): Promise<any | null> {
-  try {
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(CONFIG_PATH);
-    if (pub?.publicUrl) {
-      const res = await fetch(`${pub.publicUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (res.ok) return JSON.parse(await res.text());
-    }
-  } catch {}
-  try {
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(CONFIG_PATH);
-    if (!error && data) return JSON.parse(await data.text());
-  } catch {}
-  return null;
+  return readPrivateJson<any>(CONFIG_PATH, supabase);
 }
 
 function loadLocalConfig(): any | null {
@@ -98,12 +85,8 @@ export async function PUT(req: NextRequest) {
   let cloudError = "";
   try {
     const supabase = getStorageClient(req);
-    const { error } = await supabase.storage.from(BUCKET_NAME).upload(CONFIG_PATH, Buffer.from(json, "utf-8"), {
-      contentType: "application/json; charset=utf-8",
-      upsert: true,
-      cacheControl: "0",
-    });
-    if (error) cloudError = error.message;
+    const saved = await writePrivateJson(CONFIG_PATH, config, supabase);
+    if (!saved.ok) cloudError = saved.error || "lỗi storage";
     else cloudOk = true;
   } catch (err: any) {
     cloudError = err?.message || String(err);
