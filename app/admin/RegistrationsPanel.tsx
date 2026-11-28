@@ -49,11 +49,13 @@ export default function RegistrationsPanel() {
     if (!target || busyId) return;
 
     const nextStatus = target.status === "confirmed" ? "pending" : "confirmed";
+    const defaultItemFee =
+      target.registrationType === "shirt_only" ? bankInfo.shirtOnlyAmount || 250000 : bankInfo.amount;
     const resolvedPaidAmount =
       nextStatus === "confirmed"
         ? target.paidAmount > 0
           ? target.paidAmount
-          : bankInfo.amount
+          : defaultItemFee
         : target.paidAmount;
 
     setBusyId(id);
@@ -241,7 +243,12 @@ export default function RegistrationsPanel() {
               <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-4 py-3 font-bold text-slate-900">
                   {item.fullName}
-                  {(item.guestsCount || 0) > 0 && (
+                  {item.registrationType === "shirt_only" && (
+                    <span className="text-[10px] text-ueh-orange block font-semibold">
+                      Chỉ nhận áo kỷ niệm (250k)
+                    </span>
+                  )}
+                  {(item.guestsCount || 0) > 0 && item.registrationType !== "shirt_only" && (
                     <span className="text-[10px] text-emerald-600 block font-semibold">
                       +{item.guestsCount} người thân
                     </span>
@@ -270,7 +277,13 @@ export default function RegistrationsPanel() {
                   >
                     {item.status === "confirmed" ? (
                       <>
-                        <CheckCircle2 size={12} /> Đã thu {formatShortPaidAmount(item.paidAmount, bankInfo.amount)}
+                        <CheckCircle2 size={12} /> Đã thu{" "}
+                        {formatShortPaidAmount(
+                          item.paidAmount,
+                          item.registrationType === "shirt_only"
+                            ? bankInfo.shirtOnlyAmount || 250000
+                            : bankInfo.amount
+                        )}
                       </>
                     ) : (
                       <>
@@ -291,6 +304,7 @@ export default function RegistrationsPanel() {
                           shirtSize: item.shirtSize,
                           guestsCount: item.guestsCount,
                           paidAmount: item.paidAmount,
+                          registrationType: item.registrationType,
                         })
                       }
                       title="Lấy mã QR thanh toán gửi thành viên"

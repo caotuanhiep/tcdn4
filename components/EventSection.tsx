@@ -66,7 +66,12 @@ export default function EventSection() {
       : registrations.filter((r) => r.className === filterClass);
 
   const confirmedCount = registrations.filter((r) => r.status === "confirmed").length;
-  const totalGuestsCount = registrations.reduce((sum, r) => sum + (Number(r.guestsCount) || 0), 0);
+  const shirtOnlyCount = registrations.filter((r) => r.registrationType === "shirt_only").length;
+  const attendingOnlyCount = registrations.length - shirtOnlyCount;
+  const totalGuestsCount = registrations.reduce(
+    (sum, r) => sum + (r.registrationType === "shirt_only" ? 0 : Number(r.guestsCount) || 0),
+    0
+  );
 
   // Xác định phiếu đăng ký của người dùng hiện tại từ nguồn dữ liệu gốc
   const currentUserReg = useMemo(() => {
@@ -125,10 +130,14 @@ export default function EventSection() {
                       </div>
                       <div>
                         <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-                          ✓ Đã đăng ký & hoàn tất đóng phí
+                          {currentUserReg.registrationType === "shirt_only"
+                            ? "✓ Đã đăng ký nhận Áo kỷ niệm 15 năm & hoàn tất thanh toán"
+                            : "✓ Đã đăng ký & hoàn tất đóng phí"}
                         </div>
                         <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-                          Xin chào {currentUserReg.fullName}! Ban liên lạc đã xác nhận đóng phí tham dự 15 năm của bạn
+                          {currentUserReg.registrationType === "shirt_only"
+                            ? `Xin chào ${currentUserReg.fullName}! Ban liên lạc đã xác nhận đơn nhận Áo Polo kỷ niệm 15 năm (ship tận nơi) của bạn`
+                            : `Xin chào ${currentUserReg.fullName}! Ban liên lạc đã xác nhận đóng phí tham dự 15 năm của bạn`}
                         </h4>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 mt-1">
                           <span>
@@ -170,7 +179,9 @@ export default function EventSection() {
                       </div>
                       <div>
                         <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-black text-amber-800 uppercase tracking-wide">
-                          Đã đăng ký - Đang chờ đối soát chuyển khoản
+                          {currentUserReg.registrationType === "shirt_only"
+                            ? "Đặt Áo kỷ niệm (250.000đ) - Đang chờ đối soát chuyển khoản"
+                            : "Đã đăng ký - Đang chờ đối soát chuyển khoản"}
                         </div>
                         <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
                           Phiếu đăng ký của {currentUserReg.fullName} ({currentUserReg.className}) đang chờ khớp lệnh
@@ -488,9 +499,15 @@ export default function EventSection() {
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Đã chuyển khoản: <strong className="text-emerald-600 font-bold">{confirmedCount}</strong> / {registrations.length} bạn
+                {shirtOnlyCount > 0 && (
+                  <>
+                    {" "}• Tham dự: <strong className="text-ueh font-bold">{attendingOnlyCount}</strong> • Chỉ nhận áo:{" "}
+                    <strong className="text-ueh-orange font-bold">{shirtOnlyCount}</strong>
+                  </>
+                )}
                 {totalGuestsCount > 0 && (
                   <>
-                    {" "}• Người thân đi cùng: <strong className="text-ueh font-bold">+{totalGuestsCount}</strong> (Tổng {registrations.length + totalGuestsCount} khách)
+                    {" "}• Người thân đi cùng: <strong className="text-ueh font-bold">+{totalGuestsCount}</strong> (Tổng {attendingOnlyCount + totalGuestsCount} khách dự tiệc)
                   </>
                 )}
               </p>
@@ -557,7 +574,12 @@ export default function EventSection() {
                             </span>
                           )}
                           <span className="whitespace-nowrap">{reg.fullName}</span>
-                          {(reg.guestsCount || 0) > 0 && (
+                          {reg.registrationType === "shirt_only" && (
+                            <span className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] text-ueh-orange font-bold whitespace-nowrap">
+                              Chỉ nhận áo
+                            </span>
+                          )}
+                          {(reg.guestsCount || 0) > 0 && reg.registrationType !== "shirt_only" && (
                             <span className="rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] text-emerald-700 font-bold whitespace-nowrap">
                               +{reg.guestsCount} người thân
                             </span>

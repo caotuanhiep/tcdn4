@@ -762,7 +762,7 @@ export async function POST(request: Request) {
 
     // LUỒNG 1: ĐĂNG KÝ THAM GIA HỘI NGỘ 15 NĂM (CHỈ GỬI 1 LẦN / THÀNH VIÊN TRÁNH SPAM KHI ĐỔI SIZE ÁO)
     if (type === "registration") {
-      const { fullName, className, shirtSize, guestsCount, userId, phone, isTest } = payload;
+      const { fullName, className, shirtSize, guestsCount, registrationType, userId, phone, isTest } = payload;
 
       if (!isTest) {
         const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
@@ -797,10 +797,19 @@ export async function POST(request: Request) {
         if (allRegs.length > 0) totalCount = allRegs.length;
       } catch {}
 
-      summaryTitle = `Đăng ký 15 năm: ${fullName} (${className || "K33"})`;
+      const isShirtOnly = registrationType === "shirt_only";
+      summaryTitle = isShirtOnly
+        ? `Đặt áo kỷ niệm 15 năm: ${fullName} (${className || "K33"})`
+        : `Đăng ký 15 năm: ${fullName} (${className || "K33"})`;
       const guestsText = guestsCount > 0 ? ` (dắt theo +${guestsCount} người nhà)` : "";
 
-      if (botConfig.registrationTemplate && botConfig.registrationTemplate.trim().length > 0) {
+      if (isShirtOnly) {
+        botMessage =
+          `👕 [ĐĂNG KÝ NHẬN ÁO KỶ NIỆM 15 NĂM TCDN4]\n` +
+          `👤 ${fullName || "Đồng môn K33"} (${className || "TC10"}) tuy chưa thể về họp mặt trực tiếp ngày 12/12 nhưng đã đặt Áo Polo Kỷ Niệm size ${shirtSize || "L (Nam)"} gửi ship về: ${payload.address || "Địa chỉ đã đăng ký"}!\n` +
+          `❤️ Dù ở phương xa vẫn luôn giữ lửa đồng môn K33 — đã có ${totalCount} thành viên đăng ký.\n` +
+          `👉 Anh em điểm danh & chốt áo trước 30/11 tại: https://tcdn4.top/#event`;
+      } else if (botConfig.registrationTemplate && botConfig.registrationTemplate.trim().length > 0) {
         botMessage = botConfig.registrationTemplate
           .replace(/\{ten\}/g, fullName || "Đồng môn K33")
           .replace(/\{lop\}/g, className || "TC10")
@@ -890,8 +899,11 @@ export async function POST(request: Request) {
 
     // LUỒNG 4: THÔNG BÁO XÁC NHẬN CHUYỂN KHOẢN (SEPAY) — KÈM TỔNG SỐ NGƯỜI ĐÃ ĐĂNG KÝ & XÁC NHẬN
     else if (type === "payment" || type === "sepay_payment_confirmed") {
-      const { fullName, className, paidAmount, shirtSize, bankGateway, content, transactionDate, referenceCode } = payload;
-      summaryTitle = `Chuyển khoản thành công: ${fullName || "Thành viên"} (+${Number(paidAmount || 0).toLocaleString("vi-VN")} đ)`;
+      const { fullName, className, paidAmount, shirtSize, registrationType, bankGateway, content, transactionDate, referenceCode } = payload;
+      const isShirtOnlyPayment = registrationType === "shirt_only";
+      summaryTitle = isShirtOnlyPayment
+        ? `Chuyển khoản Áo kỷ niệm: ${fullName || "Thành viên"} (+${Number(paidAmount || 0).toLocaleString("vi-VN")} đ)`
+        : `Chuyển khoản thành công: ${fullName || "Thành viên"} (+${Number(paidAmount || 0).toLocaleString("vi-VN")} đ)`;
 
       let totalAttending = 1;
       let totalConfirmed = 1;
@@ -931,7 +943,11 @@ export async function POST(request: Request) {
           `⏰ Thời gian: ${transactionDate || new Date().toLocaleString("vi-VN")}\n` +
           `🔢 Mã GD: ${referenceCode || "N/A"}\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `✨ Trạng thái: ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!\n` +
+          `✨ Trạng thái: ${
+            isShirtOnlyPayment
+              ? "ĐÃ XÁC NHẬN ĐẶT ÁO KỶ NIỆM 15 NĂM (SHIP TẬN NƠI)!"
+              : "ĐÃ XÁC NHẬN 100% THAM GIA HỘI NGỘ 15 NĂM!"
+          }\n` +
           `🍻 Tiến độ hiện tại: ${totalAttending} anh em đã đăng ký (${totalConfirmed} bạn đã xác nhận chuyển khoản)!\n` +
           `🎉 Ban Liên Lạc xin trân trọng cảm ơn bạn đã hoàn tất đóng góp!`;
       }

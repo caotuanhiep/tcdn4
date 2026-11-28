@@ -711,7 +711,8 @@ export default function UsersPanel() {
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
                   >
                     <option value="">Chưa chọn</option>
-                    <option value="attending">Có tham gia</option>
+                    <option value="attending">Có tham gia (1.000.000đ)</option>
+                    <option value="shirt_only">Không dự — Chỉ nhận áo kỷ niệm (250.000đ)</option>
                     <option value="not_attending">Không tham gia</option>
                   </select>
                 </div>

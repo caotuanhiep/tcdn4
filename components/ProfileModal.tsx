@@ -127,11 +127,20 @@ export default function ProfileModal({
   const [attendanceStatus, setAttendanceStatus] = useState<"attending" | "not_attending" | "unregistered">(
     profile?.attendance_status === "attending"
       ? "attending"
-      : profile?.attendance_status === "not_attending"
+      : profile?.attendance_status === "shirt_only" || profile?.attendance_status === "not_attending"
+      ? "not_attending"
+      : myRegistration?.registrationType === "shirt_only"
       ? "not_attending"
       : myRegistration
       ? "attending"
       : "unregistered"
+  );
+  const [wantShirtWhenAbsent, setWantShirtWhenAbsent] = useState<boolean>(
+    profile?.attendance_status === "shirt_only"
+      ? true
+      : profile?.attendance_status === "not_attending"
+      ? false
+      : true
   );
   const [shirtSize, setShirtSize] = useState(profile?.shirt_size || myRegistration?.shirtSize || "L (Nam)");
   const [deliveryAddress, setDeliveryAddress] = useState(
@@ -230,12 +239,20 @@ export default function ProfileModal({
     }
   };
 
+  const isShirtOnlyMode = attendanceStatus === "not_attending" && wantShirtWhenAbsent;
+  const activeFeeAmount = isShirtOnlyMode ? bankInfo.shirtOnlyAmount || 250000 : bankInfo.amount;
+  const activeFeeText = isShirtOnlyMode
+    ? bankInfo.shirtOnlyAmountText || "250.000 VNĐ"
+    : bankInfo.amountText;
+
   const cleanNameNoTones = fullName
     ? removeVietnameseTones(fullName.trim().toUpperCase()).replace(/[^A-Z0-9 ]/g, "")
     : "TEN";
   const cleanPhoneDigits = phone ? phone.trim().replace(/[^0-9]/g, "") : "SDT";
-  const transferSyntax = `${bankInfo.syntaxPrefix || "TCDN4"} ${cleanNameNoTones} ${cleanPhoneDigits}`;
-  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${bankInfo.amount}&addInfo=${encodeURIComponent(transferSyntax)}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
+  const transferSyntax = isShirtOnlyMode
+    ? `${bankInfo.syntaxPrefix || "TCDN4"} AO ${cleanNameNoTones} ${cleanPhoneDigits}`
+    : `${bankInfo.syntaxPrefix || "TCDN4"} ${cleanNameNoTones} ${cleanPhoneDigits}`;
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${activeFeeAmount}&addInfo=${encodeURIComponent(transferSyntax)}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
 
   const copyToClipboard = (text: string, key: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -359,6 +376,7 @@ export default function ProfileModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "registration",
+            registrationType: "attending",
             userId: user?.id,
             fullName: fullName.trim(),
             className,
@@ -371,7 +389,7 @@ export default function ProfileModal({
         });
       } catch {}
 
-      if (myRegistration?.status === "confirmed") {
+      if (myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only") {
         toast.success("Đã cập nhật thông tin tham dự & size áo mới nhất!");
         onClose();
       } else {
@@ -385,7 +403,79 @@ export default function ProfileModal({
     }
   };
 
-  // 4. Chọn không tham gia trực tiếp -> Lưu vào DB gốc, gỡ khỏi danh sách tham dự & lưu lời chúc Cloud
+  // 3b. Không tham gia trực tiếp nhưng ĐĂNG KÝ NHẬN ÁO KỶ NIỆM 15 NĂM (250.000đ) -> Ghi DB + Manifest + Mở QR 250k
+  const handleRegisterShirtOnly = async () => {
+    if (!fullName.trim() || !phone.trim()) {
+      toast.error("Vui lòng hoàn tất Họ tên và Số điện thoại ở Bước 1!");
+      setActiveTab("info");
+      return;
+    }
+    if (!deliveryAddress.trim()) {
+      toast.error("Vui lòng nhập địa chỉ nhận ship áo kỷ niệm tận nơi!");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateProfile({
+        ...buildProfilePayload(),
+        attendance_status: "shirt_only",
+        shirt_size: shirtSize,
+        delivery_address: deliveryAddress.trim(),
+        guests_count: 0,
+      });
+
+      if (guestbookMessage.trim()) {
+        const trimmedWish = guestbookMessage.trim();
+        try {
+          await authFetch("/api/guestbook", {
+            method: "POST",
+            body: JSON.stringify({
+              name: fullName.trim() || "Thành viên K33",
+              className,
+              message: trimmedWish,
+            }),
+          });
+          broadcastDataUpdate("guestbook");
+        } catch {}
+      }
+
+      try {
+        await fetch("/api/zalo-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "registration",
+            registrationType: "shirt_only",
+            userId: user?.id,
+            fullName: fullName.trim(),
+            className,
+            shirtSize,
+            phone: phone.trim(),
+            address: deliveryAddress.trim(),
+            paidAmount: bankInfo.shirtOnlyAmount || 250000,
+            guestsCount: 0,
+          }),
+        });
+      } catch {}
+
+      if (myRegistration?.status === "confirmed" && myRegistration?.registrationType === "shirt_only") {
+        toast.success("Đã cập nhật size áo & địa chỉ ship áo kỷ niệm 15 năm!");
+        onClose();
+      } else {
+        toast.success(
+          `Đã lưu đăng ký nhận Áo kỷ niệm 15 năm (${bankInfo.shirtOnlyAmountText || "250.000 VNĐ"})! Mời bạn quét mã VietQR để hoàn tất.`
+        );
+        setShowQrModal(true);
+      }
+    } catch (err: any) {
+      toast.error(`Không thể lưu đăng ký nhận áo: ${err?.message || "Vui lòng thử lại"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 4. Chọn không tham gia trực tiếp & không nhận áo -> Lưu vào DB gốc, gỡ khỏi danh sách & lưu lời chúc Cloud
   const handleDeclineAndSendWish = async () => {
     setSaving(true);
     try {
@@ -394,6 +484,7 @@ export default function ProfileModal({
         attendance_status: "not_attending",
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
+        guests_count: 0,
       });
 
       if (guestbookMessage.trim()) {
@@ -858,7 +949,7 @@ export default function ProfileModal({
         {activeTab === "attendance" && (
           <div className="space-y-3.5 animate-in fade-in duration-150">
             {/* Trạng thái hiện tại */}
-            {attendanceStatus === "attending" && myRegistration?.status === "confirmed" ? (
+            {attendanceStatus === "attending" && myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only" ? (
               <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
@@ -871,7 +962,7 @@ export default function ProfileModal({
                   100% OK
                 </span>
               </div>
-            ) : attendanceStatus === "attending" && myRegistration?.status === "pending" ? (
+            ) : attendanceStatus === "attending" && myRegistration?.status === "pending" && myRegistration?.registrationType !== "shirt_only" ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
@@ -890,6 +981,45 @@ export default function ProfileModal({
                 <button
                   type="button"
                   onClick={() => setShowQrModal(true)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-ueh transition-colors"
+                >
+                  <QrCode size={12} className="text-ueh-gold" />
+                  <span>Mã QR</span>
+                </button>
+              </div>
+            ) : attendanceStatus === "not_attending" && myRegistration?.registrationType === "shirt_only" && myRegistration?.status === "confirmed" ? (
+              <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-emerald-900 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <div className="text-xs font-bold text-emerald-950 truncate">
+                    ĐÃ XÁC NHẬN ĐẶT ÁO KỶ NIỆM ({bankInfo.shirtOnlyAmountText}) • Áo: {myRegistration.shirtSize || shirtSize}
+                  </div>
+                </div>
+                <span className="rounded-md bg-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 shrink-0">
+                  100% OK
+                </span>
+              </div>
+            ) : attendanceStatus === "not_attending" && myRegistration?.registrationType === "shirt_only" && myRegistration?.status === "pending" ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 sm:p-3 text-amber-900 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ueh-orange text-white">
+                    <Shirt size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-amber-950 truncate">
+                      ĐÃ ĐĂNG KÝ NHẬN ÁO KỶ NIỆM • Chờ chuyển khoản
+                    </div>
+                    <div className="text-[10px] text-amber-800 truncate">
+                      Size áo: {myRegistration?.shirtSize || shirtSize} • {bankInfo.shirtOnlyAmountText} (Ship tận nơi)
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWantShirtWhenAbsent(true);
+                    setShowQrModal(true);
+                  }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-ueh transition-colors"
                 >
                   <QrCode size={12} className="text-ueh-gold" />
@@ -942,7 +1072,8 @@ export default function ProfileModal({
                   <div>
                     <div className="text-xs font-bold text-slate-900">Tôi sẽ tham gia</div>
                     <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                      Có mặt tại Cơ sở B UEH (279 Nguyễn Tri Phương, Q.10) lúc 9:00 sáng 12/12/2026.
+                      Có mặt tại Cơ sở B UEH lúc 9:00 sáng 12/12/2026 • Kinh phí{" "}
+                      <strong className="text-emerald-700">{bankInfo.amountText}</strong>.
                     </div>
                   </div>
                 </button>
@@ -967,8 +1098,9 @@ export default function ProfileModal({
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-900">Rất tiếc không thể tham gia</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Gửi lời nhắn nhủ thân thương và chúc mừng vào Sổ lưu bút K33.
+                    <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                      Vẫn có thể nhận Áo kỷ niệm 15 năm (
+                      <strong className="text-ueh-orange">{bankInfo.shirtOnlyAmountText}</strong>) &amp; gửi lời chúc K33.
                     </div>
                   </div>
                 </button>
@@ -1143,14 +1275,8 @@ export default function ProfileModal({
                   <button
                     type="button"
                     disabled={saving}
-                    onClick={() => {
-                      if (!myRegistration || profile?.attendance_status !== "attending") {
-                        void handleRegisterAttendance();
-                      } else {
-                        setShowQrModal(true);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0 disabled:opacity-50"
+                    onClick={() => setShowQrModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0 disabled:opacity-50 cursor-pointer"
                   >
                     <QrCode size={13} className="text-ueh-gold" /> Mã VietQR
                   </button>
@@ -1160,43 +1286,129 @@ export default function ProfileModal({
 
             {/* Nếu không tham gia */}
             {attendanceStatus === "not_attending" && (
-              <div className="space-y-3 rounded-xl border border-orange-200/80 bg-orange-50/40 p-3">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-orange-900 uppercase">
-                  <MessageSquare size={14} className="text-ueh-orange" />
-                  <span>Gửi lời nhắn thân thương vào Sổ Lưu Bút K33</span>
-                </div>
-                <textarea
-                  rows={2}
-                  value={guestbookMessage}
-                  onChange={(e) => setGuestbookMessage(e.target.value)}
-                  placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười!..."
-                  className="w-full rounded-xl border border-orange-200 bg-white p-2.5 text-xs focus:border-ueh focus:outline-none"
-                />
-
-                <div>
-                  <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-600 mb-1">
-                    <Shirt size={13} /> Đăng ký nhận Áo Polo gửi ship tận nơi (tùy chọn)
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <select
-                      value={shirtSize}
-                      onChange={(e) => setShirtSize(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                    >
-                      {SHIRT_SIZES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="Địa chỉ nhận ship áo tận nhà..."
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-ueh focus:outline-none"
-                    />
+              <div className="space-y-3 rounded-xl border border-orange-200/90 bg-orange-50/45 p-3">
+                {/* Lựa chọn nhận Áo kỷ niệm 15 năm (250.000đ) hay chỉ gửi lời chúc */}
+                <div className="rounded-xl border border-orange-200 bg-white p-2.5 sm:p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-orange-950">
+                      <Shirt size={14} className="text-ueh-orange shrink-0" />
+                      <span>Bạn có muốn nhận Áo Polo Kỷ Niệm 15 Năm?</span>
+                    </div>
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-ueh-orange shrink-0">
+                      {bankInfo.shirtOnlyAmountText}
+                    </span>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setWantShirtWhenAbsent(true)}
+                      className={`rounded-lg py-2 px-2.5 text-xs font-bold text-center border transition-all cursor-pointer ${
+                        wantShirtWhenAbsent
+                          ? "bg-ueh-orange text-white border-ueh-orange shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-orange-50"
+                      }`}
+                    >
+                      Có, nhận áo kỷ niệm ({bankInfo.shirtOnlyAmountText})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWantShirtWhenAbsent(false)}
+                      className={`rounded-lg py-2 px-2.5 text-xs font-bold text-center border transition-all cursor-pointer ${
+                        !wantShirtWhenAbsent
+                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Không nhận áo, chỉ gửi lời chúc
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chọn size áo + Địa chỉ ship + Box chi phí 250.000đ & Mã VietQR */}
+                {wantShirtWhenAbsent && (
+                  <div className="space-y-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-orange-950 uppercase">
+                        <Shirt size={14} className="text-ueh-orange" />
+                        <span>Chọn size Áo Polo Kỷ Niệm 15 Năm</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowShirtSizePopup(true)}
+                        className="text-[11px] font-bold text-ueh hover:underline"
+                      >
+                        Bảng số đo ↗
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                      {SHIRT_SIZES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setShirtSize(s)}
+                          className={`rounded-lg py-1.5 px-1 text-xs font-bold text-center border transition-all ${
+                            shirtSize === s
+                              ? "bg-ueh-orange text-white border-ueh-orange shadow-xs"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-orange-50"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Địa chỉ nhận ship áo kỷ niệm tận nơi *
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        placeholder="VD: Số nhà, Đường, Phường/Xã, Quận/Huyện, Tỉnh/TP..."
+                        className="w-full rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Box Chi phí Áo Kỷ Niệm 250.000đ & VietQR */}
+                    <div className="rounded-xl border border-orange-300 bg-white p-2.5 sm:p-3 flex items-center justify-between gap-2 shadow-2xs">
+                      <div>
+                        <div className="text-[10px] text-orange-700 font-bold uppercase">
+                          Chi phí Áo Kỷ Niệm 15 Năm
+                        </div>
+                        <div className="text-sm sm:text-base font-black text-slate-900">
+                          {bankInfo.shirtOnlyAmountText} / áo
+                        </div>
+                        <div className="text-[10px] text-orange-700 font-medium">
+                          Không tham dự tiệc • Bao gồm Áo Polo K33 kỷ niệm &amp; gửi ship tận nơi
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => setShowQrModal(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-ueh-orange px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-orange-600 active:scale-98 transition-all shrink-0 disabled:opacity-50 cursor-pointer"
+                      >
+                        <QrCode size={13} className="text-amber-100" /> Mã VietQR
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1 border-t border-orange-200/70 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-orange-900 uppercase">
+                    <MessageSquare size={14} className="text-ueh-orange" />
+                    <span>Gửi lời nhắn thân thương vào Sổ Lưu Bút K33 (tùy chọn)</span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={guestbookMessage}
+                    onChange={(e) => setGuestbookMessage(e.target.value)}
+                    placeholder="VD: Chúc tập thể TC10, TC11, TC12 có buổi họp mặt 15 năm thật nhiều kỷ niệm và tiếng cười!..."
+                    className="w-full rounded-xl border border-orange-200 bg-white p-2.5 text-xs focus:border-ueh focus:outline-none"
+                  />
                 </div>
               </div>
             )}
@@ -1220,15 +1432,35 @@ export default function ProfileModal({
                 >
                   {saving ? (
                     <Loader2 size={15} className="animate-spin" />
-                  ) : myRegistration?.status === "confirmed" ? (
+                  ) : myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only" ? (
                     <Save size={15} className="text-ueh-gold" />
                   ) : (
                     <QrCode size={15} className="text-ueh-gold" />
                   )}
                   <span>
-                    {myRegistration?.status === "confirmed"
+                    {myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only"
                       ? "Lưu cập nhật thông tin"
                       : "Lưu & Đăng ký tham gia (Nhận mã QR)"}
+                  </span>
+                </button>
+              ) : attendanceStatus === "not_attending" && wantShirtWhenAbsent ? (
+                <button
+                  type="button"
+                  onClick={handleRegisterShirtOnly}
+                  disabled={saving}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ueh-orange to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : myRegistration?.status === "confirmed" && myRegistration?.registrationType === "shirt_only" ? (
+                    <Save size={15} />
+                  ) : (
+                    <QrCode size={15} />
+                  )}
+                  <span>
+                    {myRegistration?.status === "confirmed" && myRegistration?.registrationType === "shirt_only"
+                      ? "Lưu cập nhật size & địa chỉ áo"
+                      : `Lưu & Nhận áo kỷ niệm (QR ${bankInfo.shirtOnlyAmountText})`}
                   </span>
                 </button>
               ) : attendanceStatus === "not_attending" ? (
@@ -1236,10 +1468,10 @@ export default function ProfileModal({
                   type="button"
                   onClick={handleDeclineAndSendWish}
                   disabled={saving}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  <span>Lưu lựa chọn (Không tham gia trực tiếp)</span>
+                  <span>Lưu lựa chọn (Chỉ gửi lời chúc)</span>
                 </button>
               ) : (
                 <div className="w-full sm:w-auto text-center py-2 px-3 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold">
@@ -1318,13 +1550,31 @@ export default function ProfileModal({
                 <X size={16} />
               </button>
 
-              <div className="flex h-11 w-11 mx-auto mb-2 items-center justify-center rounded-2xl bg-ueh text-white shadow-xs">
-                <QrCode size={22} className="text-ueh-gold" />
+              <div
+                className={`flex h-11 w-11 mx-auto mb-2 items-center justify-center rounded-2xl text-white shadow-xs ${
+                  isShirtOnlyMode ? "bg-ueh-orange" : "bg-ueh"
+                }`}
+              >
+                {isShirtOnlyMode ? (
+                  <Shirt size={22} className="text-amber-100" />
+                ) : (
+                  <QrCode size={22} className="text-ueh-gold" />
+                )}
               </div>
-              <div className="text-base font-black text-slate-900">Mã Chuyển Khoản VietQR</div>
-              <div className="text-xs text-slate-500 mb-3">Mở ứng dụng ngân hàng bất kỳ để quét mã</div>
+              <div className="text-base font-black text-slate-900">
+                {isShirtOnlyMode ? "Mã VietQR Nhận Áo Kỷ Niệm 15 Năm" : "Mã Chuyển Khoản VietQR"}
+              </div>
+              <div className="text-xs text-slate-500 mb-3">
+                {isShirtOnlyMode
+                  ? "Phí Áo Polo K33 kỷ niệm (không dự tiệc • gửi ship tận nơi)"
+                  : "Phí tham dự Gặp mặt 15 năm (tiệc VIP, áo Polo & kỷ yếu)"}
+              </div>
 
-              <div className="mx-auto w-52 overflow-hidden rounded-2xl border-2 border-emerald-300 bg-white p-2 shadow-sm">
+              <div
+                className={`mx-auto w-52 overflow-hidden rounded-2xl border-2 bg-white p-2 shadow-sm ${
+                  isShirtOnlyMode ? "border-orange-300" : "border-emerald-300"
+                }`}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrUrl} alt="VietQR TCDN4" className="w-full h-auto rounded-lg" />
               </div>
@@ -1356,12 +1606,20 @@ export default function ProfileModal({
                 </div>
 
                 <div className="flex justify-between items-center pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">Số tiền:</span>
+                  <span className="text-slate-500">
+                    {isShirtOnlyMode ? "Chi phí áo kỷ niệm:" : "Số tiền:"}
+                  </span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-black text-emerald-600">{bankInfo.amountText}</span>
+                    <span
+                      className={`text-sm font-black ${
+                        isShirtOnlyMode ? "text-ueh-orange" : "text-emerald-600"
+                      }`}
+                    >
+                      {activeFeeText}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(String(bankInfo.amount), "amount", "Số tiền")}
+                      onClick={() => copyToClipboard(String(activeFeeAmount), "amount", "Số tiền")}
                       className="p-1 rounded-md text-ueh hover:bg-blue-100"
                       title="Sao chép số tiền"
                     >
@@ -1370,19 +1628,39 @@ export default function ProfileModal({
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-blue-50/90 p-2.5 border border-blue-200 mt-2">
+                <div
+                  className={`rounded-xl p-2.5 border mt-2 ${
+                    isShirtOnlyMode
+                      ? "bg-orange-50/90 border-orange-200"
+                      : "bg-blue-50/90 border-blue-200"
+                  }`}
+                >
                   <div className="flex justify-between items-center mb-0.5">
-                    <span className="text-[10px] uppercase font-bold text-ueh">Cú pháp chuyển khoản:</span>
+                    <span
+                      className={`text-[10px] uppercase font-bold ${
+                        isShirtOnlyMode ? "text-ueh-orange" : "text-ueh"
+                      }`}
+                    >
+                      {isShirtOnlyMode ? "Cú pháp CK đặt áo kỷ niệm:" : "Cú pháp chuyển khoản:"}
+                    </span>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(transferSyntax, "syntax", "Cú pháp chuyển khoản")}
-                      className="text-[10px] font-bold text-ueh flex items-center gap-1 hover:underline"
+                      className={`text-[10px] font-bold flex items-center gap-1 hover:underline ${
+                        isShirtOnlyMode ? "text-ueh-orange" : "text-ueh"
+                      }`}
                     >
                       {copiedKey === "syntax" ? <CheckCheck size={12} className="text-emerald-600" /> : <Copy size={12} />}
                       <span>Sao chép</span>
                     </button>
                   </div>
-                  <div className="font-mono text-xs font-bold text-ueh break-all">{transferSyntax}</div>
+                  <div
+                    className={`font-mono text-xs font-bold break-all ${
+                      isShirtOnlyMode ? "text-orange-950" : "text-ueh"
+                    }`}
+                  >
+                    {transferSyntax}
+                  </div>
                 </div>
               </div>
 
@@ -1406,14 +1684,37 @@ export default function ProfileModal({
 
               <button
                 type="button"
-                onClick={() => {
+                disabled={saving}
+                onClick={async () => {
+                  const targetStatus = isShirtOnlyMode ? "shirt_only" : "attending";
+                  if (profile?.attendance_status !== targetStatus) {
+                    if (isShirtOnlyMode) {
+                      if (!deliveryAddress.trim()) {
+                        setShowQrModal(false);
+                        toast.error("Vui lòng nhập địa chỉ nhận ship áo rồi bấm Lưu & Nhận áo kỷ niệm!");
+                        return;
+                      }
+                      await handleRegisterShirtOnly();
+                      setShowQrModal(false);
+                      onClose();
+                      return;
+                    }
+                    await handleRegisterAttendance();
+                    setShowQrModal(false);
+                    onClose();
+                    return;
+                  }
                   setShowQrModal(false);
                   onClose();
                   toast.success("Cảm ơn bạn! Hệ thống SePay sẽ tự động cập nhật trạng thái khi giao dịch thành công.");
                 }}
-                className="mt-3.5 w-full rounded-xl bg-ueh py-2.5 text-xs font-bold text-white hover:bg-ueh-light transition-all shadow-md"
+                className={`mt-3.5 w-full rounded-xl py-2.5 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50 cursor-pointer ${
+                  isShirtOnlyMode
+                    ? "bg-ueh-orange hover:bg-orange-600"
+                    : "bg-ueh hover:bg-ueh-light"
+                }`}
               >
-                Tôi đã chuyển khoản xong
+                {saving ? "Đang lưu..." : "Tôi đã chuyển khoản xong"}
               </button>
             </div>
           </div>

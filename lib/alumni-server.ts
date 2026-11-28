@@ -40,6 +40,7 @@ export interface RegistrationItem {
   address: string;
   avatarUrl?: string;
   guestsCount?: number;
+  registrationType?: "attending" | "shirt_only";
   status: "confirmed" | "pending";
   paidAmount: number;
   createdAt: string;
@@ -51,6 +52,7 @@ export interface RegistrationItem {
 export interface AlumniStats {
   checkedInCount: number;
   attendingCount: number;
+  shirtOnlyCount: number;
   confirmedCount: number;
   pendingCount: number;
   singleCount: number;
@@ -239,16 +241,29 @@ export async function loadMergedRegistrations(
       consumedManifestIndexes.add(manifestIdx);
     }
 
-    // Nếu người dùng đã chủ động chọn KHÔNG tham gia -> loại bỏ khỏi danh sách tham dự
+    // Nếu người dùng đã chủ động chọn KHÔNG tham gia (và không đặt áo) -> loại bỏ khỏi danh sách
     if (p.attendance_status === "not_attending") {
       continue;
     }
 
-    // Chỉ đưa vào danh sách tham dự nếu:
-    // - Người dùng đã chọn attendance_status === "attending" trong DB, HOẶC
+    // Chỉ đưa vào danh sách đăng ký nếu:
+    // - Người dùng đã chọn attendance_status === "attending" hoặc "shirt_only" trong DB, HOẶC
     // - Đã có phiếu đăng ký (đặc biệt là đã xác nhận thanh toán) trong manifest
-    const shouldInclude = p.attendance_status === "attending" || Boolean(matchedManifest);
+    const shouldInclude =
+      p.attendance_status === "attending" ||
+      p.attendance_status === "shirt_only" ||
+      Boolean(matchedManifest);
     if (!shouldInclude) continue;
+
+    const resolvedType: "attending" | "shirt_only" =
+      p.attendance_status === "shirt_only"
+        ? "shirt_only"
+        : p.attendance_status === "attending"
+        ? "attending"
+        : matchedManifest?.registrationType === "shirt_only"
+        ? "shirt_only"
+        : "attending";
+    const defaultFee = resolvedType === "shirt_only" ? 250000 : 1000000;
 
     const resolvedName = (p.full_name || matchedManifest?.fullName || "").trim();
     if (!resolvedName) continue;
@@ -271,9 +286,15 @@ export async function loadMergedRegistrations(
       shirtSize: (p.shirt_size || matchedManifest?.shirtSize || "L (Nam)").trim(),
       address: resolvedAddress,
       avatarUrl: p.avatar_url || matchedManifest?.avatarUrl || undefined,
-      guestsCount: typeof matchedManifest?.guestsCount === "number" ? matchedManifest.guestsCount : 0,
+      guestsCount:
+        resolvedType === "shirt_only"
+          ? 0
+          : typeof matchedManifest?.guestsCount === "number"
+          ? matchedManifest.guestsCount
+          : 0,
+      registrationType: resolvedType,
       status: matchedManifest?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: Number(matchedManifest?.paidAmount) > 0 ? Number(matchedManifest?.paidAmount) : 1000000,
+      paidAmount: Number(matchedManifest?.paidAmount) > 0 ? Number(matchedManifest?.paidAmount) : defaultFee,
       createdAt: matchedManifest?.createdAt || formatShortDate((p as any).created_at),
       confirmedAt: matchedManifest?.confirmedAt,
       paymentRef: matchedManifest?.paymentRef,
@@ -285,10 +306,12 @@ export async function loadMergedRegistrations(
   manifest.forEach((m, idx) => {
     if (consumedManifestIndexes.has(idx)) return;
     if (!m.fullName) return;
+    const regType = m.registrationType === "shirt_only" ? "shirt_only" : "attending";
     result.push({
       ...m,
-      guestsCount: typeof m.guestsCount === "number" ? m.guestsCount : 0,
-      paidAmount: Number(m.paidAmount) > 0 ? Number(m.paidAmount) : 1000000,
+      registrationType: regType,
+      guestsCount: regType === "shirt_only" ? 0 : typeof m.guestsCount === "number" ? m.guestsCount : 0,
+      paidAmount: Number(m.paidAmount) > 0 ? Number(m.paidAmount) : regType === "shirt_only" ? 250000 : 1000000,
     });
   });
 
@@ -322,12 +345,15 @@ export async function syncProfileToRegistrations(
       manifest.splice(existingIdx, 1);
       changed = true;
     }
-  } else if (profile.attendance_status === "attending") {
+  } else if (profile.attendance_status === "attending" || profile.attendance_status === "shirt_only") {
     const existing = existingIdx >= 0 ? manifest[existingIdx] : null;
-    const resolvedGuestsCount =
-      typeof options?.guestsCount === "number" && Number.isFinite(options.guestsCount)
-        ? Math.max(0, Math.floor(options.guestsCount))
-        : existing?.guestsCount ?? 0;
+    const isShirtOnly = profile.attendance_status === "shirt_only";
+    const resolvedGuestsCount = isShirtOnly
+      ? 0
+      : typeof options?.guestsCount === "number" && Number.isFinite(options.guestsCount)
+      ? Math.max(0, Math.floor(options.guestsCount))
+      : existing?.guestsCount ?? 0;
+    const expectedFee = isShirtOnly ? 250000 : 1000000;
     const entry: RegistrationItem = {
       id: profile.id,
       fullName: (profile.full_name || existing?.fullName || "Thành viên K33").trim(),
@@ -341,8 +367,9 @@ export async function syncProfileToRegistrations(
         "TP. Hồ Chí Minh",
       avatarUrl: profile.avatar_url || existing?.avatarUrl || undefined,
       guestsCount: resolvedGuestsCount,
+      registrationType: isShirtOnly ? "shirt_only" : "attending",
       status: existing?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: existing?.paidAmount || 1000000,
+      paidAmount: existing?.status === "confirmed" ? (existing.paidAmount || expectedFee) : expectedFee,
       createdAt: existing?.createdAt || formatShortDate(new Date().toISOString()),
       confirmedAt: existing?.confirmedAt,
       paymentRef: existing?.paymentRef,
@@ -476,10 +503,13 @@ export function computeAlumniStats(
 
   const confirmedCount = registrations.filter((r) => r.status === "confirmed").length;
   const pendingCount = registrations.length - confirmedCount;
+  const shirtOnlyCount = registrations.filter((r) => r.registrationType === "shirt_only").length;
+  const attendingCount = registrations.length - shirtOnlyCount;
 
   return {
     checkedInCount: profiles.length,
-    attendingCount: registrations.length,
+    attendingCount,
+    shirtOnlyCount,
     confirmedCount,
     pendingCount,
     singleCount,

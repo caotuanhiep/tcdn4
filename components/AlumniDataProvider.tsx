@@ -18,6 +18,7 @@ import type { AlumniStats, RegistrationItem } from "@/lib/alumni-server";
 const EMPTY_STATS: AlumniStats = {
   checkedInCount: 0,
   attendingCount: 0,
+  shirtOnlyCount: 0,
   confirmedCount: 0,
   pendingCount: 0,
   singleCount: 0,

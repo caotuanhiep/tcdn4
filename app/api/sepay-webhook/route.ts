@@ -235,6 +235,7 @@ export async function POST(request: Request) {
     let matchedName = "Thành viên TCDN4";
     let matchedClass = "TC4";
     let matchedShirtSize = "L (Nam)";
+    let matchedRegType: "attending" | "shirt_only" = "attending";
     let isMatched = false;
     let matchReason = "none";
     let matchedId = "";
@@ -267,6 +268,10 @@ export async function POST(request: Request) {
 
         if (bestIdx >= 0) {
           const target = allRegs[bestIdx];
+          const looksLikeShirtOnly =
+            target.registrationType === "shirt_only" ||
+            (amountNum > 0 && amountNum < 500000 && (spacedContent.includes(" AO ") || cleanContent.includes("TCDN4AO")));
+          matchedRegType = looksLikeShirtOnly ? "shirt_only" : "attending";
           isMatched = true;
           matchReason = bestReason;
           matchedName = target.fullName;
@@ -286,8 +291,15 @@ export async function POST(request: Request) {
             if (isSamePerson) {
               return {
                 ...reg,
+                registrationType: matchedRegType,
                 status: "confirmed" as const,
-                paidAmount: amountNum > 0 ? amountNum : (reg.paidAmount || bankConfig.amount || 1000000),
+                paidAmount:
+                  amountNum > 0
+                    ? amountNum
+                    : reg.paidAmount ||
+                      (matchedRegType === "shirt_only"
+                        ? bankConfig.shirtOnlyAmount || 250000
+                        : bankConfig.amount || 1000000),
                 paymentRef: txRef,
                 confirmedAt: new Date().toISOString(),
                 note: (reg.note ? reg.note + " | " : "") + `SePay tự động khớp (${bestReason}): ${txRef}`,
@@ -298,11 +310,11 @@ export async function POST(request: Request) {
 
           saveOk = await saveRegistrations(updated);
 
-          // Đồng bộ attendance_status trên bảng profiles
+          // Đồng bộ attendance_status trên bảng profiles (giữ đúng shirt_only nếu là đặt áo kỷ niệm)
           try {
             if (matchedId && !matchedId.startsWith("reg-") && !matchedId.startsWith("profile-")) {
               const supabase = getSupabaseAdmin();
-              await supabase.from("profiles").update({ attendance_status: "attending" }).eq("id", matchedId);
+              await supabase.from("profiles").update({ attendance_status: matchedRegType }).eq("id", matchedId);
             }
           } catch {}
         }
@@ -332,6 +344,10 @@ export async function POST(request: Request) {
           }
 
           if (bestProfile && bestScore > 0) {
+            const isProfileShirtOnly =
+              bestProfile.attendance_status === "shirt_only" ||
+              (amountNum > 0 && amountNum < 500000);
+            matchedRegType = isProfileShirtOnly ? "shirt_only" : "attending";
             isMatched = true;
             matchReason = `profile_${bestReason}`;
             matchedName = bestProfile.full_name || "Thành viên K33";
@@ -340,9 +356,9 @@ export async function POST(request: Request) {
             matchedShirtSize = bestProfile.shirt_size || "L (Nam)";
             const pPhone = (bestProfile.phone || "").replace(/[^0-9]/g, "");
 
-            // Cập nhật profile lên attending
+            // Cập nhật profile theo đúng loại (attending hoặc shirt_only)
             try {
-              await supabase.from("profiles").update({ attendance_status: "attending" }).eq("id", bestProfile.id);
+              await supabase.from("profiles").update({ attendance_status: matchedRegType }).eq("id", bestProfile.id);
             } catch {}
 
             // Cập nhật / Thêm mới vào danh sách registrations
@@ -356,8 +372,14 @@ export async function POST(request: Request) {
               address: bestProfile.delivery_address || (bestProfile.location_region === "hn" ? "Hà Nội" : "TP. Hồ Chí Minh"),
               avatarUrl: bestProfile.avatar_url || undefined,
               guestsCount: 0,
+              registrationType: matchedRegType,
               status: "confirmed" as const,
-              paidAmount: amountNum > 0 ? amountNum : (bankConfig.amount || 1000000),
+              paidAmount:
+                amountNum > 0
+                  ? amountNum
+                  : matchedRegType === "shirt_only"
+                  ? bankConfig.shirtOnlyAmount || 250000
+                  : bankConfig.amount || 1000000,
               paymentRef: txRef,
               confirmedAt: new Date().toISOString(),
               createdAt: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
@@ -421,6 +443,7 @@ export async function POST(request: Request) {
           className: matchedClass,
           paidAmount: amountNum,
           shirtSize: matchedShirtSize || "L (Nam)",
+          registrationType: matchedRegType,
           bankGateway: gateway || bankConfig.bankName || accountNumber || "Tài khoản lớp",
           content: combinedRawContent || "",
           transactionDate: transactionDate || new Date().toLocaleString("vi-VN"),

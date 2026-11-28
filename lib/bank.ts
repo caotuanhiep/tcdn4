@@ -6,12 +6,15 @@ export interface BankConfig {
   phoneReceive: string;
   amount: number;
   amountText: string;
+  shirtOnlyAmount: number;
+  shirtOnlyAmountText: string;
   syntaxPrefix: string;
   sepayApiKey?: string;
 }
 
 export const BANK_STORAGE_KEY = "tcdn4_bank_config";
 export const BANK_UPDATED_EVENT = "tcdn4_bank_config_updated";
+export const SHIRT_ONLY_DEFAULT_AMOUNT = 250000;
 
 export const DEFAULT_BANK_INFO: BankConfig = {
   bankCode: "MB",
@@ -21,12 +24,16 @@ export const DEFAULT_BANK_INFO: BankConfig = {
   phoneReceive: "0903 123 456",
   amount: 1000000,
   amountText: "1.000.000 VNĐ",
+  shirtOnlyAmount: SHIRT_ONLY_DEFAULT_AMOUNT,
+  shirtOnlyAmountText: "250.000 VNĐ",
   syntaxPrefix: "TCDN4",
   sepayApiKey: "",
 };
 
 export function normalizeBankConfig(parsed: any): BankConfig {
   const amount = Number(parsed?.amount) > 0 ? Number(parsed.amount) : DEFAULT_BANK_INFO.amount;
+  const shirtOnlyAmount =
+    Number(parsed?.shirtOnlyAmount) > 0 ? Number(parsed.shirtOnlyAmount) : SHIRT_ONLY_DEFAULT_AMOUNT;
   return {
     bankCode: String(parsed?.bankCode || DEFAULT_BANK_INFO.bankCode),
     bankName: String(parsed?.bankName || DEFAULT_BANK_INFO.bankName),
@@ -35,6 +42,8 @@ export function normalizeBankConfig(parsed: any): BankConfig {
     phoneReceive: String(parsed?.phoneReceive || DEFAULT_BANK_INFO.phoneReceive).trim(),
     amount,
     amountText: `${amount.toLocaleString("vi-VN")} VNĐ`,
+    shirtOnlyAmount,
+    shirtOnlyAmountText: `${shirtOnlyAmount.toLocaleString("vi-VN")} VNĐ`,
     syntaxPrefix: String(parsed?.syntaxPrefix || DEFAULT_BANK_INFO.syntaxPrefix),
     sepayApiKey: parsed?.sepayApiKey !== undefined ? String(parsed.sepayApiKey).trim() : (DEFAULT_BANK_INFO.sepayApiKey || ""),
   };

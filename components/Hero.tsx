@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, ChevronRight, Users, GraduationCap, Sparkles, Shirt, Heart, Smile, UserCheck } from "lucide-react";
+import { Calendar, ChevronRight, Sparkles, Shirt, UserCheck, Pause, Play } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useAlumniData } from "@/components/AlumniDataProvider";
 
@@ -21,6 +21,7 @@ export default function Hero() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [currentShirtSlide, setCurrentShirtSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [isMarqueePaused, setIsMarqueePaused] = useState(false);
 
   // Tự động xoay vòng ảnh slider bên trái 3s
   useEffect(() => {
@@ -107,10 +108,92 @@ export default function Hero() {
         </h1>
 
         {/* Description ngắn gọn */}
-        <p className="mx-auto mb-6 max-w-2xl text-sm sm:text-base md:text-lg font-normal leading-relaxed text-slate-600">
+        <p className="mx-auto mb-5 max-w-2xl text-sm sm:text-base md:text-lg font-normal leading-relaxed text-slate-600">
           Hành trình 15 năm gắn kết. Nơi lưu giữ thanh xuân, kết nối hiện tại và mở ra những cơ hội hợp tác mới cho tập thể{" "}
           <strong className="font-semibold text-ueh">TC10 - TC11 - TC12</strong>.
         </p>
+
+        {/* Dải thông điệp chạy tinh tế ngay phía trên 2 ảnh lớn Hero */}
+        <div
+          className="hero-marquee-container relative mx-auto max-w-5xl mb-3.5 sm:mb-4 rounded-2xl border border-amber-300/50 bg-gradient-to-r from-[#003350] via-[#004A73] to-[#003350] p-1.5 sm:p-2 text-white shadow-lg shadow-ueh/15 ring-1 ring-white/10"
+          role="region"
+          aria-label="Thông báo nhận áo kỷ niệm 15 năm"
+        >
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Nút toàn dải chữ chạy -> bấm vào mở ngay tab Đăng ký / Nhận áo */}
+            <button
+              type="button"
+              onClick={handleRegisterClick}
+              className="group/ticker flex flex-1 min-w-0 items-center gap-2 sm:gap-3 rounded-xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ueh-gold cursor-pointer"
+            >
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-ueh-orange to-amber-500 px-2.5 py-1.5 sm:px-3 text-[11px] font-black uppercase tracking-wide text-white shadow-xs">
+                <Shirt size={14} className="shrink-0" />
+                <span className="hidden sm:inline">Áo 15 Năm</span>
+              </span>
+
+              <div className="hero-marquee-viewport flex-1 min-w-0 py-0.5">
+                <div
+                  className="hero-marquee-track text-[13px] sm:text-sm font-medium tracking-[0.01em] text-blue-50/95"
+                  data-paused={isMarqueePaused ? "true" : "false"}
+                >
+                  <span className="inline-flex shrink-0 items-center gap-4 sm:gap-6 pr-6 sm:pr-10 whitespace-nowrap">
+                    <span>
+                      Không thể hội ngộ trực tiếp?{" "}
+                      <strong className="font-extrabold text-ueh-gold">
+                        Vẫn điểm danh để nhận Áo Polo Kỷ Niệm 15 Năm
+                      </strong>{" "}
+                      <span className="text-amber-200/95 font-semibold">(250.000đ • ship tận nơi)</span>
+                    </span>
+                    <span className="text-ueh-gold/80 text-xs" aria-hidden="true">✦</span>
+                    <span>
+                      Hội ngộ 12/12 tại UEH Cơ sở B hoặc nhận áo từ phương xa —{" "}
+                      <strong className="font-bold text-white underline decoration-ueh-gold/80 underline-offset-4">
+                        Chốt size trước 30/11
+                      </strong>
+                    </span>
+                    <span className="text-ueh-gold/80 text-xs" aria-hidden="true">✦</span>
+                  </span>
+
+                  <span
+                    className="hero-marquee-clone shrink-0 items-center gap-4 sm:gap-6 pr-6 sm:pr-10 whitespace-nowrap"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      Không thể hội ngộ trực tiếp?{" "}
+                      <strong className="font-extrabold text-ueh-gold">
+                        Vẫn điểm danh để nhận Áo Polo Kỷ Niệm 15 Năm
+                      </strong>{" "}
+                      <span className="text-amber-200/95 font-semibold">(250.000đ • ship tận nơi)</span>
+                    </span>
+                    <span className="text-ueh-gold/80 text-xs">✦</span>
+                    <span>
+                      Hội ngộ 12/12 tại UEH Cơ sở B hoặc nhận áo từ phương xa —{" "}
+                      <strong className="font-bold text-white underline decoration-ueh-gold/80 underline-offset-4">
+                        Chốt size trước 30/11
+                      </strong>
+                    </span>
+                    <span className="text-ueh-gold/80 text-xs">✦</span>
+                  </span>
+                </div>
+              </div>
+
+              <span className="hidden md:inline-flex shrink-0 items-center gap-1 rounded-xl bg-white/12 border border-white/15 px-3 py-1.5 text-xs font-bold text-ueh-gold transition-colors group-hover/ticker:bg-white/20">
+                <span>Nhận áo ngay</span>
+                <ChevronRight size={14} className="transition-transform group-hover/ticker:translate-x-0.5" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMarqueePaused((prev) => !prev)}
+              aria-label={isMarqueePaused ? "Tiếp tục chữ chạy" : "Tạm dừng chữ chạy"}
+              title={isMarqueePaused ? "Tiếp tục chữ chạy" : "Tạm dừng chữ chạy"}
+              className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/20 hover:text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ueh-gold cursor-pointer"
+            >
+              {isMarqueePaused ? <Play size={13} /> : <Pause size={13} />}
+            </button>
+          </div>
+        </div>
 
         {/* 2. KHU VỰC ẢNH BANNER & ĐỒNG PHỤC (2 CỘT TRÊN DESKTOP, CỘT TRÁI SLIDER 3 ẢNH 3S, CỘT PHẢI BẠN MẪU MẶC ÁO FULL CHIỀU CAO) */}
         <div className="relative mx-auto max-w-5xl mb-8">

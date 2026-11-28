@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       address,
       avatarUrl,
       guestsCount,
+      registrationType,
       paidAmount,
       note,
     } = body;
@@ -77,6 +78,10 @@ export async function POST(req: NextRequest) {
     const regId = String(body.id || requestUser?.id || `reg-${Date.now()}`);
     const cleanPhone = cleanPhoneDigits(phone);
 
+    const resolvedRegType: "attending" | "shirt_only" =
+      registrationType === "shirt_only" ? "shirt_only" : "attending";
+    const defaultRegFee = resolvedRegType === "shirt_only" ? 250000 : 1000000;
+
     // 1. Cập nhật bảng profiles (nguồn chân lý) nếu ID thuộc về user đã đăng nhập
     if (requestUser && requestUser.id === regId) {
       const { error: profErr } = await supabase
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
             full_name: String(fullName).trim(),
             class_name: className || "TC10",
             phone: String(phone).trim(),
-            attendance_status: "attending",
+            attendance_status: resolvedRegType,
             shirt_size: shirtSize || "L (Nam)",
             delivery_address: address ? String(address).trim() : "",
             updated_at: new Date().toISOString(),
@@ -120,9 +125,15 @@ export async function POST(req: NextRequest) {
       shirtSize: shirtSize || existingReg?.shirtSize || "L (Nam)",
       address: address ? String(address).trim() : existingReg?.address || "TP. Hồ Chí Minh",
       avatarUrl: avatarUrl || existingReg?.avatarUrl || undefined,
-      guestsCount: typeof guestsCount === "number" ? Number(guestsCount) : existingReg?.guestsCount || 0,
+      guestsCount:
+        resolvedRegType === "shirt_only"
+          ? 0
+          : typeof guestsCount === "number"
+          ? Number(guestsCount)
+          : existingReg?.guestsCount || 0,
+      registrationType: resolvedRegType,
       status: existingReg?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: Number(paidAmount) || existingReg?.paidAmount || 1000000,
+      paidAmount: Number(paidAmount) || existingReg?.paidAmount || defaultRegFee,
       createdAt: existingReg?.createdAt || body.createdAt || formatShortDate(new Date().toISOString()),
       confirmedAt: existingReg?.confirmedAt,
       paymentRef: existingReg?.paymentRef,
@@ -232,12 +243,15 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Nếu Admin cập nhật size áo/địa chỉ hoặc xác nhận tham gia -> đồng bộ vào bảng profiles
+    // Nếu Admin cập nhật size áo/địa chỉ hoặc xác nhận -> đồng bộ vào bảng profiles (giữ nguyên loại shirt_only nếu là đặt áo)
     if (!id.startsWith("reg-") && !id.startsWith("profile-")) {
       const profilePatch: Record<string, any> = { updated_at: new Date().toISOString() };
       if (shirtSize) profilePatch.shirt_size = shirtSize;
       if (address !== undefined) profilePatch.delivery_address = address;
-      if (status === "confirmed") profilePatch.attendance_status = "attending";
+      if (status === "confirmed") {
+        profilePatch.attendance_status =
+          updatedItem.registrationType === "shirt_only" ? "shirt_only" : "attending";
+      }
       if (Object.keys(profilePatch).length > 1) {
         await supabase.from("profiles").update(profilePatch).eq("id", id);
       }

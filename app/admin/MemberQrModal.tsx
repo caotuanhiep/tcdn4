@@ -21,6 +21,7 @@ export interface QrTargetMember {
   shirtSize?: string | null;
   guestsCount?: number | null;
   paidAmount?: number | null;
+  registrationType?: "attending" | "shirt_only";
 }
 
 function removeVietnameseTones(str: string) {
@@ -45,23 +46,28 @@ export default function MemberQrModal({
   const [copyingImage, setCopyingImage] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  const isShirtOnly = member?.registrationType === "shirt_only";
+
   useEffect(() => {
     const cached = getBankInfo();
+    const defaultAmt = isShirtOnly ? cached.shirtOnlyAmount || 250000 : cached.amount;
     setBankInfo(cached);
-    setCustomAmount(Number(member?.paidAmount) > 0 ? Number(member?.paidAmount) : cached.amount);
+    setCustomAmount(Number(member?.paidAmount) > 0 ? Number(member?.paidAmount) : defaultAmt);
 
     let cancelled = false;
     fetchBankInfo()
       .then((cfg) => {
         if (cancelled) return;
         setBankInfo(cfg);
-        if (!member?.paidAmount) setCustomAmount(cfg.amount);
+        if (!member?.paidAmount) {
+          setCustomAmount(isShirtOnly ? cfg.shirtOnlyAmount || 250000 : cfg.amount);
+        }
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [member]);
+  }, [member, isShirtOnly]);
 
   if (!member) return null;
 
@@ -69,11 +75,17 @@ export default function MemberQrModal({
     ? removeVietnameseTones(member.fullName.trim().toUpperCase()).replace(/[^A-Z0-9 ]/g, "")
     : "TEN";
   const cleanPhoneDigits = member.phone ? member.phone.trim().replace(/[^0-9]/g, "") : "";
-  const transferSyntax = [bankInfo.syntaxPrefix || "TCDN4", cleanNameNoTones, cleanPhoneDigits]
+  const transferSyntax = [
+    bankInfo.syntaxPrefix || "TCDN4",
+    isShirtOnly ? "AO" : "",
+    cleanNameNoTones,
+    cleanPhoneDigits,
+  ]
     .filter(Boolean)
     .join(" ");
 
-  const safeAmount = Number(customAmount) > 0 ? Math.round(Number(customAmount)) : bankInfo.amount;
+  const fallbackAmount = isShirtOnly ? bankInfo.shirtOnlyAmount || 250000 : bankInfo.amount;
+  const safeAmount = Number(customAmount) > 0 ? Math.round(Number(customAmount)) : fallbackAmount;
   const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankCode}-${bankInfo.accountNumber}-compact2.png?amount=${safeAmount}&addInfo=${encodeURIComponent(
     transferSyntax
   )}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
@@ -91,10 +103,14 @@ export default function MemberQrModal({
         ? `\n• Người thân đi cùng: +${member.guestsCount} người`
         : "";
     const shirtLine = member.shirtSize ? `\n• Size áo Polo: ${member.shirtSize}` : "";
+    const introLine = isShirtOnly
+      ? `Chào ${member.fullName}, mình đã đăng ký giúp bạn nhận Áo Polo Kỷ Niệm 15 năm TCDN4 - K33 UEH (gửi ship tận nơi) rồi nhé! 👕\n`
+      : `Chào ${member.fullName}, mình đã đăng ký giúp bạn tham gia Họp mặt 15 năm TCDN4 - K33 UEH (Thứ 7, 12/12/2026) rồi nhé! 🎉\n`;
+    const feeLabel = isShirtOnly ? "Chi phí áo kỷ niệm" : "Kinh phí tham dự";
     return (
-      `Chào ${member.fullName}, mình đã đăng ký giúp bạn tham gia Họp mặt 15 năm TCDN4 - K33 UEH (Thứ 7, 12/12/2026) rồi nhé! 🎉\n` +
+      `${introLine}` +
       `${shirtLine}${guestsLine}\n` +
-      `• Kinh phí tham dự: ${safeAmount.toLocaleString("vi-VN")} VNĐ\n` +
+      `• ${feeLabel}: ${safeAmount.toLocaleString("vi-VN")} VNĐ\n` +
       `• Ngân hàng: ${bankInfo.bankName}\n` +
       `• Số tài khoản: ${bankInfo.accountNumber} (${bankInfo.accountName})\n` +
       `• Nội dung CK: ${transferSyntax}\n\n` +

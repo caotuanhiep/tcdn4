@@ -64,3 +64,61 @@ body {
 .timeline-runner-dot {
   animation: timeline-runner 4.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
+
+@keyframes hero-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.hero-marquee-viewport {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 20px,
+    black calc(100% - 20px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 20px,
+    black calc(100% - 20px),
+    transparent
+  );
+}
+
+.hero-marquee-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-marquee-clone {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-marquee-track {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: max-content;
+    will-change: transform;
+    animation: hero-marquee 24s linear infinite;
+  }
+
+  .hero-marquee-clone {
+    display: inline-flex;
+  }
+
+  .hero-marquee-container:hover .hero-marquee-track,
+  .hero-marquee-container:focus-within .hero-marquee-track,
+  .hero-marquee-track[data-paused="true"] {
+    animation-play-state: paused;
+  }
+}
