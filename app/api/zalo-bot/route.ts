@@ -260,7 +260,7 @@ async function handleAlumniAiQuery(
 
 Quy tắc trả lời:
 1. TRẢ LỜI TỰ DO MỌI CHỦ ĐỀ BÊN NGOÀI: Nếu thành viên nhờ làm thơ (thất ngôn tứ tuyệt, lục bát...), viết lời khích lệ đi họp lớp, kể chuyện vui, tư vấn quán ăn/nhậu, giải đáp kiến thức đời sống, tài chính, công việc hay trò chuyện phiếm -> HÃY PHÁT HUY TỐI ĐA TRÍ TUỆ CỦA BẠN để trả lời sáng tạo, tự nhiên, đúng trọng tâm câu hỏi! Tuyệt đối KHÔNG ép trả lời bằng danh sách/thống kê database khi câu hỏi không hỏi về số liệu lớp.
-2. CHÍNH XÁC 100% KHI HỎI DỮ LIỆU LỚP: Nếu câu hỏi có liên quan đến thông tin tập thể TCDN4 (số người đăng ký, người thân đi cùng, ai đã đóng tiền, số tài khoản, mức phí ${bankInfo.amountText}, cú pháp CK, lịch họp 12/12, địa điểm, size áo, Ban Liên Lạc, danh sách anh em ở TP.HCM / Hà Nội / Nước ngoài, ai đang độc thân / tình trạng hôn nhân, thông tin bạn bè, sinh nhật...) -> PHẢI trích xuất chính xác từ phần DỮ LIỆU THỰC TẾ bên dưới, tuyệt đối không bịa số liệu hay STK.
+2. CHÍNH XÁC 100% KHI HỎI DỮ LIỆU LỚP: Nếu câu hỏi có liên quan đến thông tin tập thể TCDN4 hoặc hồ sơ bất kỳ thành viên nào (họ tên, lớp, chức danh, công ty, khu vực/nơi ở, SĐT, ngày sinh nhật, tình trạng hôn nhân, số con F1, trạng thái đăng ký 15 năm / chỉ nhận áo ${bankInfo.shirtOnlyAmountText || "250.000 VNĐ"}, người thân đi cùng, ai đã đóng tiền, số tài khoản, mức phí ${bankInfo.amountText}, cú pháp CK, lịch họp 12/12, địa điểm, size áo, địa chỉ nhận áo, bio/chia sẻ, sổ lưu bút, Ban Liên Lạc...) -> PHẢI trích xuất chính xác từ phần DỮ LIỆU THỰC TẾ bên dưới, tuyệt đối không bịa số liệu hay STK.
 3. ĐỊNH DẠNG ZALO (BẮT BUỘC): TUYỆT ĐỐI KHÔNG dùng cú pháp Markdown (KHÔNG dùng **in đậm**, *in nghiêng*, ### tiêu đề, dấu backtick hay [text](url)). Zalo không hỗ trợ Markdown nên sẽ hiện nguyên ký tự ** rất xấu. Chỉ trả về văn bản thuần (plain text), xuống dòng thoáng, gạch đầu dòng bằng dấu "• " hoặc emoji vừa phải, thân tình, xưng hô tự nhiên 'mình / bạn' hoặc 'em / anh chị'.`;
 
   let replyText = "";
@@ -453,15 +453,52 @@ Quy tắc trả lời:
           `👉 Cả nhà nhắc anh em vào cập nhật hồ sơ tại: https://tcdn4.top/#directory`;
       }
     }
-    // Hỏi về sinh nhật
-    else if (/sinh\s*nh[aậ]t/.test(qLower)) {
-      if (dbSummary.birthdayMembersThisMonth.length > 0) {
+    // Hỏi về sinh nhật / ngày sinh (hỗ trợ hỏi theo tên thành viên, hôm nay, sắp tới, theo tháng cụ thể, hoặc toàn bộ)
+    else if (/sinh\s*nh[aậ]t|ng[aà]y\s*sinh|sinh\s*ng[aà]y|th[aá]ng\s*sinh/.test(qLower)) {
+      const monthMatch = qLower.match(/(?:th[aá]ng|t)\s*(1[0-2]|0?[1-9])\b/);
+      if (dbSummary.matchedMembers.length > 0 && !monthMatch && !/h[oô]m\s*nay|s[aắ]p\s*t[oớ]i|th[aá]ng\s*n[aà]y|t[aấ]t\s*c[aả]|danh\s*s[aá]ch/.test(qLower)) {
         replyText =
-          `🎂 Danh sách đồng môn sinh nhật tháng ${new Date().getMonth() + 1} này:\n` +
+          `🎂 [THÔNG TIN SINH NHẬT ĐỒNG MÔN TCDN4]\n` +
+          `${dbSummary.matchedMembers.slice(0, 8).join("\n")}\n` +
+          `👉 Xem danh bạ tại: https://tcdn4.top/#directory`;
+      } else if (monthMatch) {
+        const m = parseInt(monthMatch[1], 10);
+        const monthList = dbSummary.birthdaysByMonth[m] || [];
+        replyText =
+          monthList.length > 0
+            ? `🎂 Danh sách đồng môn sinh nhật Tháng ${m} (${monthList.length} bạn):\n${monthList.map((b: string) => `• ${b}`).join("\n")}\n👉 Cập nhật ngày sinh tại: https://tcdn4.top`
+            : `🎂 Hiện chưa có bạn nào ghi nhận sinh nhật Tháng ${m} trên danh bạ (tổng đã có ${dbSummary.allBirthdayMembers.length} bạn cập nhật ngày sinh).`;
+      } else if (/h[oô]m\s*nay/.test(qLower)) {
+        replyText =
+          dbSummary.birthdayMembersToday.length > 0
+            ? `🎂 Hôm nay (${dbSummary.currentVietnamDate}) là sinh nhật của:\n${dbSummary.birthdayMembersToday.map((b: string) => `• ${b}`).join("\n")}\n🎉 Cả nhà cùng chúc mừng nhé!`
+            : `🎂 Hôm nay (${dbSummary.currentVietnamDate}) chưa có đồng môn nào sinh nhật.${
+                dbSummary.upcomingBirthdayMembers.length > 0
+                  ? `\n📅 Sinh nhật sắp tới:\n${dbSummary.upcomingBirthdayMembers.slice(0, 5).map((b: string) => `• ${b}`).join("\n")}`
+                  : ""
+              }`;
+      } else if (/s[aắ]p\s*t[oớ]i|g[aầ]n\s*nh[aấ]t|tu[aầ]n\s*n[aà]y/.test(qLower)) {
+        replyText =
+          dbSummary.upcomingBirthdayMembers.length > 0
+            ? `🎂 Sinh nhật đồng môn sắp tới (trong 30 ngày):\n${dbSummary.upcomingBirthdayMembers.map((b: string) => `• ${b}`).join("\n")}\n👉 Xem tại: https://tcdn4.top`
+            : `🎂 Trong 30 ngày tới chưa có đồng môn nào ghi nhận sinh nhật trên danh bạ.`;
+      } else if (/t[aấ]t\s*c[aả]|to[aà]n\s*b[oộ]|c[aả]\s*l[oớ]p/.test(qLower)) {
+        replyText =
+          dbSummary.allBirthdayMembers.length > 0
+            ? `🎂 Lịch sinh nhật thành viên TCDN4 đã ghi nhận (${dbSummary.allBirthdayMembers.length} bạn):\n${dbSummary.allBirthdayMembers.slice(0, 25).map((b: string) => `• ${b}`).join("\n")}`
+            : `🎂 Hiện chưa có bạn nào cập nhật ngày sinh nhật trên danh bạ.`;
+      } else if (dbSummary.birthdayMembersThisMonth.length > 0) {
+        replyText =
+          `🎂 Danh sách đồng môn sinh nhật Tháng ${dbSummary.currentVietnamMonth}:\n` +
           dbSummary.birthdayMembersThisMonth.map((b: string) => `• ${b}`).join("\n") +
           `\n👉 Cả nhà cùng vào chúc mừng tại: https://tcdn4.top`;
+      } else if (dbSummary.upcomingBirthdayMembers.length > 0) {
+        replyText =
+          `🎂 Tháng ${dbSummary.currentVietnamMonth} chưa có sinh nhật nào, nhưng sắp tới có:\n` +
+          dbSummary.upcomingBirthdayMembers.slice(0, 8).map((b: string) => `• ${b}`).join("\n") +
+          `\n👉 Cập nhật ngày sinh tại: https://tcdn4.top`;
       } else {
-        replyText = `🎂 Tháng ${new Date().getMonth() + 1} này chưa có bạn nào ghi nhận sinh nhật trên danh bạ. Cập nhật ngày sinh tại: https://tcdn4.top`;
+        replyText = `🎂 Tháng ${dbSummary.currentVietnamMonth} chưa có bạn nào ghi nhận sinh nhật (hiện hệ thống đã có ngày sinh của ${dbSummary.allBirthdayMembers.length}/${dbSummary.totalProfiles} bạn). Cập nhật ngày sinh tại: https://tcdn4.top`;
       }
     }
     // Tra cứu thông tin thành viên cụ thể (tìm thấy trong database)

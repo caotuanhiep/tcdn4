@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Clock,
   Shirt,
+  Cake,
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAlumniData } from "@/components/AlumniDataProvider";
@@ -28,10 +29,61 @@ const SHIRT_SIZES = [
   "S (Nữ)", "M (Nữ)", "L (Nữ)", "XL (Nữ)",
 ];
 
+function normalizeBirthdayForInput(raw?: string | null): string {
+  if (!raw) return "";
+  const str = String(raw).trim();
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2].padStart(2, "0")}-${isoMatch[3].padStart(2, "0")}`;
+  }
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[1].padStart(2, "0")}`;
+  }
+  return "";
+}
+
+function formatBirthdayDisplay(raw?: string | null): string {
+  if (!raw) return "";
+  const str = String(raw).trim();
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return `${isoMatch[3].padStart(2, "0")}/${isoMatch[2].padStart(2, "0")}/${isoMatch[1]}`;
+  }
+  return str;
+}
+
+function getBirthdayBadgeMeta(raw?: string | null): { isToday: boolean; isThisMonth: boolean } {
+  if (!raw) return { isToday: false, isThisMonth: false };
+  const str = String(raw).trim();
+  let day = 0;
+  let month = 0;
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    month = parseInt(isoMatch[2], 10);
+    day = parseInt(isoMatch[3], 10);
+  } else {
+    const dmMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})/);
+    if (dmMatch) {
+      day = parseInt(dmMatch[1], 10);
+      month = parseInt(dmMatch[2], 10);
+    }
+  }
+  if (!day || !month) return { isToday: false, isThisMonth: false };
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curDay = now.getDate();
+  return {
+    isToday: month === curMonth && day === curDay,
+    isThisMonth: month === curMonth,
+  };
+}
+
 const INITIAL_NEW_MEMBER = {
   full_name: "",
   class_name: "TC10",
   phone: "",
+  birthday: "",
   job_title: "",
   company: "",
   location_region: "hcm",
@@ -135,6 +187,7 @@ export default function UsersPanel() {
     const reg = findRegistrationForUser(user);
     setEditingUser({
       ...user,
+      birthday: normalizeBirthdayForInput(user.birthday),
       location_region: user.location_region === "dn" ? "other" : user.location_region || "hcm",
       marital_status: user.marital_status || "married",
       guests_count: reg?.guestsCount || 0,
@@ -238,6 +291,7 @@ export default function UsersPanel() {
           location_region: editingUser.location_region,
           specific_location: editingUser.specific_location,
           phone: editingUser.phone?.trim() || "",
+          birthday: editingUser.birthday || "",
           marital_status: editingUser.marital_status || "married",
           role: editingUser.role,
           attendance_status: editingUser.attendance_status || null,
@@ -297,11 +351,14 @@ export default function UsersPanel() {
     if (filterRole !== "all" && u.role !== filterRole) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const formattedBday = formatBirthdayDisplay(u.birthday).toLowerCase();
     return (
       (u.full_name && u.full_name.toLowerCase().includes(q)) ||
       (u.company && u.company.toLowerCase().includes(q)) ||
       (u.job_title && u.job_title.toLowerCase().includes(q)) ||
-      (u.phone && u.phone.includes(q))
+      (u.phone && u.phone.includes(q)) ||
+      (formattedBday && formattedBday.includes(q)) ||
+      (u.birthday && u.birthday.toLowerCase().includes(q))
     );
   });
 
@@ -348,7 +405,7 @@ export default function UsersPanel() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên, công ty, nghề nghiệp, SĐT..."
+              placeholder="Tìm theo tên, công ty, nghề nghiệp, SĐT, sinh nhật..."
               className="w-full rounded-xl border border-slate-200 pl-10 pr-3.5 py-2 text-xs focus:border-ueh focus:outline-none"
             />
           </div>
@@ -391,6 +448,7 @@ export default function UsersPanel() {
                 <th className="py-3 px-3">Lớp</th>
                 <th className="py-3 px-3">Nghề nghiệp & Công ty</th>
                 <th className="py-3 px-3">Khu vực / SĐT</th>
+                <th className="py-3 px-3 whitespace-nowrap">Sinh nhật</th>
                 <th className="py-3 px-3">Vai trò</th>
                 <th className="py-3 px-4 text-right">Thao tác</th>
               </tr>
@@ -398,20 +456,22 @@ export default function UsersPanel() {
             <tbody className="divide-y divide-slate-100">
               {loading && users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-ueh mb-2" />
                     <span className="text-xs font-semibold">Đang tải danh bạ thành viên...</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     Không tìm thấy thành viên phù hợp.
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
                   const reg = findRegistrationForUser(u);
+                  const bdayDisplay = formatBirthdayDisplay(u.birthday);
+                  const bdayMeta = getBirthdayBadgeMeta(u.birthday);
                   return (
                   <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
@@ -429,7 +489,11 @@ export default function UsersPanel() {
                             <span>{u.full_name || "Chưa đặt tên"}</span>
                             {reg?.status === "confirmed" ? (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                                <CheckCircle2 size={10} /> Đã CK
+                                <CheckCircle2 size={10} /> {reg.registrationType === "shirt_only" ? "Đã CK áo" : "Đã CK"}
+                              </span>
+                            ) : reg?.registrationType === "shirt_only" || u.attendance_status === "shirt_only" ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-ueh-orange">
+                                <Shirt size={10} /> Đặt áo
                               </span>
                             ) : reg || u.attendance_status === "attending" ? (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
@@ -484,6 +548,48 @@ export default function UsersPanel() {
                     </td>
 
                     <td className="py-3 px-3 whitespace-nowrap">
+                      {bdayDisplay ? (
+                        <div className="inline-flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-bold border ${
+                              bdayMeta.isToday
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : bdayMeta.isThisMonth
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-slate-50 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            <Cake
+                              size={11}
+                              className={
+                                bdayMeta.isToday
+                                  ? "text-rose-500"
+                                  : bdayMeta.isThisMonth
+                                  ? "text-ueh-orange"
+                                  : "text-slate-400"
+                              }
+                            />
+                            <span>{bdayDisplay}</span>
+                          </span>
+                          {bdayMeta.isToday && (
+                            <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                              Hôm nay
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(u)}
+                          className="text-[11px] text-slate-400 hover:text-ueh hover:underline cursor-pointer"
+                          title="Bấm để bổ sung ngày sinh nhật"
+                        >
+                          Chưa có +
+                        </button>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-3 whitespace-nowrap">
                       <select
                         value={u.role || "member"}
                         onChange={(e) => handleChangeRole(u.id, e.target.value)}
@@ -513,6 +619,7 @@ export default function UsersPanel() {
                               shirtSize: reg?.shirtSize || u.shirt_size,
                               guestsCount: reg?.guestsCount || 0,
                               paidAmount: reg?.paidAmount,
+                              registrationType: reg?.registrationType,
                             })
                           }
                           className="p-1.5 rounded-lg text-ueh hover:bg-blue-50 transition-colors cursor-pointer"
@@ -657,58 +764,100 @@ export default function UsersPanel() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  <label
+                    htmlFor="edit-member-phone"
+                    className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
                     Số điện thoại / Zalo
                   </label>
                   <input
-                    type="text"
+                    id="edit-member-phone"
+                    name="phone"
+                    type="tel"
+                    autoComplete="tel"
                     value={editingUser.phone || ""}
                     onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  <label
+                    htmlFor="edit-member-birthday"
+                    className="flex items-center gap-1 text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
+                    <Cake size={12} className="text-ueh-orange" />
+                    <span>Ngày sinh nhật</span>
+                  </label>
+                  <input
+                    id="edit-member-birthday"
+                    name="birthday"
+                    type="date"
+                    autoComplete="bday"
+                    value={editingUser.birthday || ""}
+                    onChange={(e) => setEditingUser({ ...editingUser, birthday: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="edit-member-role"
+                    className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
                     Phân quyền vai trò
                   </label>
                   <select
+                    id="edit-member-role"
+                    name="role"
                     value={editingUser.role || "member"}
                     onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-ueh focus:border-ueh focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-ueh focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
                   >
                     <option value="member">Thành viên</option>
                     <option value="committee">Ban liên lạc</option>
                     <option value="admin">Super Admin</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  <label
+                    htmlFor="edit-member-marital"
+                    className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
                     Tình trạng hôn nhân
                   </label>
                   <select
+                    id="edit-member-marital"
+                    name="marital_status"
                     value={editingUser.marital_status || "married"}
                     onChange={(e) => setEditingUser({ ...editingUser, marital_status: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
                   >
                     <option value="married">Đã kết hôn</option>
                     <option value="single">Độc thân vui tính</option>
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div className="sm:col-span-2">
+                  <label
+                    htmlFor="edit-member-attendance"
+                    className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
                     Tham gia 15 năm
                   </label>
                   <select
+                    id="edit-member-attendance"
+                    name="attendance_status"
                     value={editingUser.attendance_status || ""}
                     onChange={(e) =>
                       setEditingUser({ ...editingUser, attendance_status: e.target.value || null })
                     }
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
                   >
                     <option value="">Chưa chọn</option>
                     <option value="attending">Có tham gia (1.000.000đ)</option>
@@ -869,32 +1018,62 @@ export default function UsersPanel() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                  <label
+                    htmlFor="create-member-phone"
+                    className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                  >
                     Số điện thoại / Zalo *
                   </label>
                   <input
+                    id="create-member-phone"
+                    name="phone"
                     type="tel"
+                    autoComplete="tel"
                     required={newMember.register_event}
                     value={newMember.phone}
                     onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
                     placeholder="VD: 0909123456 (tạo mã QR SePay)"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
-                    Tình trạng hôn nhân
-                  </label>
-                  <select
-                    value={newMember.marital_status}
-                    onChange={(e) => setNewMember({ ...newMember, marital_status: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus:outline-none"
+                  <label
+                    htmlFor="create-member-birthday"
+                    className="flex items-center gap-1 text-xs font-bold uppercase text-slate-700 mb-1"
                   >
-                    <option value="married">Đã kết hôn</option>
-                    <option value="single">Độc thân vui tính</option>
-                  </select>
+                    <Cake size={12} className="text-ueh-orange" />
+                    <span>Ngày sinh nhật (tùy chọn)</span>
+                  </label>
+                  <input
+                    id="create-member-birthday"
+                    name="birthday"
+                    type="date"
+                    autoComplete="bday"
+                    value={newMember.birthday}
+                    onChange={(e) => setNewMember({ ...newMember, birthday: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
+                  />
                 </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="create-member-marital"
+                  className="block text-xs font-bold uppercase text-slate-700 mb-1"
+                >
+                  Tình trạng hôn nhân
+                </label>
+                <select
+                  id="create-member-marital"
+                  name="marital_status"
+                  value={newMember.marital_status}
+                  onChange={(e) => setNewMember({ ...newMember, marital_status: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-ueh focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ueh"
+                >
+                  <option value="married">Đã kết hôn</option>
+                  <option value="single">Độc thân vui tính</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

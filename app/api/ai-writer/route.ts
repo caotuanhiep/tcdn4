@@ -73,7 +73,7 @@ ${dbContext.rawTextContext}
 
 Quy tắc trả lời:
 - Nếu người dùng hỏi các câu hỏi ngoài database (làm thơ, khích lệ anh em, tư vấn quán ăn/nhậu, kiến thức tài chính, đời sống, trò chuyện vui...): trả lời sáng tạo, tự nhiên, đúng trọng tâm bằng đầy đủ trí tuệ của bạn.
-- Khi người dùng hỏi về dữ liệu lớp (ai ở khu vực nào, bao nhiêu người đăng ký/người thân đi cùng/đóng tiền, ai đang độc thân/tình trạng hôn nhân, STK ngân hàng, lịch họp 12/12, sinh nhật, tìm bạn...): lấy số liệu chính xác 100% từ cơ sở dữ liệu trên, tuyệt đối không bịa đặt.
+- Khi người dùng hỏi về dữ liệu lớp hoặc hồ sơ thành viên (nghề nghiệp, công ty, khu vực/nơi ở, SĐT, ngày sinh nhật, tình trạng hôn nhân, số con F1, bao nhiêu người đăng ký/chỉ nhận áo 250k/người thân đi cùng/đóng tiền, size áo, địa chỉ nhận áo, bio chia sẻ, sổ lưu bút, Ban Liên Lạc, STK ngân hàng, lịch họp 12/12...): lấy số liệu chính xác 100% từ cơ sở dữ liệu trên, tuyệt đối không bịa đặt.
 - ĐỊNH DẠNG ZALO (BẮT BUỘC): TUYỆT ĐỐI KHÔNG dùng Markdown (không dùng **in đậm**, *in nghiêng*, ### tiêu đề, dấu backtick hay [text](url)) vì Zalo không render Markdown sẽ hiện nguyên ký tự ** rất xấu. Chỉ dùng văn bản thuần (plain text), xuống dòng gọn gàng, gạch đầu dòng bằng dấu "• " và emoji phù hợp. Link web tham khảo khi cần: https://tcdn4.top/#event hoặc https://tcdn4.top/#directory.`;
 
     let userPrompt = "";
@@ -216,10 +216,43 @@ Chỉ trả về nội dung tin nhắn hoàn chỉnh, không thêm lời dẫn g
           dbContext.singleMembers.length > 0
             ? `💘 Hội độc thân vui tính TCDN4 hiện có ${dbContext.singleMembers.length} bạn:\n${dbContext.singleMembers.map((s) => `• ${s}`).join("\n")}\n👉 Xem danh bạ tại: https://tcdn4.top/#directory`
             : `💘 Hiện trên hệ thống chưa có bạn nào bật trạng thái Độc thân (${dbContext.marriedCount} bạn đã kết hôn).`;
-      } else if (qLower.includes("sinh nhật")) {
-        answer = dbContext.birthdayMembersThisMonth.length > 0
-          ? `🎂 Danh sách sinh nhật tháng này gồm: ${dbContext.birthdayMembersThisMonth.join(", ")} 🎉!`
-          : `🎂 Tháng này chưa có bạn nào ghi nhận sinh nhật trên hệ thống.`;
+      } else if (/sinh\s*nh[aậ]t|ng[aà]y\s*sinh|sinh\s*ng[aà]y|th[aá]ng\s*sinh/.test(qLower)) {
+        const monthMatch = qLower.match(/(?:th[aá]ng|t)\s*(1[0-2]|0?[1-9])\b/);
+        if (dbContext.matchedMembers.length > 0 && !monthMatch && !/h[oô]m\s*nay|s[aắ]p\s*t[oớ]i|th[aá]ng\s*n[aà]y|t[aấ]t\s*c[aả]|danh\s*s[aá]ch/.test(qLower)) {
+          answer = `🎂 Thông tin sinh nhật thành viên từ danh bạ tcdn4.top:\n${dbContext.matchedMembers.slice(0, 8).join("\n")}`;
+        } else if (monthMatch) {
+          const m = parseInt(monthMatch[1], 10);
+          const monthList = dbContext.birthdaysByMonth[m] || [];
+          answer =
+            monthList.length > 0
+              ? `🎂 Danh sách đồng môn sinh nhật Tháng ${m} (${monthList.length} bạn):\n${monthList.map((b) => `• ${b}`).join("\n")}`
+              : `🎂 Hiện chưa có bạn nào ghi nhận sinh nhật Tháng ${m} trên hệ thống (đã ghi nhận ${dbContext.allBirthdayMembers.length}/${dbContext.totalProfiles} bạn).`;
+        } else if (/h[oô]m\s*nay/.test(qLower)) {
+          answer =
+            dbContext.birthdayMembersToday.length > 0
+              ? `🎂 Hôm nay (${dbContext.currentVietnamDate}) là sinh nhật của: ${dbContext.birthdayMembersToday.join(", ")} 🎉!`
+              : `🎂 Hôm nay (${dbContext.currentVietnamDate}) chưa có bạn nào sinh nhật.${
+                  dbContext.upcomingBirthdayMembers.length > 0
+                    ? `\n📅 Sắp tới: ${dbContext.upcomingBirthdayMembers.slice(0, 5).join("; ")}`
+                    : ""
+                }`;
+        } else if (/s[aắ]p\s*t[oớ]i|g[aầ]n\s*nh[aấ]t/.test(qLower)) {
+          answer =
+            dbContext.upcomingBirthdayMembers.length > 0
+              ? `🎂 Sinh nhật đồng môn sắp tới:\n${dbContext.upcomingBirthdayMembers.map((b) => `• ${b}`).join("\n")}`
+              : `🎂 Trong 30 ngày tới chưa có đồng môn nào ghi nhận sinh nhật.`;
+        } else if (/t[aấ]t\s*c[aả]|to[aà]n\s*b[oộ]|c[aả]\s*l[oớ]p/.test(qLower)) {
+          answer =
+            dbContext.allBirthdayMembers.length > 0
+              ? `🎂 Lịch sinh nhật đã ghi nhận (${dbContext.allBirthdayMembers.length} bạn):\n${dbContext.allBirthdayMembers.slice(0, 25).map((b) => `• ${b}`).join("\n")}`
+              : `🎂 Hiện chưa có thành viên nào cập nhật ngày sinh nhật.`;
+        } else if (dbContext.birthdayMembersThisMonth.length > 0) {
+          answer = `🎂 Danh sách sinh nhật Tháng ${dbContext.currentVietnamMonth} gồm: ${dbContext.birthdayMembersThisMonth.join(", ")} 🎉!`;
+        } else if (dbContext.upcomingBirthdayMembers.length > 0) {
+          answer = `🎂 Tháng ${dbContext.currentVietnamMonth} chưa có sinh nhật, sắp tới có: ${dbContext.upcomingBirthdayMembers.slice(0, 6).join("; ")}`;
+        } else {
+          answer = `🎂 Tháng ${dbContext.currentVietnamMonth} chưa có bạn nào ghi nhận sinh nhật trên hệ thống (hiện có ${dbContext.allBirthdayMembers.length}/${dbContext.totalProfiles} bạn đã điền ngày sinh).`;
+        }
       } else if (dbContext.matchedMembers.length > 0) {
         answer = `🔍 Thông tin thành viên từ danh bạ tcdn4.top:\n${dbContext.matchedMembers.slice(0, 8).join("\n")}`;
       } else {
