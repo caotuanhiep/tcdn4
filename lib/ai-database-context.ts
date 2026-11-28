@@ -8,6 +8,12 @@ import {
 } from "@/lib/alumni-server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { DEFAULT_COMMITTEE_MEMBERS, type CommitteeMember } from "@/lib/committee";
+import {
+  EXPENSES_STORAGE_PATH,
+  formatExpenseDateTime,
+  getExpenseCategoryMeta,
+  type ExpenseItem,
+} from "@/lib/expenses";
 
 interface GuestbookRecord {
   name?: string;
@@ -45,6 +51,9 @@ export interface DatabaseSummary {
   totalPending: number;
   totalGuestsCount: number;
   totalCollectedAmount: number;
+  totalSpentAmount: number;
+  fundBalance: number;
+  expenseSummaries: string[];
   attendingNames: string[];
   confirmedNames: string[];
   pendingNames: string[];
@@ -177,12 +186,13 @@ function normalizeForSearch(str: string) {
 }
 
 export async function getAlumniDatabaseContext(userQuery?: string): Promise<DatabaseSummary> {
-  // 1. Tải song song: Cấu hình Ngân hàng chuẩn từ Cloud, Danh bạ Profiles từ Supabase DB, Ban Liên Lạc & Sổ Lưu Bút
-  const [{ config: bankInfo }, profiles, cloudCommittee, cloudGuestbook] = await Promise.all([
+  // 1. Tải song song: Cấu hình Ngân hàng chuẩn từ Cloud, Danh bạ Profiles từ Supabase DB, Ban Liên Lạc, Sổ Lưu Bút & Sổ Chi Tiêu Quỹ
+  const [{ config: bankInfo }, profiles, cloudCommittee, cloudGuestbook, cloudExpenses] = await Promise.all([
     loadBankConfigServer(),
     loadProfilesFromDb().catch(() => []),
     loadPublicStorageJson<CommitteeMember[]>("settings/committee.json").catch(() => null),
     loadPublicStorageJson<GuestbookRecord[]>("settings/guestbook.json").catch(() => null),
+    loadPublicStorageJson<ExpenseItem[]>(EXPENSES_STORAGE_PATH).catch(() => null),
   ]);
   const registrations = await loadMergedRegistrations(undefined, profiles).catch(
     () => [] as RegistrationItem[]
@@ -192,33 +202,51 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
       ? cloudCommittee
       : DEFAULT_COMMITTEE_MEMBERS;
   const guestbookEntries = Array.isArray(cloudGuestbook) ? cloudGuestbook : [];
+  const expenseItems = Array.isArray(cloudExpenses) ? cloudExpenses : [];
+  const totalSpentAmount = expenseItems.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const expenseSummaries = expenseItems.map(
+    (e) =>
+      `• [${getExpenseCategoryMeta(e.category).shortLabel}] ${e.title}: -${Number(e.amount || 0).toLocaleString("vi-VN")}đ | Người chi: ${e.spentBy} | Lúc: ${formatExpenseDateTime(e.spentAt)}${
+        e.note ? ` | Ghi chú: ${e.note}` : ""
+      }${e.billUrls?.length ? ` | Có ${e.billUrls.length} bill chứng từ` : ""}`
+  );
 
   // 2. Tổng hợp số liệu từ danh sách đăng ký 15 năm (nguồn chuẩn nhất cho việc tham gia & chuyển khoản)
   const confirmedRegs = registrations.filter((r) => r.status === "confirmed");
   const pendingRegs = registrations.filter((r) => r.status !== "confirmed");
-  const totalCollectedAmount = confirmedRegs.reduce(
-    (sum, r) => sum + (Number(r.paidAmount) || bankInfo.amount || 1000000),
-    0
-  );
+  const totalCollectedAmount = confirmedRegs.reduce((sum, r) => {
+    if (r.registrationType === "attending_free") return sum;
+    const fallback =
+      r.registrationType === "shirt_only"
+        ? bankInfo.shirtOnlyAmount || 250000
+        : bankInfo.amount || 1000000;
+    const amount = typeof r.paidAmount === "number" && r.paidAmount >= 0 ? r.paidAmount : fallback;
+    return sum + amount;
+  }, 0);
   const totalGuestsCount = registrations.reduce(
-    (sum, r) => sum + (Number(r.guestsCount) || 0),
+    (sum, r) => sum + (r.registrationType === "shirt_only" ? 0 : Number(r.guestsCount) || 0),
     0
   );
 
   const formatGuestTag = (guests?: number) =>
     guests && guests > 0 ? ` • +${guests} người thân` : "";
 
-  const confirmedNames = confirmedRegs.map(
-    (r) =>
-      `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Đã đóng ${(Number(r.paidAmount) || bankInfo.amount).toLocaleString("vi-VN")}đ)`
+  const confirmedNames = confirmedRegs.map((r) =>
+    r.registrationType === "attending_free"
+      ? `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Miễn phí họp lớp 0đ)`
+      : `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Đã đóng ${(
+          Number(r.paidAmount) ||
+          (r.registrationType === "shirt_only" ? bankInfo.shirtOnlyAmount || 250000 : bankInfo.amount)
+        ).toLocaleString("vi-VN")}đ)`
   );
   const pendingNames = pendingRegs.map(
     (r) =>
       `${r.fullName} (${r.className} - Áo ${r.shirtSize}${formatGuestTag(r.guestsCount)} - Chờ chuyển khoản)`
   );
-  const attendingNames = registrations.map(
-    (r) =>
-      `${r.fullName} (${r.className}${formatGuestTag(r.guestsCount)}${r.status === "confirmed" ? " - Đã CK ✓" : " - Chờ CK"})`
+  const attendingNames = registrations.map((r) =>
+    r.registrationType === "attending_free"
+      ? `${r.fullName} (${r.className}${formatGuestTag(r.guestsCount)} - Miễn phí 0đ ✓)`
+      : `${r.fullName} (${r.className}${formatGuestTag(r.guestsCount)}${r.status === "confirmed" ? " - Đã CK ✓" : " - Chờ CK"})`
   );
 
   // Thống kê size áo
@@ -306,13 +334,17 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
     const resolvedShirt = (m.shirt_size || reg?.shirtSize || "").trim();
     const resolvedDelivery = (m.delivery_address || reg?.address || "").trim();
     const statusInfo = reg
-      ? reg.status === "confirmed"
+      ? reg.registrationType === "attending_free"
+        ? `Tham dự 15N - Miễn chi phí họp lớp (0đ - tỉnh xa) ✓${guestTag}`
+        : reg.status === "confirmed"
         ? reg.registrationType === "shirt_only"
           ? `Đặt áo kỷ niệm (250k) & Đã CK ${(Number(reg.paidAmount) || 250000).toLocaleString("vi-VN")}đ ✓`
           : `Tham dự 15N & Đã CK ${(Number(reg.paidAmount) || bankInfo.amount).toLocaleString("vi-VN")}đ ✓${guestTag}`
         : reg.registrationType === "shirt_only"
         ? "Đặt áo kỷ niệm (250k) - Chờ CK"
         : `Tham dự 15N - Chờ CK${guestTag}`
+      : m.attendance_status === "attending_free"
+      ? "Tham dự 15N - Miễn chi phí họp lớp (0đ - tỉnh xa)"
       : m.attendance_status === "attending"
       ? "Đăng ký tham dự 15N"
       : m.attendance_status === "shirt_only"
@@ -466,13 +498,17 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
         const resolvedShirtSize = (m.shirt_size || reg?.shirtSize || "").trim();
         const resolvedDeliveryAddr = (m.delivery_address || reg?.address || "").trim();
         const regStatus = reg
-          ? reg.status === "confirmed"
+          ? reg.registrationType === "attending_free"
+            ? `Đã xác nhận tham gia 15 năm - Miễn chi phí họp lớp (0đ - tỉnh xa) ✓${regGuestInfo ? ` (${regGuestInfo.slice(2)})` : ""}`
+            : reg.status === "confirmed"
             ? reg.registrationType === "shirt_only"
               ? `Đặt Áo kỷ niệm (250k) & ĐÃ CHUYỂN KHOẢN ✓`
               : `Đã đăng ký & ĐÃ CHUYỂN KHOẢN ✓${regGuestInfo ? ` (${regGuestInfo.slice(2)})` : ""}`
             : reg.registrationType === "shirt_only"
             ? `Đặt Áo kỷ niệm (250k) - Chờ chuyển khoản`
             : `Đã đăng ký tham gia 15 năm - Chờ chuyển khoản${regGuestInfo ? ` (${regGuestInfo.slice(2)})` : ""}`
+          : m.attendance_status === "attending_free"
+          ? "Tham gia 15 năm - Miễn chi phí họp lớp (0đ - tỉnh xa)"
           : m.attendance_status === "attending"
           ? "Đã đăng ký tham gia 15 năm 🎉"
           : m.attendance_status === "shirt_only"
@@ -537,6 +573,7 @@ export async function getAlumniDatabaseContext(userQuery?: string): Promise<Data
 
   // 6. Xây dựng toàn bộ ngữ cảnh sống động từ Database + Settings
   const shirtOnlyRegs = registrations.filter((r) => r.registrationType === "shirt_only");
+  const freeAttendingRegs = registrations.filter((r) => r.registrationType === "attending_free");
   const attendingDirectRegs = registrations.filter((r) => r.registrationType !== "shirt_only");
   const birthdayMonthsSummary = Object.entries(birthdaysByMonth)
     .sort(([a], [b]) => Number(a) - Number(b))
@@ -556,6 +593,7 @@ Ngày hiện tại (giờ Việt Nam): ${vnToday.display} (Tháng ${currentMonth
 
 2. THÔNG TIN CHUYỂN KHOẢN & ĐÓNG QUỸ (CẤU HÌNH CHÍNH THỨC TỪ ADMIN):
 - Mức kinh phí tham dự trực tiếp: ${bankInfo.amountText} / thành viên (bao gồm tiệc VIP, áo Polo kỷ niệm & kỷ yếu 15 năm).
+- Chính sách ưu đãi: Thành viên ở tỉnh xa về tham dự được miễn chi phí họp lớp (0 VNĐ).
 - Mức chi phí không tham dự nhưng muốn nhận Áo Polo kỷ niệm 15 năm (ship tận nơi): ${bankInfo.shirtOnlyAmountText || "250.000 VNĐ"} / áo.
 - Ngân hàng thụ hưởng: ${bankInfo.bankName} (Mã NH: ${bankInfo.bankCode}).
 - Số tài khoản: ${bankInfo.accountNumber}
@@ -567,12 +605,17 @@ ${bankInfo.phoneReceive ? `- SĐT hỗ trợ đối soát: ${bankInfo.phoneRecei
 
 3. THỐNG KÊ ĐĂNG KÝ 15 NĂM & QUỸ HIỆN TẠI (REALTIME):
 - Tổng số cựu sinh viên đã điểm danh trong danh bạ: ${profiles.length} bạn (TC10: ${tc10Count}, TC11: ${tc11Count}, TC12: ${tc12Count}).
-- Tổng số phiếu ĐÃ ĐĂNG KÝ 15 năm: ${registrations.length} bạn (gồm ${attendingDirectRegs.length} bạn tham dự trực tiếp + ${shirtOnlyRegs.length} bạn chỉ nhận áo kỷ niệm 250k; đi cùng ${totalGuestsCount} người thân -> Tổng dự kiến ${attendingDirectRegs.length + totalGuestsCount} khách dự tiệc).
+- Tổng số phiếu ĐÃ ĐĂNG KÝ 15 năm: ${registrations.length} bạn (gồm ${attendingDirectRegs.length} bạn tham dự trực tiếp${freeAttendingRegs.length > 0 ? ` [trong đó ${freeAttendingRegs.length} bạn ở tỉnh xa được miễn phí 0đ]` : ""} + ${shirtOnlyRegs.length} bạn chỉ nhận áo kỷ niệm 250k; đi cùng ${totalGuestsCount} người thân -> Tổng dự kiến ${attendingDirectRegs.length + totalGuestsCount} khách dự tiệc).
   + Đã chuyển khoản xác nhận (confirmed): ${confirmedRegs.length} bạn (Tổng quỹ đã thu: ${totalCollectedAmount.toLocaleString("vi-VN")} VNĐ).
     Danh sách đã CK: ${confirmedNames.join("; ") || "Chưa có"}.
   + Đang chờ chuyển khoản (pending): ${pendingRegs.length} bạn.
     Danh sách chờ CK: ${pendingNames.join("; ") || "Không có"}.
 - Thống kê size áo đã đăng ký: ${shirtSizeSummary}.
+- BÁO CÁO CHI TIÊU & TỒN QUỸ HỌP LỚP (MINH BẠCH):
+  + Tổng Thu: +${totalCollectedAmount.toLocaleString("vi-VN")} VNĐ
+  + Tổng Chi (${expenseItems.length} khoản): -${totalSpentAmount.toLocaleString("vi-VN")} VNĐ
+  + Tồn Quỹ Hiện Tại: ${(totalCollectedAmount - totalSpentAmount).toLocaleString("vi-VN")} VNĐ
+  ${expenseSummaries.length > 0 ? `Chi tiết các khoản chi:\n${expenseSummaries.join("\n")}` : "Chưa có khoản chi nào được ghi nhận."}
 
 4. TÌNH TRẠNG HÔN NHÂN & HỘI ĐỘC THÂN VUI TÍNH (REALTIME TỪ DATABASE):
 - Tổng số thành viên ĐANG ĐỘC THÂN (${singleMembers.length} bạn): ${singleMembers.join("; ") || "Hiện chưa có thành viên nào cập nhật trạng thái độc thân trong danh bạ"}.
@@ -610,6 +653,9 @@ ${matchedMembers.length > 0 ? `10. THÔNG TIN THÀNH VIÊN KHỚP TRỰC TIẾP 
     totalPending: pendingRegs.length,
     totalGuestsCount,
     totalCollectedAmount,
+    totalSpentAmount,
+    fundBalance: totalCollectedAmount - totalSpentAmount,
+    expenseSummaries,
     attendingNames,
     confirmedNames,
     pendingNames,

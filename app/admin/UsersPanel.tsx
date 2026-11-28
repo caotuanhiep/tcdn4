@@ -298,7 +298,8 @@ export default function UsersPanel() {
           shirt_size: editingUser.shirt_size || null,
           delivery_address: editingUser.delivery_address || "",
           guests_count:
-            editingUser.attendance_status === "attending"
+            editingUser.attendance_status === "attending" ||
+            editingUser.attendance_status === "attending_free"
               ? Math.max(0, Math.min(10, Number(editingUser.guests_count) || 0))
               : 0,
         }),
@@ -487,7 +488,12 @@ export default function UsersPanel() {
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span>{u.full_name || "Chưa đặt tên"}</span>
-                            {reg?.status === "confirmed" ? (
+                            {reg?.registrationType === "attending_free" ||
+                            u.attendance_status === "attending_free" ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 border border-sky-200 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">
+                                <CheckCircle2 size={10} /> Miễn phí (0đ)
+                              </span>
+                            ) : reg?.status === "confirmed" ? (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
                                 <CheckCircle2 size={10} /> {reg.registrationType === "shirt_only" ? "Đã CK áo" : "Đã CK"}
                               </span>
@@ -861,6 +867,7 @@ export default function UsersPanel() {
                   >
                     <option value="">Chưa chọn</option>
                     <option value="attending">Có tham gia (1.000.000đ)</option>
+                    <option value="attending_free">Có tham gia — Miễn chi phí họp lớp (0đ - Tỉnh xa)</option>
                     <option value="shirt_only">Không dự — Chỉ nhận áo kỷ niệm (250.000đ)</option>
                     <option value="not_attending">Không tham gia</option>
                   </select>

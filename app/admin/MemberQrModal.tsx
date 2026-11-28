@@ -21,7 +21,7 @@ export interface QrTargetMember {
   shirtSize?: string | null;
   guestsCount?: number | null;
   paidAmount?: number | null;
-  registrationType?: "attending" | "shirt_only";
+  registrationType?: "attending" | "attending_free" | "shirt_only";
 }
 
 function removeVietnameseTones(str: string) {

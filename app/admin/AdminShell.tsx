@@ -15,7 +15,7 @@ import CommitteePanel from "./CommitteePanel";
 type Tab = "registrations" | "users" | "zalobot" | "payment" | "committee" | "images";
 
 const TABS = [
-  { id: "registrations" as Tab, label: "Đăng ký 15 Năm", icon: CalendarCheck },
+  { id: "registrations" as Tab, label: "Đăng ký & Quỹ 15 Năm", icon: CalendarCheck },
   { id: "users" as Tab, label: "Danh bạ cựu sinh viên", icon: Users },
   { id: "zalobot" as Tab, label: "Đấu nối Bot Zalo", icon: Bot },
   { id: "payment" as Tab, label: "Cấu hình Ngân hàng & QR", icon: CreditCard },

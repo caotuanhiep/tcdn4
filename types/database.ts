@@ -14,7 +14,7 @@ export interface Profile {
   marital_status?: "single" | "married" | string | null;
   children_count?: number | null;
   specific_location?: string | null;
-  attendance_status?: "attending" | "shirt_only" | "not_attending" | "pending" | string | null;
+  attendance_status?: "attending" | "attending_free" | "shirt_only" | "not_attending" | "pending" | string | null;
   shirt_size?: string | null;
   delivery_address?: string | null;
   guests_count?: number | null;

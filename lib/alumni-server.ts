@@ -40,7 +40,7 @@ export interface RegistrationItem {
   address: string;
   avatarUrl?: string;
   guestsCount?: number;
-  registrationType?: "attending" | "shirt_only";
+  registrationType?: "attending" | "attending_free" | "shirt_only";
   status: "confirmed" | "pending";
   paidAmount: number;
   createdAt: string;
@@ -247,23 +247,29 @@ export async function loadMergedRegistrations(
     }
 
     // Chỉ đưa vào danh sách đăng ký nếu:
-    // - Người dùng đã chọn attendance_status === "attending" hoặc "shirt_only" trong DB, HOẶC
+    // - Người dùng đã chọn attendance_status === "attending", "attending_free" hoặc "shirt_only" trong DB, HOẶC
     // - Đã có phiếu đăng ký (đặc biệt là đã xác nhận thanh toán) trong manifest
     const shouldInclude =
       p.attendance_status === "attending" ||
+      p.attendance_status === "attending_free" ||
       p.attendance_status === "shirt_only" ||
       Boolean(matchedManifest);
     if (!shouldInclude) continue;
 
-    const resolvedType: "attending" | "shirt_only" =
-      p.attendance_status === "shirt_only"
+    const resolvedType: "attending" | "attending_free" | "shirt_only" =
+      p.attendance_status === "attending_free"
+        ? "attending_free"
+        : p.attendance_status === "shirt_only"
         ? "shirt_only"
         : p.attendance_status === "attending"
         ? "attending"
+        : matchedManifest?.registrationType === "attending_free"
+        ? "attending_free"
         : matchedManifest?.registrationType === "shirt_only"
         ? "shirt_only"
         : "attending";
-    const defaultFee = resolvedType === "shirt_only" ? 250000 : 1000000;
+    const defaultFee =
+      resolvedType === "attending_free" ? 0 : resolvedType === "shirt_only" ? 250000 : 1000000;
 
     const resolvedName = (p.full_name || matchedManifest?.fullName || "").trim();
     if (!resolvedName) continue;
@@ -277,6 +283,13 @@ export async function loadMergedRegistrations(
         : p.location_region === "overseas"
         ? "Nước ngoài"
         : "TP. Hồ Chí Minh");
+
+    const resolvedPaidAmount =
+      resolvedType === "attending_free"
+        ? 0
+        : Number(matchedManifest?.paidAmount) > 0
+        ? Number(matchedManifest?.paidAmount)
+        : defaultFee;
 
     result.push({
       id: p.id,
@@ -293,8 +306,11 @@ export async function loadMergedRegistrations(
           ? matchedManifest.guestsCount
           : 0,
       registrationType: resolvedType,
-      status: matchedManifest?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: Number(matchedManifest?.paidAmount) > 0 ? Number(matchedManifest?.paidAmount) : defaultFee,
+      status:
+        resolvedType === "attending_free" || matchedManifest?.status === "confirmed"
+          ? "confirmed"
+          : "pending",
+      paidAmount: resolvedPaidAmount,
       createdAt: matchedManifest?.createdAt || formatShortDate((p as any).created_at),
       confirmedAt: matchedManifest?.confirmedAt,
       paymentRef: matchedManifest?.paymentRef,
@@ -306,12 +322,25 @@ export async function loadMergedRegistrations(
   manifest.forEach((m, idx) => {
     if (consumedManifestIndexes.has(idx)) return;
     if (!m.fullName) return;
-    const regType = m.registrationType === "shirt_only" ? "shirt_only" : "attending";
+    const regType: "attending" | "attending_free" | "shirt_only" =
+      m.registrationType === "attending_free"
+        ? "attending_free"
+        : m.registrationType === "shirt_only"
+        ? "shirt_only"
+        : "attending";
     result.push({
       ...m,
       registrationType: regType,
+      status: regType === "attending_free" ? "confirmed" : m.status,
       guestsCount: regType === "shirt_only" ? 0 : typeof m.guestsCount === "number" ? m.guestsCount : 0,
-      paidAmount: Number(m.paidAmount) > 0 ? Number(m.paidAmount) : regType === "shirt_only" ? 250000 : 1000000,
+      paidAmount:
+        regType === "attending_free"
+          ? 0
+          : Number(m.paidAmount) > 0
+          ? Number(m.paidAmount)
+          : regType === "shirt_only"
+          ? 250000
+          : 1000000,
     });
   });
 
@@ -345,15 +374,32 @@ export async function syncProfileToRegistrations(
       manifest.splice(existingIdx, 1);
       changed = true;
     }
-  } else if (profile.attendance_status === "attending" || profile.attendance_status === "shirt_only") {
+  } else if (
+    profile.attendance_status === "attending" ||
+    profile.attendance_status === "attending_free" ||
+    profile.attendance_status === "shirt_only"
+  ) {
     const existing = existingIdx >= 0 ? manifest[existingIdx] : null;
+    const isFree = profile.attendance_status === "attending_free";
     const isShirtOnly = profile.attendance_status === "shirt_only";
     const resolvedGuestsCount = isShirtOnly
       ? 0
       : typeof options?.guestsCount === "number" && Number.isFinite(options.guestsCount)
       ? Math.max(0, Math.floor(options.guestsCount))
       : existing?.guestsCount ?? 0;
-    const expectedFee = isShirtOnly ? 250000 : 1000000;
+    const expectedFee = isFree ? 0 : isShirtOnly ? 250000 : 1000000;
+    const wasFreeWithZero =
+      existing?.registrationType === "attending_free" && Number(existing?.paidAmount || 0) === 0;
+    const nextStatus: "confirmed" | "pending" = isFree
+      ? "confirmed"
+      : existing?.status === "confirmed" && !wasFreeWithZero
+      ? "confirmed"
+      : "pending";
+    const nextPaidAmount = isFree
+      ? 0
+      : nextStatus === "confirmed" && Number(existing?.paidAmount) > 0
+      ? Number(existing?.paidAmount)
+      : expectedFee;
     const entry: RegistrationItem = {
       id: profile.id,
       fullName: (profile.full_name || existing?.fullName || "Thành viên K33").trim(),
@@ -367,13 +413,15 @@ export async function syncProfileToRegistrations(
         "TP. Hồ Chí Minh",
       avatarUrl: profile.avatar_url || existing?.avatarUrl || undefined,
       guestsCount: resolvedGuestsCount,
-      registrationType: isShirtOnly ? "shirt_only" : "attending",
-      status: existing?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: existing?.status === "confirmed" ? (existing.paidAmount || expectedFee) : expectedFee,
+      registrationType: isFree ? "attending_free" : isShirtOnly ? "shirt_only" : "attending",
+      status: nextStatus,
+      paidAmount: nextPaidAmount,
       createdAt: existing?.createdAt || formatShortDate(new Date().toISOString()),
-      confirmedAt: existing?.confirmedAt,
-      paymentRef: existing?.paymentRef,
-      note: existing?.note,
+      confirmedAt: isFree ? existing?.confirmedAt || new Date().toISOString() : nextStatus === "confirmed" ? existing?.confirmedAt : undefined,
+      paymentRef: isFree ? "MIEN_PHI_TINH_XA" : existing?.paymentRef,
+      note: isFree
+        ? existing?.note || "Miễn chi phí họp lớp (thành viên tỉnh xa)"
+        : existing?.note,
     };
 
     if (existingIdx >= 0) {

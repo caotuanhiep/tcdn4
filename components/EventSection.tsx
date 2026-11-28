@@ -130,12 +130,16 @@ export default function EventSection() {
                       </div>
                       <div>
                         <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-                          {currentUserReg.registrationType === "shirt_only"
+                          {currentUserReg.registrationType === "attending_free"
+                            ? "✓ Đã xác nhận tham gia • Miễn chi phí họp lớp (Thành viên ở xa)"
+                            : currentUserReg.registrationType === "shirt_only"
                             ? "✓ Đã đăng ký nhận Áo kỷ niệm 15 năm & hoàn tất thanh toán"
                             : "✓ Đã đăng ký & hoàn tất đóng phí"}
                         </div>
                         <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-                          {currentUserReg.registrationType === "shirt_only"
+                          {currentUserReg.registrationType === "attending_free"
+                            ? `Xin chào ${currentUserReg.fullName}! Ban liên lạc trân trọng chào đón bạn từ phương xa về tham dự 15 năm (miễn chi phí họp lớp)`
+                            : currentUserReg.registrationType === "shirt_only"
                             ? `Xin chào ${currentUserReg.fullName}! Ban liên lạc đã xác nhận đơn nhận Áo Polo kỷ niệm 15 năm (ship tận nơi) của bạn`
                             : `Xin chào ${currentUserReg.fullName}! Ban liên lạc đã xác nhận đóng phí tham dự 15 năm của bạn`}
                         </h4>
@@ -498,7 +502,7 @@ export default function EventSection() {
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Đã chuyển khoản: <strong className="text-emerald-600 font-bold">{confirmedCount}</strong> / {registrations.length} bạn
+                Đã xác nhận: <strong className="text-emerald-600 font-bold">{confirmedCount}</strong> / {registrations.length} bạn
                 {shirtOnlyCount > 0 && (
                   <>
                     {" "}• Tham dự: <strong className="text-ueh font-bold">{attendingOnlyCount}</strong> • Chỉ nhận áo:{" "}

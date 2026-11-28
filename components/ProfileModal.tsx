@@ -124,8 +124,12 @@ export default function ProfileModal({
   const [maritalStatus, setMaritalStatus] = useState<string>(profile?.marital_status || "married");
   const [childrenCount, setChildrenCount] = useState<number>(profile?.children_count ?? 1);
 
+  const isFeeExemptMember =
+    profile?.attendance_status === "attending_free" ||
+    myRegistration?.registrationType === "attending_free";
+
   const [attendanceStatus, setAttendanceStatus] = useState<"attending" | "not_attending" | "unregistered">(
-    profile?.attendance_status === "attending"
+    profile?.attendance_status === "attending" || profile?.attendance_status === "attending_free"
       ? "attending"
       : profile?.attendance_status === "shirt_only" || profile?.attendance_status === "not_attending"
       ? "not_attending"
@@ -360,9 +364,10 @@ export default function ProfileModal({
     try {
       // Ghi đè toàn bộ thông tin cá nhân + trạng thái tham gia + size áo + địa chỉ vào bảng profiles
       // (API /api/profile sẽ đồng thời cập nhật registrations-manifest.json kèm số người thân trên Cloud)
+      const nextAttendingStatus = isFeeExemptMember ? "attending_free" : "attending";
       await updateProfile({
         ...buildProfilePayload(),
-        attendance_status: "attending",
+        attendance_status: nextAttendingStatus,
         shirt_size: shirtSize,
         delivery_address: deliveryAddress.trim(),
         guests_count: resolvedGuestsCount,
@@ -376,20 +381,23 @@ export default function ProfileModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "registration",
-            registrationType: "attending",
+            registrationType: nextAttendingStatus,
             userId: user?.id,
             fullName: fullName.trim(),
             className,
             shirtSize,
             phone: phone.trim(),
             address: deliveryAddress.trim() || "Tại sự kiện Cơ sở B",
-            paidAmount: bankInfo.amount,
+            paidAmount: isFeeExemptMember ? 0 : bankInfo.amount,
             guestsCount: resolvedGuestsCount,
           }),
         });
       } catch {}
 
-      if (myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only") {
+      if (
+        isFeeExemptMember ||
+        (myRegistration?.status === "confirmed" && myRegistration?.registrationType !== "shirt_only")
+      ) {
         toast.success("Đã cập nhật thông tin tham dự & size áo mới nhất!");
         onClose();
       } else {
@@ -954,7 +962,7 @@ export default function ProfileModal({
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                   <div className="text-xs font-bold text-emerald-950 truncate">
-                    ĐÃ XÁC NHẬN THAM GIA • Áo: {myRegistration.shirtSize || shirtSize}
+                    {isFeeExemptMember ? "ĐÃ XÁC NHẬN (MIỄN PHÍ HỌP LỚP)" : "ĐÃ XÁC NHẬN THAM GIA"} • Áo: {myRegistration.shirtSize || shirtSize}
                     {(myRegistration.guestsCount || 0) > 0 ? ` • +${myRegistration.guestsCount} người thân` : ""}
                   </div>
                 </div>
@@ -1266,20 +1274,24 @@ export default function ProfileModal({
                   <div>
                     <div className="text-[10px] text-slate-500 font-bold uppercase">Kinh phí tham dự</div>
                     <div className="text-sm sm:text-base font-black text-slate-900">
-                      {bankInfo.amountText} / thành viên
+                      {isFeeExemptMember ? "Miễn phí (0 VNĐ)" : `${bankInfo.amountText} / thành viên`}
                     </div>
                     <div className="text-[10px] text-emerald-700 font-medium">
-                      Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm
+                      {isFeeExemptMember
+                        ? "Ưu đãi miễn chi phí họp lớp dành cho thành viên ở tỉnh xa • Bao gồm tiệc VIP & áo Polo"
+                        : "Bao gồm tiệc VIP, áo Polo & kỷ yếu 15 năm"}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => setShowQrModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0 disabled:opacity-50 cursor-pointer"
-                  >
-                    <QrCode size={13} className="text-ueh-gold" /> Mã VietQR
-                  </button>
+                  {!isFeeExemptMember && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => setShowQrModal(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-ueh active:scale-98 transition-all shrink-0 disabled:opacity-50 cursor-pointer"
+                    >
+                      <QrCode size={13} className="text-ueh-gold" /> Mã VietQR
+                    </button>
+                  )}
                 </div>
               </div>
             )}

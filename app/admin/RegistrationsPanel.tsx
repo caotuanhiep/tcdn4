@@ -1,20 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, QrCode, Search, Shirt, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock,
+  QrCode,
+  Receipt,
+  Search,
+  Shirt,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import { useAlumniData } from "@/components/AlumniDataProvider";
 import { authFetch, broadcastDataUpdate } from "@/lib/api";
 import { DEFAULT_BANK_INFO, fetchBankInfo, getBankInfo, type BankConfig } from "@/lib/bank";
+import type { ExpenseItem } from "@/lib/expenses";
 import MemberQrModal, { type QrTargetMember } from "@/app/admin/MemberQrModal";
+import ExpensesSection from "@/app/admin/ExpensesSection";
 
-function formatShortPaidAmount(amount?: number, fallback = 1000000): string {
-  const val = Number(amount) > 0 ? Number(amount) : fallback;
+function formatShortPaidAmount(
+  amount?: number,
+  fallback = 1000000,
+  isFree = false
+): string {
+  if (isFree) return "0đ";
+  const val = typeof amount === "number" && amount >= 0 ? amount : fallback;
+  if (val === 0) return "0đ";
   if (val >= 1000000) {
     const millions = val / 1000000;
     return Number.isInteger(millions)
       ? `${millions} triệu`
-      : `${millions.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} triệu`;
+      : `${millions.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} triệu`;
   }
   return `${Math.round(val / 1000)}k`;
 }
@@ -32,21 +52,48 @@ function formatRegistrationDate(val?: string) {
 
 export default function RegistrationsPanel() {
   const toast = useToast();
-  const { registrations: list, refresh } = useAlumniData();
+  const { registrations: list, lastUpdated, refresh } = useAlumniData();
   const [bankInfo, setBankInfo] = useState<BankConfig>(DEFAULT_BANK_INFO);
+  const [subTab, setSubTab] = useState<"registrations" | "expenses">("registrations");
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [classFilter, setClassFilter] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [qrMember, setQrMember] = useState<QrTargetMember | null>(null);
+
+  const fetchExpenses = useCallback(async () => {
+    try {
+      const res = await authFetch(`/api/expenses?t=${Date.now()}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success && Array.isArray(data.expenses)) {
+        setExpenses(data.expenses);
+      }
+    } catch {
+      // ignore transient network errors
+    } finally {
+      setLoadingExpenses(false);
+    }
+  }, []);
 
   useEffect(() => {
     setBankInfo(getBankInfo());
     fetchBankInfo().then((cfg) => setBankInfo(cfg)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    void fetchExpenses();
+  }, [fetchExpenses, lastUpdated]);
+
   const toggleStatus = async (id: string) => {
     const target = list.find((x) => x.id === id);
     if (!target || busyId) return;
+
+    const isFreeItem = target.registrationType === "attending_free";
+    if (isFreeItem) {
+      toast.info(`${target.fullName} đang ở diện Miễn chi phí họp lớp (0đ). Đổi trạng thái tại mục Quản lý Thành viên nếu cần thu phí.`);
+      return;
+    }
 
     const nextStatus = target.status === "confirmed" ? "pending" : "confirmed";
     const defaultItemFee =
@@ -132,32 +179,57 @@ export default function RegistrationsPanel() {
     return true;
   });
 
+  const freeCount = list.filter((r) => r.registrationType === "attending_free").length;
+  const confirmedPaidCount = list.filter(
+    (r) => r.status === "confirmed" && r.registrationType !== "attending_free"
+  ).length;
   const totalPaid = list
     .filter((r) => r.status === "confirmed")
-    .reduce((sum, r) => sum + (Number(r.paidAmount) > 0 ? Number(r.paidAmount) : bankInfo.amount), 0);
-  const totalGuests = list.reduce((sum, r) => sum + (Number(r.guestsCount) || 0), 0);
+    .reduce((sum, r) => {
+      if (r.registrationType === "attending_free") return sum;
+      const fallback =
+        r.registrationType === "shirt_only" ? bankInfo.shirtOnlyAmount || 250000 : bankInfo.amount;
+      const amt = typeof r.paidAmount === "number" && r.paidAmount >= 0 ? r.paidAmount : fallback;
+      return sum + amt;
+    }, 0);
+  const totalGuests = list.reduce(
+    (sum, r) => sum + (r.registrationType === "shirt_only" ? 0 : Number(r.guestsCount) || 0),
+    0
+  );
+  const totalSpent = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const fundBalance = totalPaid - totalSpent;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-ueh">
-            Quản lý Đăng ký 15 Năm & Size Áo
+            Quản lý Đăng ký 15 Năm &amp; Quỹ Họp Lớp
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Theo dõi danh sách tham dự, đối soát chuyển khoản trực tiếp từ database gốc (cập nhật realtime)
+            Theo dõi danh sách tham dự, đối soát thu phí &amp; sổ chi tiêu minh bạch có hóa đơn chứng từ (realtime)
           </p>
         </div>
 
-        <button
-          onClick={copyShirtSummary}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-800 transition-colors self-start sm:self-auto"
-        >
-          <Shirt size={14} /> Xuất Bảng Size Áo
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === "expenses" ? "registrations" : "expenses")}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2 text-xs font-bold text-ueh-orange hover:bg-orange-100 transition-colors cursor-pointer"
+          >
+            <Receipt size={14} />
+            <span>{subTab === "expenses" ? "Xem Danh sách Thu phí" : `Sổ Chi Tiêu (${expenses.length})`}</span>
+          </button>
+          <button
+            onClick={copyShirtSummary}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-ueh px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-800 transition-colors cursor-pointer"
+          >
+            <Shirt size={14} /> Xuất Bảng Size Áo
+          </button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Registration Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
           <div className="text-[11px] font-bold uppercase text-slate-400">Tổng Đăng Ký</div>
@@ -168,11 +240,15 @@ export default function RegistrationsPanel() {
         </div>
 
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase text-slate-400">Đã Chuyển Khoản</div>
+          <div className="text-[11px] font-bold uppercase text-slate-400">Đã Xác Nhận</div>
           <div className="text-2xl font-black text-emerald-600 mt-1">
             {list.filter((r) => r.status === "confirmed").length}
           </div>
-          <div className="text-[10px] text-emerald-600 font-semibold">Đã xác nhận tiền</div>
+          <div className="text-[10px] text-emerald-600 font-semibold">
+            {freeCount > 0
+              ? `${confirmedPaidCount} đã CK • ${freeCount} miễn phí (0đ)`
+              : "Đã xác nhận tiền"}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
@@ -185,14 +261,108 @@ export default function RegistrationsPanel() {
 
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
           <div className="text-[11px] font-bold uppercase text-slate-400">Kinh Phí Đã Thu</div>
-          <div className="text-xl sm:text-2xl font-black text-blue-600 mt-1">
-            {(totalPaid / 1000000).toFixed(1)}M
+          <div className="text-lg sm:text-xl font-black text-blue-600 mt-1">
+            {totalPaid.toLocaleString("vi-VN")}đ
           </div>
-          <div className="text-[10px] text-slate-500">Quỹ tài chính sự kiện</div>
+          <div className="text-[10px] text-slate-500">
+            {freeCount > 0
+              ? `Không tính ${freeCount} bạn miễn phí (0đ)`
+              : "Quỹ tài chính sự kiện"}
+          </div>
         </div>
       </div>
 
-      {/* Filter and Search */}
+      {/* Tổng Quan Quỹ Họp Lớp Minh Bạch: Tổng Thu - Tổng Chi - Tồn Quỹ */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50/70 via-white to-emerald-50/60 p-4 shadow-2xs">
+        <div className="flex items-center gap-3 rounded-2xl bg-white/90 border border-emerald-100 p-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+            <TrendingUp size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng Thu Quỹ</div>
+            <div className="text-base sm:text-lg font-black text-emerald-700 truncate">
+              +{totalPaid.toLocaleString("vi-VN")}đ
+            </div>
+            <div className="text-[10px] text-slate-500">{confirmedPaidCount} lượt đã đóng phí</div>
+          </div>
+        </div>
+
+        <div
+          onClick={() => setSubTab("expenses")}
+          className="flex items-center gap-3 rounded-2xl bg-white/90 border border-rose-100 p-3.5 cursor-pointer hover:border-rose-300 transition-colors"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+            <TrendingDown size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng Chi Quỹ</div>
+            <div className="text-base sm:text-lg font-black text-rose-600 truncate">
+              -{totalSpent.toLocaleString("vi-VN")}đ
+            </div>
+            <div className="text-[10px] text-slate-500">
+              {expenses.length} khoản chi minh bạch • Bấm xem sổ chi →
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl bg-ueh text-white p-3.5 shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-ueh-gold">
+            <Wallet size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-blue-200">Tồn Quỹ Hiện Tại</div>
+            <div
+              className={`text-base sm:text-lg font-black truncate ${
+                fundBalance < 0 ? "text-rose-300" : "text-ueh-gold"
+              }`}
+            >
+              {fundBalance.toLocaleString("vi-VN")}đ
+            </div>
+            <div className="text-[10px] text-blue-100/90">Tổng thu trừ tổng chi thực tế</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-tabs: Thu phí & Danh sách ĐK | Sổ Chi Tiêu & Bill */}
+      <div className="flex rounded-2xl bg-slate-100 p-1.5 gap-1.5">
+        <button
+          type="button"
+          onClick={() => setSubTab("registrations")}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold transition-all cursor-pointer ${
+            subTab === "registrations"
+              ? "bg-white text-ueh shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Users size={15} />
+          <span>Danh sách Đăng ký &amp; Thu phí ({list.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab("expenses")}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold transition-all cursor-pointer ${
+            subTab === "expenses"
+              ? "bg-white text-ueh-orange shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Receipt size={15} />
+          <span>Theo dõi Chi tiêu &amp; Upload Bill ({expenses.length})</span>
+        </button>
+      </div>
+
+      {subTab === "expenses" ? (
+        <ExpensesSection
+          expenses={expenses}
+          loading={loadingExpenses}
+          totalIncome={totalPaid}
+          confirmedPaidCount={confirmedPaidCount}
+          freeCount={freeCount}
+          onExpensesChange={setExpenses}
+        />
+      ) : (
+        <>
+          {/* Filter and Search */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl bg-white p-3 border border-slate-100 shadow-2xs">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -243,6 +413,11 @@ export default function RegistrationsPanel() {
               <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-4 py-3 font-bold text-slate-900">
                   {item.fullName}
+                  {item.registrationType === "attending_free" && (
+                    <span className="text-[10px] text-sky-600 block font-semibold">
+                      Miễn phí họp lớp (Tỉnh xa • 0đ)
+                    </span>
+                  )}
                   {item.registrationType === "shirt_only" && (
                     <span className="text-[10px] text-ueh-orange block font-semibold">
                       Chỉ nhận áo kỷ niệm (250k)
@@ -270,19 +445,26 @@ export default function RegistrationsPanel() {
                     onClick={() => void toggleStatus(item.id)}
                     disabled={busyId === item.id}
                     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-transform active:scale-95 cursor-pointer disabled:opacity-50 ${
-                      item.status === "confirmed"
+                      item.registrationType === "attending_free"
+                        ? "bg-sky-50 text-sky-700 border border-sky-200"
+                        : item.status === "confirmed"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : "bg-amber-50 text-amber-700 border border-amber-200"
                     }`}
                   >
-                    {item.status === "confirmed" ? (
+                    {item.registrationType === "attending_free" ? (
+                      <>
+                        <CheckCircle2 size={12} /> Miễn phí (0đ)
+                      </>
+                    ) : item.status === "confirmed" ? (
                       <>
                         <CheckCircle2 size={12} /> Đã thu{" "}
                         {formatShortPaidAmount(
                           item.paidAmount,
                           item.registrationType === "shirt_only"
                             ? bankInfo.shirtOnlyAmount || 250000
-                            : bankInfo.amount
+                            : bankInfo.amount,
+                          false
                         )}
                       </>
                     ) : (
@@ -327,6 +509,8 @@ export default function RegistrationsPanel() {
           </tbody>
         </table>
       </div>
+        </>
+      )}
 
       <MemberQrModal member={qrMember} onClose={() => setQrMember(null)} />
     </div>

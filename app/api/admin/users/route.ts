@@ -145,12 +145,22 @@ export async function POST(req: NextRequest) {
       newUserId = crypto.randomUUID();
     }
 
-    const isAttending = body.register_event === true || body.attendance_status === "attending";
-    const resolvedAttendance = isAttending
-      ? "attending"
-      : body.attendance_status === "not_attending"
-      ? "not_attending"
-      : null;
+    const rawAtt = body.attendance_status;
+    const resolvedAttendance =
+      rawAtt === "attending_free"
+        ? "attending_free"
+        : rawAtt === "shirt_only"
+        ? "shirt_only"
+        : rawAtt === "attending" || body.register_event === true
+        ? "attending"
+        : rawAtt === "not_attending"
+        ? "not_attending"
+        : null;
+    const isRegisteredEvent =
+      resolvedAttendance === "attending" ||
+      resolvedAttendance === "attending_free" ||
+      resolvedAttendance === "shirt_only";
+    const isAttending = resolvedAttendance === "attending" || resolvedAttendance === "attending_free";
 
     const rawGuests = body.guests_count ?? body.guestsCount;
     const parsedGuestsCount =
@@ -175,7 +185,7 @@ export async function POST(req: NextRequest) {
           ? Math.max(0, Math.floor(Number(body.children_count)))
           : 0,
       attendance_status: resolvedAttendance,
-      shirt_size: isAttending ? String(body.shirt_size || "L (Nam)") : body.shirt_size || null,
+      shirt_size: isRegisteredEvent ? String(body.shirt_size || "L (Nam)") : body.shirt_size || null,
       delivery_address: String(body.delivery_address || "").trim(),
       bio: String(body.bio || "").trim(),
       role: ["member", "committee", "admin"].includes(body.role) ? body.role : "member",
@@ -203,7 +213,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Nếu Admin bật "Đẩy sang đăng ký 15 năm" -> đồng bộ luôn sang manifest đăng ký 15 năm kèm số người thân
-    if (resolvedAttendance === "attending") {
+    if (isRegisteredEvent) {
       try {
         await syncProfileToRegistrations(savedProfile, supabase, {
           guestsCount: parsedGuestsCount,
@@ -216,7 +226,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: isAttending
+        message: isRegisteredEvent
           ? `Đã tạo hồ sơ và đẩy ${fullName} sang danh sách đăng ký 15 năm!`
           : `Đã thêm ${fullName} vào danh bạ cựu sinh viên!`,
         user: { ...savedProfile, guests_count: parsedGuestsCount },

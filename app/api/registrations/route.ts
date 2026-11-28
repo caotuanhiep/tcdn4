@@ -78,9 +78,14 @@ export async function POST(req: NextRequest) {
     const regId = String(body.id || requestUser?.id || `reg-${Date.now()}`);
     const cleanPhone = cleanPhoneDigits(phone);
 
-    const resolvedRegType: "attending" | "shirt_only" =
-      registrationType === "shirt_only" ? "shirt_only" : "attending";
-    const defaultRegFee = resolvedRegType === "shirt_only" ? 250000 : 1000000;
+    const resolvedRegType: "attending" | "attending_free" | "shirt_only" =
+      registrationType === "attending_free"
+        ? "attending_free"
+        : registrationType === "shirt_only"
+        ? "shirt_only"
+        : "attending";
+    const defaultRegFee =
+      resolvedRegType === "attending_free" ? 0 : resolvedRegType === "shirt_only" ? 250000 : 1000000;
 
     // 1. Cập nhật bảng profiles (nguồn chân lý) nếu ID thuộc về user đã đăng nhập
     if (requestUser && requestUser.id === regId) {
@@ -132,8 +137,14 @@ export async function POST(req: NextRequest) {
           ? Number(guestsCount)
           : existingReg?.guestsCount || 0,
       registrationType: resolvedRegType,
-      status: existingReg?.status === "confirmed" ? "confirmed" : "pending",
-      paidAmount: Number(paidAmount) || existingReg?.paidAmount || defaultRegFee,
+      status:
+        resolvedRegType === "attending_free" || existingReg?.status === "confirmed"
+          ? "confirmed"
+          : "pending",
+      paidAmount:
+        resolvedRegType === "attending_free"
+          ? 0
+          : Number(paidAmount) || existingReg?.paidAmount || defaultRegFee,
       createdAt: existingReg?.createdAt || body.createdAt || formatShortDate(new Date().toISOString()),
       confirmedAt: existingReg?.confirmedAt,
       paymentRef: existingReg?.paymentRef,
@@ -206,7 +217,12 @@ export async function PUT(req: NextRequest) {
     const updatedItem: RegistrationItem = {
       ...target,
       status: status || target.status,
-      paidAmount: typeof paidAmount === "number" ? paidAmount : target.paidAmount,
+      paidAmount:
+        target.registrationType === "attending_free"
+          ? 0
+          : typeof paidAmount === "number"
+          ? paidAmount
+          : target.paidAmount,
       paymentRef: paymentRef || target.paymentRef,
       shirtSize: shirtSize || target.shirtSize,
       address: address !== undefined ? address : target.address,
@@ -250,7 +266,11 @@ export async function PUT(req: NextRequest) {
       if (address !== undefined) profilePatch.delivery_address = address;
       if (status === "confirmed") {
         profilePatch.attendance_status =
-          updatedItem.registrationType === "shirt_only" ? "shirt_only" : "attending";
+          updatedItem.registrationType === "attending_free"
+            ? "attending_free"
+            : updatedItem.registrationType === "shirt_only"
+            ? "shirt_only"
+            : "attending";
       }
       if (Object.keys(profilePatch).length > 1) {
         await supabase.from("profiles").update(profilePatch).eq("id", id);
